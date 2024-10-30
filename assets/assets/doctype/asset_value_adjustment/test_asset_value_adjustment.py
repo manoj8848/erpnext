@@ -7,7 +7,6 @@ from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import (
 	make_purchase_receipt,
 )
 from frappe.utils import add_days, cstr, get_last_day, getdate, nowdate
-from frappe.tests import IntegrationTestCase
 
 from assets.assets.doctype.asset.asset import get_asset_value_after_depreciation
 from assets.assets.doctype.asset.depreciation import post_depreciation_entries
@@ -18,7 +17,7 @@ from assets.assets.doctype.asset_depreciation_schedule.asset_depreciation_schedu
 from assets.assets.doctype.asset_repair.test_asset_repair import create_asset_repair
 
 
-class TestAssetValueAdjustment(IntegrationTestCase):
+class TestAssetValueAdjustment(unittest.TestCase):
 	def setUp(self):
 		create_asset_data()
 		frappe.db.set_value(
