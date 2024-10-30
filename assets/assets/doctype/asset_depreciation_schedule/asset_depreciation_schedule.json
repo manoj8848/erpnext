@@ -27,6 +27,8 @@
   "expected_value_after_useful_life",
   "depreciation_schedule_section",
   "depreciation_schedule",
+  "accounting_dimensions_section",
+  "cost_center",
   "details_section",
   "notes",
   "status",
@@ -104,6 +106,7 @@
    "label": "Depreciation Schedule"
   },
   {
+    "allow_on_submit": 1,
    "fieldname": "depreciation_schedule",
    "fieldtype": "Table",
    "label": "Depreciation Schedule",
@@ -202,12 +205,24 @@
    "label": "Company",
    "options": "Company",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_dimensions_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Dimensions"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-01-08 16:31:04.533928",
+ "modified": "2024-09-23 06:37:47.550658",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Depreciation Schedule",

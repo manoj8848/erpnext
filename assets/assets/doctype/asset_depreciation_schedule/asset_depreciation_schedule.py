@@ -30,13 +30,12 @@ class AssetDepreciationSchedule(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		from assets.assets.doctype.depreciation_schedule.depreciation_schedule import (
-			DepreciationSchedule,
-		)
+		from assets.assets.doctype.depreciation_schedule.depreciation_schedule import DepreciationSchedule
 
 		amended_from: DF.Link | None
 		asset: DF.Link
 		company: DF.Link | None
+		cost_center: DF.Link | None
 		daily_prorata_based: DF.Check
 		depreciation_method: DF.Literal[
 			"", "Straight Line", "Double Declining Balance", "Written Down Value", "Manual"
@@ -49,8 +48,8 @@ class AssetDepreciationSchedule(Document):
 		gross_purchase_amount: DF.Currency
 		naming_series: DF.Literal["ACC-ADS-.YYYY.-"]
 		notes: DF.SmallText | None
-		opening_number_of_booked_depreciations: DF.Int
 		opening_accumulated_depreciation: DF.Currency
+		opening_number_of_booked_depreciations: DF.Int
 		rate_of_depreciation: DF.Percent
 		shift_based: DF.Check
 		status: DF.Literal["Draft", "Active", "Cancelled"]
@@ -220,7 +219,12 @@ class AssetDepreciationSchedule(Document):
 		self.expected_value_after_useful_life = row.expected_value_after_useful_life
 		self.daily_prorata_based = row.daily_prorata_based
 		self.shift_based = row.shift_based
+		self.cost_center = asset_doc.cost_center
 		self.status = "Draft"
+
+		fields = frappe.get_list("Accounting Dimension", pluck="fieldname")
+		for field in fields:
+			setattr(self, field, getattr(asset_doc, field, None))
 
 	def make_depr_schedule(
 		self,

@@ -11,7 +11,13 @@
   "column_break_2",
   "asset_name",
   "target_location",
-  "to_employee"
+  "to_employee",
+  "accounting_dimension_source_section",
+  "source_cost_center",
+  "source_dimension_col_break",
+  "accounting_dimension_target_section",
+  "target_cost_center",
+  "target_dimension_col_break"
  ],
  "fields": [
   {
@@ -70,10 +76,40 @@
    "label": "Company",
    "options": "Company",
    "read_only": 1
-  }
- ],
+},
+{
+ "fieldname": "accounting_dimension_source_section",
+ "fieldtype": "Section Break",
+ "label": "Accounting Dimension (Source)"
+},
+{
+ "fieldname": "accounting_dimension_target_section",
+ "fieldtype": "Section Break",
+ "label": "Accounting Dimension (Target)"
+},
+{
+ "fieldname": "target_cost_center",
+ "fieldtype": "Link",
+ "label": "Target Cost Center",
+ "options": "Cost Center"
+},
+{
+ "fieldname": "source_dimension_col_break",
+ "fieldtype": "Column Break"
+},
+{
+ "fieldname": "target_dimension_col_break",
+ "fieldtype": "Column Break"
+},
+{
+ "fieldname": "source_cost_center",
+ "fieldtype": "Link",
+ "label": "Source Cost Center",
+ "options": "Cost Center"
+}
+],
  "istable": 1,
- "modified": "2019-10-09 15:59:08.265141",
+ "modified": "2024-09-20 02:44:54.216537",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Movement Item",

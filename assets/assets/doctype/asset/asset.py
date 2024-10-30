@@ -400,8 +400,16 @@ class Asset(AccountsController):
 				"asset_name": self.asset_name,
 				"target_location": self.location,
 				"to_employee": self.custodian,
+				"target_cost_center": self.cost_center,
 			}
 		]
+		fields = frappe.get_list("Accounting Dimension", pluck="fieldname")
+		transformed_fields = [f"target_{field}" for field in fields]
+
+		for field in transformed_fields:
+			original_fieldname = field.replace("target_", "")
+			assets[0][field] = getattr(self, original_fieldname, None)
+
 		asset_movement = frappe.get_doc(
 			{
 				"doctype": "Asset Movement",
@@ -1081,14 +1089,22 @@ def make_asset_movement(assets, purpose=None):
 	for asset in assets:
 		asset = frappe.get_doc("Asset", asset.get("name"))
 		asset_movement.company = asset.get("company")
-		asset_movement.append(
-			"assets",
-			{
-				"asset": asset.get("name"),
-				"source_location": asset.get("location"),
-				"from_employee": asset.get("custodian"),
-			},
-		)
+
+		asset_dict = {
+			"asset": asset.get("name"),
+			"source_location": asset.get("location"),
+			"from_employee": asset.get("custodian"),
+			"source_cost_center": asset.get("cost_center"),
+		}
+
+		fields = frappe.get_list("Accounting Dimension", pluck="fieldname")
+		transformed_fields = [f"source_{field}" for field in fields]
+
+		for field in transformed_fields:
+			original_fieldname = field.replace("source_", "")
+			asset_dict[field] = asset.get(original_fieldname, None)
+
+		asset_movement.append("assets", asset_dict)
 
 	if asset_movement.get("assets"):
 		return asset_movement.as_dict()

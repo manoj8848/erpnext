@@ -2,6 +2,70 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Asset Movement", {
+	refresh: function (frm) {
+		if (frm.doc.purpose == "Transfer" && frm.doc.docstatus == 1) {
+			if (!frm.doc.journal_entry) {
+				frm.add_custom_button(
+					__("Make Journal Entry"),
+					function () {
+						frappe.confirm("Are you sure you want to proceed?", () => {
+							frappe.call({
+								method: "assets.assets.doctype.asset_movement.asset_movement.make_asset_movement_entry",
+								args: {
+									asset_movement_name: frm.doc.name,
+									transaction_date: frm.doc.transaction_date,
+									company: frm.doc.company,
+								},
+								callback: function (r) {
+									frappe.model.sync(r.message);
+									frm.refresh();
+								},
+							});
+						});
+					},
+					__("Create")
+				);
+			}
+			frm.add_custom_button(
+				__("Make Delivery Note"),
+				function () {
+					frappe.confirm(
+						"Are you sure you want to proceed?",
+						() => {
+							frappe.call({
+								method: "assets.assets.doctype.asset_movement.asset_movement.make_delivery_note",
+								args: {
+									name: frm.doc.name,
+									transaction_date: frm.doc.transaction_date,
+								},
+								callback: function (r) {
+									frappe.model.with_doctype("Delivery Note", function () {
+										var doc = frappe.model.get_new_doc("Delivery Note");
+										var items = r.message;
+										var child = frappe.model.add_child(doc, "items");
+
+										items.forEach(function (item) {
+											for (var key in item) {
+												if (Object.prototype.hasOwnProperty.call(item, key)) {
+													child[key] = item[key];
+												}
+											}
+										});
+										frappe.set_route("Form", "Delivery Note", doc.name);
+									});
+								},
+							});
+						},
+						() => {
+							// action to perform if No is selected
+						}
+					);
+				},
+				__("Create")
+			);
+		}
+	},
+
 	setup: (frm) => {
 		frm.set_query("to_employee", "assets", (doc) => {
 			return {
@@ -32,13 +96,16 @@ frappe.ui.form.on("Asset Movement", {
 				},
 			};
 		}),
-			frm.set_query("asset", "assets", () => {
-				return {
-					filters: {
-						status: ["not in", ["Draft"]],
-					},
-				};
-			});
+		frm.set_query("asset", "assets", () => {
+			return {
+				filters: {
+					status: ["not in", ["Draft"]],
+				},
+			};
+		});
+
+		set_cost_center_query(frm, "source_cost_center");
+		set_cost_center_query(frm, "target_cost_center");
 	},
 
 	onload: (frm) => {
@@ -90,22 +157,61 @@ frappe.ui.form.on("Asset Movement", {
 	},
 });
 
+function set_cost_center_query(frm, fieldname) {
+	frm.fields_dict["assets"].grid.get_field(fieldname).get_query = function (doc, cdt, cdn) {
+		return {
+			filters: {
+				company: frm.doc.company,
+				is_group: 0,
+			},
+		};
+	};
+}
+
 frappe.ui.form.on("Asset Movement Item", {
 	asset: function (frm, cdt, cdn) {
-		// on manual entry of an asset auto sets their source location / employee
-		const asset_name = locals[cdt][cdn].asset;
-		if (asset_name) {
-			frappe.db
-				.get_doc("Asset", asset_name)
-				.then((asset_doc) => {
-					if (asset_doc.location)
-						frappe.model.set_value(cdt, cdn, "source_location", asset_doc.location);
-					if (asset_doc.custodian)
-						frappe.model.set_value(cdt, cdn, "from_employee", asset_doc.custodian);
-				})
-				.catch((err) => {
-					console.log(err); // eslint-disable-line
-				});
-		}
+		frappe.db
+			.get_list("Accounting Dimension", {
+				fields: ["name"],
+			})
+			.then((fields) => {
+				const field_names = fields.map(
+					(field) => `source_${field.name.toLowerCase().replace(/ /g, "_")}`
+				);
+				const target_fields = fields.map(
+					(field) => `target_${field.name.toLowerCase().replace(/ /g, "_")}`
+				);
+
+				const asset_name = locals[cdt][cdn].asset;
+
+				if (asset_name) {
+					frappe.db.get_doc("Asset", asset_name).then((asset_doc) => {
+						if (asset_doc.location) {
+							frappe.model.set_value(cdt, cdn, "source_location", asset_doc.location);
+						}
+						if (asset_doc.custodian) {
+							frappe.model.set_value(cdt, cdn, "from_employee", asset_doc.custodian);
+						}
+						if (asset_doc.cost_center) {
+							frappe.model.set_value(cdt, cdn, "source_cost_center", asset_doc.cost_center);
+						}
+						if (frm.doc.purpose == "Issue" || frm.doc.purpose == "Reciept") {
+							target_fields.forEach((field) => {
+								const original_field = field.replace("target_", "");
+								if (asset_doc[original_field]) {
+									frappe.model.set_value(cdt, cdn, field, asset_doc[original_field]);
+								}
+							});
+							frappe.model.set_value(cdt, cdn, "target_cost_center", asset_doc.cost_center);
+						}
+						field_names.forEach((field) => {
+							const original_field = field.replace("source_", "");
+							if (asset_doc[original_field]) {
+								frappe.model.set_value(cdt, cdn, field, asset_doc[original_field]);
+							}
+						});
+					});
+				}
+			});
 	},
 });

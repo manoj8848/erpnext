@@ -343,6 +343,7 @@ def _make_journal_entry_for_depreciation(
 					or dimension.get("default_dimension")
 				}
 			)
+	update_dimension_fields(asset_depr_schedule_doc.name, credit_entry, debit_entry)
 
 	je.append("accounts", credit_entry)
 	je.append("accounts", debit_entry)
@@ -360,6 +361,24 @@ def _make_journal_entry_for_depreciation(
 		row = asset.get("finance_books")[idx - 1]
 		row.value_after_depreciation -= depr_schedule.depreciation_amount
 		row.db_update()
+
+
+def update_dimension_fields(asset_depr_schedule_doc_name, credit_entry, debit_entry):
+	additional_fields = {}
+	fieldnames = frappe.get_list("Accounting Dimension", pluck="fieldname")
+	for fieldname in fieldnames:
+		field_data = frappe.db.get_value(
+			"Asset Depreciation Schedule", asset_depr_schedule_doc_name, fieldname
+		)
+		additional_fields[fieldname] = field_data
+
+	cost_center = frappe.db.get_value(
+		"Asset Depreciation Schedule", asset_depr_schedule_doc_name, "cost_center"
+	)
+	additional_fields["cost_center"] = cost_center
+
+	credit_entry.update(additional_fields)
+	debit_entry.update(additional_fields)
 
 
 def get_depreciation_accounts(asset_category, company):

@@ -10,6 +10,7 @@
   "purpose",
   "column_break_4",
   "transaction_date",
+  "journal_entry",
   "section_break_10",
   "assets",
   "reference",
@@ -91,12 +92,19 @@
   {
    "fieldname": "column_break_9",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.docstatus==1",
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry"
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2023-06-28 16:54:26.571083",
+ "modified": "2024-09-19 03:56:09.122360",
  "modified_by": "Administrator",
  "module": "Assets",
  "name": "Asset Movement",
