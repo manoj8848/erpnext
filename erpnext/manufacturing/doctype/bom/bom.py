@@ -1135,19 +1135,15 @@ def get_bom_items_as_dict(
                 item_default.default_warehouse,
                 item_default.expense_account,
                 item_default.buying_cost_center,
-                bom_item.source_warehouse,
-                bom_item.operation,
-                bom_item.include_item_in_manufacturing,
-                bom_item.description,
-                bom_item.sourced_by_supplier,
-				{rate_field}
+				{group_by_fields}
 				order by bom_item.idx"""
 
 	is_stock_item = 0 if include_non_stock_items else 1
 	if cint(fetch_exploded):
 		query = query.format(
 			table="BOM Explosion Item",
-			rate_field = """bom_item.rate""",
+			group_by_fields = """bom_item.source_warehouse, bom_item.operation, bom_item.include_item_in_manufacturing, bom_item.description,
+                bom_item.sourced_by_supplier""",
 			where_conditions="",
 			is_stock_item=is_stock_item,
 			qty_field="stock_qty",
@@ -1162,6 +1158,7 @@ def get_bom_items_as_dict(
 	elif fetch_scrap_items:
 		query = query.format(
 			table="BOM Scrap Item",
+			group_by_fields = """item.description""",
 			where_conditions="",
 			select_columns=", item.description",
 			is_stock_item=is_stock_item,
@@ -1172,7 +1169,8 @@ def get_bom_items_as_dict(
 	else:
 		query = query.format(
 			table="BOM Item",
-			rate_field = """bom_item.uom, bom_item.conversion_factor, bom_item.base_rate""",
+			group_by_fields = """bom_item.source_warehouse, bom_item.operation, bom_item.include_item_in_manufacturing, bom_item.uom, bom_item.conversion_factor, bom_item.description,
+                bom_item.sourced_by_supplier, bom_item.base_rate""",
 			where_conditions="",
 			is_stock_item=is_stock_item,
 			qty_field="stock_qty" if fetch_qty_in_stock_uom else "qty",
@@ -1180,7 +1178,7 @@ def get_bom_items_as_dict(
 				bom_item.operation, bom_item.include_item_in_manufacturing, bom_item.sourced_by_supplier,
 				bom_item.description, bom_item.base_rate as bom_rate""",
 		)
-		print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+		
 		items = frappe.db.sql(query, {"qty": qty, "bom": bom, "company": company}, as_dict=True)
 
 	for item in items:

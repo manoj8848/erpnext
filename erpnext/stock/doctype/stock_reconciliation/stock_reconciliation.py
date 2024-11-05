@@ -1177,21 +1177,32 @@ def get_items_for_stock_reco(warehouse, company):
 
 	items += frappe.db.sql(
 		"""
-		select
-			i.name as item_code, i.item_name, id.default_warehouse as warehouse, i.has_serial_no, i.has_batch_no
-		from
-			`tabItem` i, `tabItem Default` id
-		where
-			i.name = id.parent
-			and exists(
-				select name from `tabWarehouse` where lft >= %s and rgt <= %s and name=id.default_warehouse and is_group = 0
-			)
-			and i.is_stock_item = 1
-			and i.has_variants = 0
-			and IFNULL(i.disabled, 0) = 0
-			and id.company = %s
-		group by i.name
-	""",
+    select
+        i.name as item_code,
+        i.item_name,
+        id.default_warehouse as warehouse,
+        i.has_serial_no,
+        i.has_batch_no
+    from
+        `tabItem` i
+    inner join
+        `tabItem Default` id on i.name = id.parent
+    where
+        exists (
+            select name from `tabWarehouse`
+            where lft >= %s and rgt <= %s and name=id.default_warehouse and is_group = 0
+        )
+        and i.is_stock_item = 1
+        and i.has_variants = 0
+        and IFNULL(i.disabled, 0) = 0
+        and id.company = %s
+    group by
+        i.name,
+        i.item_name,
+        id.default_warehouse,
+        i.has_serial_no,
+        i.has_batch_no
+    """,
 		(lft, rgt, company),
 		as_dict=1,
 	)

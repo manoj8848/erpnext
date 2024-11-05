@@ -2959,7 +2959,7 @@ def get_expired_batch_items():
 	where b.expiry_date <= %s
 	and b.expiry_date is not NULL
 	and b.batch_id = sle.batch_no and sle.is_cancelled = 0
-	group by sle.warehouse, sle.item_code, sle.batch_no""",
+	group by sle.warehouse, sle.item_code, sle.batch_no, b.item, sle.stock_uom""",
 		(nowdate()),
 		as_dict=1,
 	)

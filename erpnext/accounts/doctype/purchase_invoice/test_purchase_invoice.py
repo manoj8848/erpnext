@@ -1397,8 +1397,10 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 		for i, gle in enumerate(gl_entries):
 			self.assertEqual(expected_gle[i][0], gle.account)
 			self.assertEqual(expected_gle[i][1], gle.balance)
-
-		expected_gle = [["_Test Payable USD - _TC", 70000.0], ["Cash - _TC", -70000.0]]
+		if frappe.db.db_type=='postgres':
+			expected_gle = [["Cash - _TC", -70000.0],["_Test Payable USD - _TC", 70000.0]]
+		else:
+			expected_gle = [["_Test Payable USD - _TC", 70000.0], ["Cash - _TC", -70000.0]]
 
 		gl_entries = frappe.db.sql(
 			"""

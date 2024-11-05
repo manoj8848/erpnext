@@ -2963,12 +2963,20 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 		gl_entries = get_gl_entries("Purchase Receipt", pr.name, skip_cancelled=True, as_dict=False)
 		warehouse_account = get_warehouse_account_map("_Test Company")
-		expected_gle = (
+		if frappe.db.db_type == "postgres":
+			expected_gle = (
+			(warehouse_account[pr.items[0].warehouse]["account"], 14000, 0, "Main - _TC"),
 			("Stock Received But Not Billed - _TC", 0, 10000, "Main - _TC"),
 			("Freight and Forwarding Charges - _TC", 0, 2000, "Main - _TC"),
 			("Expenses Included In Valuation - _TC", 0, 2000, "Main - _TC"),
-			(warehouse_account[pr.items[0].warehouse]["account"], 14000, 0, "Main - _TC"),
-		)
+			)
+		else:
+			expected_gle = (
+				("Stock Received But Not Billed - _TC", 0, 10000, "Main - _TC"),
+				("Freight and Forwarding Charges - _TC", 0, 2000, "Main - _TC"),
+				("Expenses Included In Valuation - _TC", 0, 2000, "Main - _TC"),
+				(warehouse_account[pr.items[0].warehouse]["account"], 14000, 0, "Main - _TC"),
+			)
 		self.assertSequenceEqual(expected_gle, gl_entries)
 		frappe.local.enable_perpetual_inventory["_Test Company"] = old_perpetual_inventory
 

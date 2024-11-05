@@ -1121,7 +1121,7 @@ def get_item_wise_returned_qty(pr_doc):
                 AND pri.purchase_receipt_item IN %s
             GROUP BY 
                 pri.purchase_receipt_item
-        """, (tuple(items),), as_dict=1)
+        """, (tuple(items),), as_list=1)
     )
 
 

@@ -1546,8 +1546,9 @@ class TestStockEntry(FrappeTestCase):
 			"Repost Item Valuation", {"voucher_no": receipt2.name, "docstatus": 1}, "name"
 		)
 
-		doc = frappe.get_doc("Repost Item Valuation", repost_name)
-		repost_sl_entries(doc)
+		if repost_name:
+			doc = frappe.get_doc("Repost Item Valuation", repost_name)
+			repost_sl_entries(doc)
 
 		for obj in [repack1, repack2, transfer1, transfer2]:
 			obj.load_from_db()
