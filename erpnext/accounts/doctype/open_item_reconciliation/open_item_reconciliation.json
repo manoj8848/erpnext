@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2024-11-06 11:11:38.176859",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_jmjh",
+  "company",
+  "naming_series",
+  "column_break_psht",
+  "account",
+  "cost_center",
+  "amended_from",
+  "section_break_bdsb",
+  "total_credit_amount",
+  "credit_amount",
+  "column_break_wxdt",
+  "total_debit_amount",
+  "debit_amount",
+  "allocated_entries_section",
+  "allocation"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_jmjh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Open Item Reconciliation",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "OIR.#####"
+  },
+  {
+   "fieldname": "column_break_psht",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_bdsb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_credit_amount",
+   "fieldtype": "Currency",
+   "label": "Total Credit Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_amount",
+   "fieldtype": "Table",
+   "label": "Credit Amount",
+   "options": "GL Reconciliation Details"
+  },
+  {
+   "fieldname": "column_break_wxdt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_debit_amount",
+   "fieldtype": "Currency",
+   "label": "Total Debit Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "debit_amount",
+   "fieldtype": "Table",
+   "label": "Debit Amount",
+   "options": "GL Reconciliation Details"
+  },
+  {
+   "fieldname": "allocated_entries_section",
+   "fieldtype": "Section Break",
+   "label": "Allocated Entries"
+  },
+  {
+   "fieldname": "allocation",
+   "fieldtype": "Table",
+   "label": "Allocation",
+   "options": "GL Entry Allocation"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2024-11-06 11:35:13.589290",
+ "modified_by": "Administrator",
+ "module": "Accounts",
+ "name": "Open Item Reconciliation",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -56,6 +56,9 @@ erpnext.accounts.SalesInvoiceController = class SalesInvoiceController extends (
 			me.frm.refresh_fields();
 		}
 		erpnext.queries.setup_warehouse_query(this.frm);
+		if(me.frm.is_new() && me.frm.payment_schedule && me.frm.payment_schedule.length > 0){
+			me.frm.set_value("payment_schedule", "[]")
+		}
 		cur_frm.set_query("payment_term",function (doc) {
 			return {
 				

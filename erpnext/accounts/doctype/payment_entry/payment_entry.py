@@ -2565,10 +2565,10 @@ def set_pending_discount_loss(pe, doc, discount_amount, base_total_discount_loss
 		# Otherwise it will be the total discount loss.
 		book_tax_loss = frappe.db.get_single_value("Accounts Settings", "book_tax_discount_loss")
 		account_type = "round_off_account" if book_tax_loss else "default_discount_account"
-
+		account_name = get_default_account_name(doc.payment_term, doc.doctype)
 		pe.set_gain_or_loss(
 			account_details={
-				"account": frappe.get_cached_value("Company", pe.company, account_type),
+				"account": account_name,
 				"cost_center": pe.cost_center
 				or frappe.get_cached_value("Company", pe.company, "cost_center"),
 				"amount": discount_amount * positive_negative,
@@ -2794,7 +2794,7 @@ def apply_discount_paid_amount(paid_amount, received_amount, doc, party_account_
 	has_payment_discount_term = hasattr(doc, "payment_discount_terms") and doc.payment_discount_terms
 	is_multi_currency = party_account_currency != doc.company_currency
 	is_discount_applied = False
-
+	
 	if doc.doctype in eligible_for_payments and has_payment_discount_term:
 		for term in doc.payment_discount_terms:
 			if term.discount and reference_date <= term.discount_date and is_discount_applied is False:
@@ -2816,7 +2816,7 @@ def apply_discount_paid_amount(paid_amount, received_amount, doc, party_account_
 				total_discount += discount_amount
 				
 				is_discount_applied = True
-
+				
 			else:
 				continue
 
@@ -2827,3 +2827,6 @@ def apply_discount_paid_amount(paid_amount, received_amount, doc, party_account_
 
 	return paid_amount, received_amount, total_discount, valid_discounts
 
+def get_default_account_name(dn, dt):
+	field = "default_account_for_purchase" if dt in ["Purchase Order","Purchase Invoice"] else "default_account_for_sales"
+	return frappe.db.get_value("Payment Term", dn, field)

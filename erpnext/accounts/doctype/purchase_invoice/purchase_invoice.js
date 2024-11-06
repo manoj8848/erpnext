@@ -61,6 +61,9 @@ erpnext.accounts.PurchaseInvoice = class PurchaseInvoice extends erpnext.buying.
 		if (this.frm.doc.supplier && this.frm.doc.__islocal) {
 			this.frm.trigger("supplier");
 		}
+		if(me.frm.is_new() && me.frm.payment_schedule && me.frm.payment_schedule.length > 0){
+			me.frm.set_value("payment_schedule", "[]")
+		}
 		cur_frm.set_query("payment_term",function (doc) {
 			return {
 				

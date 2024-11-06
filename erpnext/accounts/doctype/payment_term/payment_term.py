@@ -17,6 +17,8 @@ class PaymentTerm(Document):
 
 		credit_days: DF.Int
 		credit_months: DF.Int
+		default_account_for_purchase: DF.Link | None
+		default_account_for_sales: DF.Link | None
 		description: DF.SmallText | None
 		discount: DF.Float
 		discount_type: DF.Literal["Percentage", "Amount"]

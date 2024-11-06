@@ -1139,7 +1139,8 @@
    "fieldname": "payment_terms_template",
    "fieldtype": "Link",
    "label": "Payment Terms Template",
-   "options": "Payment Terms Template"
+   "options": "Payment Terms Template",
+   "hidden":1
   },
   {
    "fieldname": "payment_schedule",
@@ -1147,7 +1148,8 @@
    "label": "Payment Schedule",
    "no_copy": 1,
    "options": "Payment Schedule",
-   "print_hide": 1
+   "print_hide": 1,
+   "hidden":1
   },
   {
    "fieldname": "terms_section_break",

@@ -27,6 +27,7 @@ class GLEntry(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from erpnext.accounts.doctype.gl_entry_reconciliation_details.gl_entry_reconciliation_details import GLEntryReconciliationDetails
 		from frappe.types import DF
 
 		account: DF.Link | None
@@ -45,18 +46,22 @@ class GLEntry(Document):
 		due_date: DF.Date | None
 		finance_book: DF.Link | None
 		fiscal_year: DF.Link | None
+		gl_entry_reconciliation_details: DF.Table[GLEntryReconciliationDetails]
 		is_advance: DF.Literal["No", "Yes"]
 		is_cancelled: DF.Check
 		is_opening: DF.Literal["No", "Yes"]
+		is_reconciled: DF.Check
 		party: DF.DynamicLink | None
 		party_type: DF.Link | None
 		posting_date: DF.Date | None
 		project: DF.Link | None
+		reconciled_amount: DF.Currency
 		remarks: DF.Text | None
 		to_rename: DF.Check
 		transaction_currency: DF.Link | None
 		transaction_date: DF.Date | None
 		transaction_exchange_rate: DF.Float
+		unreconciled_amount: DF.Currency
 		voucher_detail_no: DF.Data | None
 		voucher_no: DF.DynamicLink | None
 		voucher_subtype: DF.SmallText | None
@@ -83,6 +88,20 @@ class GLEntry(Document):
 			self.check_pl_account()
 			self.validate_party()
 			self.validate_currency()
+
+
+	def after_insert(self): #For Open Item Reconciliation Feature
+		total_amt = 0.0
+		if self.debit_in_account_currency > 0.0:
+			total_amt = self.debit_in_account_currency
+		elif self.credit_in_account_currency > 0.0:
+			total_amt = self.credit_in_account_currency
+		
+		reconciled_amt = self.reconciled_amount if self.reconciled_amount else 0.0
+		unreconciled_amount = total_amt - reconciled_amt
+
+		self.unreconciled_amount = unreconciled_amount
+
 
 	def on_update(self):
 		adv_adj = self.flags.adv_adj
@@ -451,3 +470,24 @@ def rename_temporarily_named_docs(doctype):
 			(newname, oldname),
 			auto_commit=True,
 		)
+
+@frappe.whitelist()
+def update_gl_entry_once(): #For Open Item reconciliation Feature. 
+    get_gl_ac = frappe.db.get_all("Account",{"is_open_item":1},["name"])
+    for row in get_gl_ac:
+        all_gle = frappe.db.get_all("GL Entry",{"account":row.name,"is_cancelled":0},["name"])
+        if all_gle:
+            for gle in all_gle:
+                if gle.get("name"):
+                    self = frappe.get_doc("GL Entry",gle.get("name"))
+                    total_amt = 0.0
+                    if self.debit_in_account_currency > 0.0:
+                        total_amt = self.debit_in_account_currency
+                    elif self.credit_in_account_currency > 0.0:
+                        total_amt = self.credit_in_account_currency
+                    
+                    reconciled_amt = self.reconciled_amount if self.reconciled_amount else 0.0
+                    unreconciled_amount = total_amt - reconciled_amt
+
+                    frappe.db.set_value(self.doctype,self.name,"unreconciled_amount",unreconciled_amount)
+                    frappe.db.commit()

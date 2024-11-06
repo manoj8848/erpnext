@@ -111,7 +111,7 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 		pi.submit()
 
 		expected_gl_entries = {
-			"_Test Payable - _TC": [0, 1512.3],
+			"_Test Payable - _TC": [0, 1512.0],
 			"_Test Account Cost for Goods Sold - _TC": [1250, 0],
 			"_Test Account Shipping Charges - _TC": [100, 0],
 			"_Test Account Excise Duty - _TC": [140, 0],
@@ -407,11 +407,17 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 			as_dict=1,
 		)
 		self.assertTrue(gl_entries)
-
-		expected_values = [
-			["_Test Account Cost for Goods Sold - TCP1", 250.0, 0],
-			["Creditors - TCP1", 0, 250],
-		]
+		if frappe.db.db_type == 'postgres':
+			expected_values = [
+				["Creditors - TCP1", 0, 250],
+				["_Test Account Cost for Goods Sold - TCP1", 250.0, 0],
+				
+			]
+		else:
+			expected_values = [
+				["_Test Account Cost for Goods Sold - TCP1", 250.0, 0],
+				["Creditors - TCP1", 0, 250],
+			]
 
 		for i, gle in enumerate(gl_entries):
 			self.assertEqual(expected_values[i][0], gle.account)
@@ -1534,7 +1540,10 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 
 		# Check GLE for Purchase Invoice
 		# Zero net effect on final TDS payable on invoice
-		expected_gle = [["_Test Account Cost for Goods Sold - _TC", 30000], ["Creditors - _TC", -30000]]
+		if frappe.db.db_type =='postgres':
+			expected_gle = [["Creditors - _TC", -30000],["_Test Account Cost for Goods Sold - _TC", 30000]]
+		else:
+			expected_gle = [["_Test Account Cost for Goods Sold - _TC", 30000], ["Creditors - _TC", -30000]]
 
 		gl_entries = frappe.db.sql(
 			"""select account, sum(debit - credit) as amount

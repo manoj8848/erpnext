@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-11-05 11:59:32.746108",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "posting_date",
+  "gl_entry",
+  "amount",
+  "glr_ref_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Posting Date"
+  },
+  {
+   "fieldname": "gl_entry",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "GL Entry",
+   "options": "GL Entry"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount"
+  },
+  {
+   "fieldname": "glr_ref_id",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Open Item Reconciliation Reference Id",
+   "options": "Open Item Reconciliation",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2024-11-06 13:46:30.663663",
+ "modified_by": "Administrator",
+ "module": "Accounts",
+ "name": "GL Entry Reconciliation Details",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
