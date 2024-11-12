@@ -11,13 +11,15 @@
   {
    "fieldname": "project_name",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Project",
-   "options": "Project"
+   "options": "Project",
+   "reqd": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2020-08-03 16:53:39.219736",
+ "modified": "2024-11-12 15:57:15.598452",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "PSOA Project",
@@ -26,5 +28,6 @@
  "quick_entry": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }

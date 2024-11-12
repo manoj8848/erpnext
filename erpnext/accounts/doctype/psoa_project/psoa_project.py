@@ -18,7 +18,7 @@ class PSOAProject(Document):
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
-		project_name: DF.Link | None
+		project_name: DF.Link
 	# end: auto-generated types
 
 	pass
