@@ -264,7 +264,7 @@ erpnext.PointOfSale.ItemSelector = class {
 			me.events.item_selected({
 				field: "qty",
 				value: "+1",
-				stock_uom = stock_uom === "undefined" ? undefined : stock_uom;
+				stock_uom  
 			});
 			me.search_field.set_focus();
 		});
