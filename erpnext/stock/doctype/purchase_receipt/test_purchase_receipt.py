@@ -4189,6 +4189,42 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(sl_entries[0]['actual_qty'], -10)
 		self.assertEqual(sh_gle[0], sh_gle[1])
 		self.assertEqual(srbnb_gle[0], srbnb_gle[1])
+	
+	def test_pr_zero_valuation_TC_B_104(self):
+		company = "_Test Company"
+		item_code = "Testing-31"
+		warehouse = "Stores - _TC"
+		supplier = "_Test Supplier 1"
+		item_price = 0
+		if not item_code:
+			create_item("Testing-31")
+		if not warehouse:
+			create_warehouse("Stores - _TC")
+		if not frappe.db.exists("Item Price", {"item_code": item_code, "price_list": "Standard Buying"}):
+			frappe.get_doc({
+				"doctype": "Item Price",
+				"price_list": "Standard Buying",
+				"item_code": item_code,
+				"price_list_rate": item_price
+			}).insert()
+		pr_data = {
+			"company" : company,
+			"item_code" : item_code,
+			"warehouse" : warehouse,
+			"supplier": supplier,
+			"received_qty":1,
+			"qty" : 1,
+			"rate" : 0,
+			"do_not_save":1
+		}
+		pr = make_purchase_receipt(**pr_data)
+		pr.items[0].allow_zero_valuation_rate = 1
+		pr.save()
+		pr.submit()
+		gl_entries = get_gl_entries(pr.doctype, pr.name)
+		self.assertEqual(len(gl_entries), 0)
+		sle_entries = get_sl_entries(pr.doctype, pr.name)
+		self.assertEqual(len(sle_entries), 1)
 
 	def test_create_2pr_with_item_fifo_and_sr_TC_SCK_14(self):
 		self._test_create_2pr_with_item_fifo_and_sr()
