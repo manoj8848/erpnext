@@ -4,7 +4,7 @@
 
 from collections import deque
 from functools import partial
-
+import copy
 import frappe
 from frappe.tests.utils import FrappeTestCase, timeout
 from frappe.utils import cstr, flt
@@ -20,6 +20,11 @@ from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
 	create_stock_reconciliation,
 )
+from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+from erpnext.buying.doctype.purchase_order.purchase_order import make_subcontracting_order
+from erpnext.subcontracting.doctype.subcontracting_order.subcontracting_order import make_subcontracting_receipt
+from erpnext.controllers.subcontracting_controller import make_rm_stock_entry
 
 test_records = frappe.get_test_records("BOM")
 test_dependencies = ["Item", "Quality Inspection Template"]
@@ -754,8 +759,70 @@ class TestBOM(FrappeTestCase):
 		self.assertTrue("_Test RM Item 1 Do Not Include In Manufacture" not in items)
 		self.assertTrue("_Test RM Item 2 Fixed Asset Item" not in items)
 		self.assertTrue("_Test RM Item 3 Manufacture Item" in items)
+	
+	def test_subcontrcting_supply_raw_material_TC_B_100(self):
+		import random
+		valid_hsn_codes = [
+				code for code in frappe.db.get_all("GST HSN Code", pluck='name')
+				if isinstance(code, str) and code.isdigit() and len(code) in [6, 8]
+			]
+		gst_hsn_code = random.choice(valid_hsn_codes)
+		item_1 = make_item(item_code="Testing Service", properties={"item_group":"Services","gst_hsn_code":gst_hsn_code, "is_stock_item":0}).name
+		item_2 = make_item(item_code="Testing Wooden Plank", properties={"item_group":"Raw Material","gst_hsn_code":gst_hsn_code,"valuation_rate":1500, "is_stock_item":1}).name
+		item_3 = make_item(item_code="Testing Nails", properties={"item_group":"Raw Material", "gst_hsn_code":gst_hsn_code,"valuation_rate":200, "is_stock_item":1}).name
+		item_4 = make_item(item_code="Testing Aluminium Bar", properties={"item_group":"Raw Material", "gst_hsn_code":gst_hsn_code,"valuation_rate":500, "is_stock_item":1}).name
+		fg_item = make_item(item_code="Testing Cupboard", properties={"item_group":"Products", "gst_hsn_code":gst_hsn_code, "is_sub_contracted_item":1, "is_stock_item":1}).name
+		raw_materials = [item_2, item_3, item_4]
+		supplier_warehouse = create_warehouse("Supplier Warehouse PO")
+		from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
+		bom = make_bom(item=fg_item, raw_materials=raw_materials, do_not_save=True)
+		for item in bom.items:
+			if item.item_code == item_2:
+				item.qty = 10
+			elif item.item_code == item_3:
+				item.qty = 5
+			elif item.item_code == item_4:
+				item.qty = 2
+		bom.insert(ignore_permissions=True)
+		bom.submit()
+		po = create_purchase_order(item_code=item_1, qty=1, rate=1000, is_subcontracted=1, supplier_warehouse=supplier_warehouse, do_not_save=True)
+		po.items[0].fg_item = fg_item
+		po.items[0].fg_item_qty = 1
+		po.save()
+		po.submit()
+		sco = make_subcontracting_order(po.name) 
+		sco.supplier_warehouse = supplier_warehouse
+		sco.set_warehouse = "Stores - _TC"
+		sco.save()
+		sco.submit()
+		from erpnext.controllers.tests.test_subcontracting_controller import get_rm_items, make_stock_in_entry, make_stock_transfer_entry
+		rm_items = get_rm_items(sco.supplied_items)
+		itemwise_details = make_stock_in_entry(rm_items=rm_items)
 
+		for item in rm_items:
+			item["sco_rm_detail"] = sco.items[0].name
 
+		make_stock_transfer_entry(
+			sco_no=sco.name,
+			rm_items=rm_items,
+			itemwise_details=copy.deepcopy(itemwise_details),
+		)
+		make_subcontracting_receipt_against_sco(sco.name)
+		from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_invoice 
+		pr = make_purchase_receipt(po.name)
+		pr.submit()
+		self.assertEqual(pr.status, "To Bill")
+		pi = make_purchase_invoice(pr.name)
+		pi.is_paid = 1
+		pi.mode_of_payment = "Cash"
+		pi.cash_bank_account = "Cash - _TC"
+		pi.paid_amount = 1000
+		pi.save()
+		pi.submit()
+		self.assertEqual(pi.status, "Paid")
+
+		
 def get_default_bom(item_code="_Test FG Item 2"):
 	return frappe.db.get_value("BOM", {"item": item_code, "is_active": 1, "is_default": 1})
 
@@ -773,6 +840,12 @@ def level_order_traversal(node):
 			q.append(subtree)
 
 	return traversal
+
+def make_subcontracting_receipt_against_sco(sco, quantity=1):
+	scr = make_subcontracting_receipt(sco)
+	scr.items[0].qty = quantity
+	scr.insert()
+	scr.submit()
 
 
 def create_nested_bom(tree, prefix="_Test bom "):
