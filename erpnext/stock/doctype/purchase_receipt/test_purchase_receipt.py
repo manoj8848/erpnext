@@ -4503,6 +4503,46 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(pi.net_total, 9000)
 		pi.submit()
 
+	def test_pr_zero_valuation_TC_B_104(self):
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		item = create_item("Testing-31")
+		supplier = create_supplier(supplier_name="_Test Supplier")
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			company = frappe.new_doc("Company")
+			company.company_name = company
+			company.country="India",
+			company.default_currency= "INR",
+			company.save()
+		else:
+			company = frappe.get_doc("Company", company) 
+		item_price = 0
+		if not frappe.db.exists("Item Price", {"item_code": item.item_code, "price_list": "Standard Buying"}):
+			frappe.get_doc({
+				"doctype": "Item Price",
+				"price_list": "Standard Buying",
+				"item_code": item.item_code,
+				"price_list_rate": item_price
+			}).insert()
+		pr_data = {
+			"company" : company.name,
+			"item_code" : item.item_code,
+			"warehouse" : create_warehouse("Stores - _TC", company=company.name),
+			"supplier": supplier.name,
+			"received_qty":1,
+			"qty" : 1,
+			"rate" : 0,
+			"do_not_save":1
+		}
+		pr = make_purchase_receipt(**pr_data)
+		pr.items[0].allow_zero_valuation_rate = 1
+		pr.save()
+		pr.submit()
+		gl_entries = get_gl_entries(pr.doctype, pr.name)
+		self.assertEqual(len(gl_entries), 0)
+		sle_entries = get_sl_entries(pr.doctype, pr.name)
+		self.assertEqual(len(sle_entries), 1)
+	
 	def test_putaway_rule_with_pr_pi_TC_B_153(self):
 		company = "_Test Company"
 		warehouse = "Stores - _TC"
