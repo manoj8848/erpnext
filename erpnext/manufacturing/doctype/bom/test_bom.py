@@ -760,7 +760,6 @@ class TestBOM(FrappeTestCase):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
-		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.buying.doctype.purchase_order.purchase_order import make_subcontracting_order
 		item_1 = create_item(item_code="Testing Service", is_stock_item=0)
 		item_1.item_group = "Services"

@@ -6792,6 +6792,53 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(po.total_taxes_and_charges, 360)
 		self.assertEqual(po.grand_total, 2360)
 
+	def test_po_with_create_tax_template_5_pr_pi_2_TC_B_145(self):
+		from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_invoice
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		supplier = create_supplier(supplier_name="_Test Supplier PO")
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			company = frappe.new_doc("Company")
+			company.company_name = company
+			company.country="India",
+			company.default_currency= "INR",
+			company.save()
+		else:
+			company = frappe.get_doc("Company", company)
+		tax_template = "GST 5% - TC-4"
+		if not frappe.db.exists("Item Tax Template", tax_template):
+			tax_template = get_tax_template(company.name, tax_template, 5)
+		item_group = frappe.get_doc("Item Group", "Raw Material")
+		item_group.append("taxes", {"item_tax_template": tax_template})
+		item_group.save()
+		item = create_item("_Test Item")
+		item.item_group = "Raw Material"
+		item.save()
+		po_data = {
+			"company": company.name,
+			"supplier": supplier.name,
+			"warehouse": create_warehouse("Stores - _TC"),
+			"item_code": item.item_code,
+			"qty": 10,
+			"rate": 1000
+		}
+		doc_po = create_purchase_order(**po_data)
+		doc_pr = make_purchase_receipt(doc_po.name)
+		doc_pr.save()
+		doc_pr.submit()
+		self.assertEqual(doc_pr.items[0].qty, 10)
+		self.assertEqual(doc_pr.items[0].rate, 1000)
+		pr_gl_entries = frappe.get_all("GL Entry", filters={"voucher_no": doc_pr.name}, fields=["account", "debit", "credit"])
+		for gl_entries in pr_gl_entries:
+			if gl_entries['account'] == "Stock In Hand - _TC":
+				self.assertEqual(gl_entries['debit'], 10000)
+			elif gl_entries['account'] == "Stock Received But Not Billed - _TC":
+				self.assertEqual(gl_entries['credit'], 10000)
+		doc_pi = make_purchase_invoice(doc_pr.name)
+		doc_pi.save()
+		doc_pi.submit()
+
 	def test_po_with_partial_pi_and_update_items_TC_B_130(self):
 		company = "_Test Company"
 		warehouse = "Stores - _TC"
@@ -8161,6 +8208,31 @@ def get_item_tax_template(company, tax_template, rate):
 					},
 					{
 						"tax_type": "Input Tax SGST - TC-3",
+						"tax_rate": rate/2
+					},
+				]
+			}
+		)
+		tax_template.insert(ignore_if_duplicate=True)
+
+		return tax_template.name
+
+def get_tax_template(company, tax_template, rate):
+	if not frappe.db.exists(tax_template):
+		tax_template = frappe.get_doc(
+			{
+				"doctype": "Item Tax Template",
+				"title": f"GST {rate}%",
+				"company": company,
+				"gst_treatment": "Taxable",
+				"gst_rate": rate,
+				"taxes": [
+					{
+						"tax_type": "Input Tax CGST - _TC",
+						"tax_rate": rate/2
+					},
+					{
+						"tax_type": "Input Tax SGST - _TC",
 						"tax_rate": rate/2
 					},
 				]
