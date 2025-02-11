@@ -3311,6 +3311,17 @@ class TestStockEntry(FrappeTestCase):
 		se.save()
 		se.submit()
 
+	@change_settings("Stock Settings", {"allow_negative_stock": 1})
+	def test_stock_manufacture_with_batch_TC_SCK_139(self):
+		company = create_company()
+		item = make_item("ADI-SH-W07", {'has_batch_no':1, "create_new_batch":1, "valuation_rate":100})
+		se = make_stock_entry(item_code=item.name,purpose="Manufacture", company=company,target=create_warehouse("Test Warehouse"), qty=150, basic_rate=100,do_not_save=True)
+		se.items[0].is_finished_item = 1
+		se.save()
+		se.submit()
+		self.assertEqual(se.items[0].purpose, "Manufacture")
+		self.assertEqual(se.items[0].is_finished_item, 1)
+
 def create_company(company=None):
 	if not company:
 		company = "_Test Company"
