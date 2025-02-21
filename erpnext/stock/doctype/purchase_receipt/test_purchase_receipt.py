@@ -2,7 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase, change_settings
+from frappe.tests.utils import FrappeTestCase, change_settings, if_app_installed
 from frappe.utils import add_days, cint, cstr, flt, get_datetime, getdate, nowtime, today
 from pypika import functions as fn
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
@@ -4705,16 +4705,15 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 	def test_pr_with_additional_discount_TC_B_053(self):
 		# Scenario : PR => PI [With Additional Discount]
-		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
-			make_purchase_invoice as make_pi_from_pr,
-		)
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		item = make_test_item("Testing-31")
 
 		pr_data = {
 			"company" : "_Test Company",
-			"item_code" : "_Test Item",
+			"item_code" : item.item_code,
 			"warehouse" : "Stores - _TC",
 			"supplier": "_Test Supplier",
-            "schedule_date": "2025-01-13",
+            "schedule_date": today(),
 			"qty" : 1,
 			"rate" : 10000,
 			"apply_discount_on" : "Net Total",
@@ -4741,7 +4740,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(doc_pr.discount_amount, 1000)
 		self.assertEqual(doc_pr.grand_total, 10080)
 
-		pi = make_pi_from_pr(doc_pr.name)
+		pi = make_purchase_invoice(doc_pr.name)
 		pi.insert()
 		pi.submit()
 
@@ -4755,45 +4754,61 @@ class TestPurchaseReceipt(FrappeTestCase):
 		pi_total = sum(entry["debit"] for entry in pi_gl_entries)
 		self.assertEqual(pi_total, 10080)
 
+	@if_app_installed("india_compliance")
 	def test_pr_to_pi_with_additional_discount_TC_B_059(self):
 		# Scenario : PR => PI [With Applied Additional Discount on Grand Total]
-		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
-			make_purchase_invoice as make_pi_from_pr,
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_company_and_supplier as create_data
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		get_company_supplier = create_data()
+		company = get_company_supplier.get("child_company")
+		# supplier = get_company_supplier.get("supplier")
+		supplier = create_supplier(
+			supplier_name="_test_supplier",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company"
 		)
-
+		item = make_test_item("test_item_discount")
+		warehouse = "Stores - TC-3"
 		pr_data = {
-			"company" : "_Test Company",
-			"item_code" : "_Test Item",
-			"warehouse" : "Stores - _TC",
-			"supplier": "_Test Supplier",
-            "schedule_date": "2025-01-13",
+			"company" : company,
+			"item_code" : item.item_code,
+			"supplier_warehouse" : warehouse,
+			"supplier": supplier,
+            "schedule_date": today(),
 			"qty" : 1,
 			"rate" : 10000,
 			"apply_discount_on" : "Grand Total",
 			"additional_discount_percentage" :10 ,
-			"do_not_submit":1
+			"do_not_submit":1,
+			"warehouse": warehouse,
+			"stock_uom": "Nos",
+			"uom": "Nos"
 		}
 
 		acc = frappe.new_doc("Account")
-		acc.account_name = "Input Tax IGST"
-		acc.parent_account = "Tax Assets - _TC"
-		acc.company = "_Test Company"
-		account_name = frappe.db.exists("Account", {"account_name" : "Input Tax IGST","company": "_Test Company" })
+		acc.account_name = "Input Tax"
+		acc.parent_account = "Tax Assets - TC-3"
+		acc.company = company
+		account_name = frappe.db.exists("Account", {"account_name" : "Input Tax","company": company})
 		if not account_name:
 			account_name = acc.insert()
 
 		doc_pr = make_purchase_receipt(**pr_data)
-		doc_pr.append("taxes", {
-                    "charge_type": "On Net Total",
-                    "account_head": account_name,
-                    "rate": 12,
-                    "description": "Input GST",
-                })
+		doc_pr.append(
+			"taxes",
+			{
+				"charge_type": "On Net Total",
+				"account_head": account_name,
+				"rate": 12,
+				"description": "Input GST",
+            }
+		)
 		doc_pr.submit()
 		self.assertEqual(doc_pr.discount_amount, 1120)
 		self.assertEqual(doc_pr.grand_total, 10080)
 
-		pi = make_pi_from_pr(doc_pr.name)
+		pi = make_purchase_invoice(doc_pr.name)
+		pi.bill_no = "test_bill_1122"
 		pi.insert()
 		pi.submit()
 
@@ -4809,13 +4824,15 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 	def test_standalone_pr_with_additional_discount_TC_B_062(self):
 		# Scenario : Standalone PR [With Applied Additional Discount on Grand Total]
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		item = make_test_item("Testing-31")
 
 		pr_data = {
 			"company" : "_Test Company",
-			"item_code" : "_Test Item",
+			"item_code" : item.item_code,
 			"warehouse" : "Stores - _TC",
 			"supplier": "_Test Supplier",
-            "schedule_date": "2025-01-13",
+            "schedule_date": today(),
 			"qty" : 1,
 			"rate" : 10000,
 			"apply_discount_on" : "Grand Total",
