@@ -79,19 +79,36 @@ class PromotionalScheme(Document):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
+		from frappe.types import DF
+
 		from erpnext.accounts.doctype.customer_group_item.customer_group_item import CustomerGroupItem
 		from erpnext.accounts.doctype.customer_item.customer_item import CustomerItem
 		from erpnext.accounts.doctype.pricing_rule_brand.pricing_rule_brand import PricingRuleBrand
-		from erpnext.accounts.doctype.pricing_rule_item_code.pricing_rule_item_code import PricingRuleItemCode
-		from erpnext.accounts.doctype.pricing_rule_item_group.pricing_rule_item_group import PricingRuleItemGroup
-		from erpnext.accounts.doctype.promotional_scheme_price_discount.promotional_scheme_price_discount import PromotionalSchemePriceDiscount
-		from erpnext.accounts.doctype.promotional_scheme_product_discount.promotional_scheme_product_discount import PromotionalSchemeProductDiscount
+		from erpnext.accounts.doctype.pricing_rule_item_code.pricing_rule_item_code import (
+			PricingRuleItemCode,
+		)
+		from erpnext.accounts.doctype.pricing_rule_item_group.pricing_rule_item_group import (
+			PricingRuleItemGroup,
+		)
+		from erpnext.accounts.doctype.promotional_scheme_price_discount.promotional_scheme_price_discount import (
+			PromotionalSchemePriceDiscount,
+		)
+		from erpnext.accounts.doctype.promotional_scheme_product_discount.promotional_scheme_product_discount import (
+			PromotionalSchemeProductDiscount,
+		)
 		from erpnext.accounts.doctype.supplier_group_item.supplier_group_item import SupplierGroupItem
 		from erpnext.accounts.doctype.supplier_item.supplier_item import SupplierItem
 		from erpnext.accounts.doctype.territory_item.territory_item import TerritoryItem
 		from frappe.types import DF
 
-		applicable_for: DF.Literal["", "Customer", "Customer Group", "Territory", "Supplier", "Supplier Group"]
+		applicable_for: DF.Literal[
+			"",
+			"Customer",
+			"Customer Group",
+			"Territory",
+			"Supplier",
+			"Supplier Group",
+		]
 		apply_on: DF.Literal["", "Item Code", "Item Group", "Brand", "Transaction"]
 		apply_rule_on_other: DF.Literal["", "Item Code", "Item Group", "Brand"]
 		brands: DF.Table[PricingRuleBrand]

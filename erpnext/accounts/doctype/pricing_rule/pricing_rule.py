@@ -170,8 +170,6 @@ class PricingRule(Document):
 			"Customer",
 			"Customer Group",
 			"Territory",
-			"Sales Partner",
-			"Campaign",
 		]:
 			throw(
 				_("Selling must be checked, if Applicable For is selected as {0}").format(self.applicable_for)
@@ -298,8 +296,6 @@ def apply_pricing_rule(args, doc=None):
 	        "plc_conversion_rate": "something",
 	        "company": "something",
 	        "transaction_date": "something",
-	        "campaign": "something",
-	        "sales_partner": "something",
 	        "ignore_pricing_rule": "something"
 	}
 	"""
