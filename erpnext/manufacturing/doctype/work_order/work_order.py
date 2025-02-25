@@ -1441,6 +1441,7 @@ def make_stock_entry(work_order_id, purpose, qty=None, target_warehouse=None):
 		if "project" in frappe.get_installed_apps() :
 			stock_entry.project = work_order.project
 
+
 	if purpose == "Disassemble":
 		stock_entry.from_warehouse = work_order.fg_warehouse
 		stock_entry.to_warehouse = target_warehouse or work_order.source_warehouse
