@@ -371,11 +371,9 @@ def get_stock_ledger_entries(filters, items):
 	to_date = get_datetime(filters.to_date + " 23:59:59")
 
 	sle = frappe.qb.DocType("Stock Ledger Entry")
-	query = (
-		frappe.qb.from_(sle)
-		.select(
+	fileds_list = ["voucher_no", "company"]
+	select_fields = [
 			sle.item_code,
-			sle.posting_datetime.as_("date"),
 			sle.warehouse,
 			sle.posting_date,
 			sle.posting_time,
@@ -390,9 +388,15 @@ def get_stock_ledger_entries(filters, items):
 			sle.voucher_no,
 			sle.stock_value,
 			sle.batch_no,
-			sle.serial_no,
-			sle.project,
-		)
+			sle.serial_no,]
+	
+	if "Asset" in frappe.get_installed_apps():
+		fileds_list.append("project")
+		select_fields.append(sle.project)
+
+	query = (
+		frappe.qb.from_(sle)
+		.select(sle.posting_datetime.as_("date"), *select_fields)
 		.where((sle.docstatus < 2) & (sle.is_cancelled == 0) & (sle.posting_datetime[from_date:to_date]))
 		.orderby(sle.posting_datetime)
 		.orderby(sle.creation)
@@ -408,7 +412,7 @@ def get_stock_ledger_entries(filters, items):
 	if items:
 		query = query.where(sle.item_code.isin(items))
 
-	for field in ["voucher_no", "project", "company"]:
+	for field in fileds_list:
 		if filters.get(field) and field not in inventory_dimension_fields:
 			query = query.where(sle[field] == filters.get(field))
 

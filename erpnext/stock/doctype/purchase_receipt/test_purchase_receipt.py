@@ -772,8 +772,9 @@ class TestPurchaseReceipt(FrappeTestCase):
 			company="_Test Company with perpetual inventory",
 		)
 
-		if not frappe.db.exists("Location", "Test Location"):
-			frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
+		if "Asset" in frappe.get_installed_apps():
+			if not frappe.db.exists("Location", "Test Location"):
+				frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
 
 		pr = make_purchase_receipt(
 			cost_center=cost_center,
@@ -797,8 +798,10 @@ class TestPurchaseReceipt(FrappeTestCase):
 		pr.cancel()
 
 	def test_purchase_receipt_cost_center_with_balance_sheet_account(self):
-		if not frappe.db.exists("Location", "Test Location"):
-			frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
+
+		if "Asset" in frappe.get_installed_apps():
+			if not frappe.db.exists("Location", "Test Location"):
+				frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
 
 		pr = make_purchase_receipt(
 			company="_Test Company with perpetual inventory",
@@ -5336,8 +5339,12 @@ def make_purchase_receipt(**args):
 	return pr
 
 def make_purchase_receipt_with_multiple_items(**args):
-	if not frappe.db.exists("Location", "Test Location"):
-		frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
+	test_dependencies = ["BOM", "Item Price"]
+	if "Asset" in frappe.get_installed_apps():
+		test_dependencies.append("Location")
+
+		if not frappe.db.exists("Location", "Test Location"):
+			frappe.get_doc({"doctype": "Location", "location_name": "Test Location"}).insert()
 
 	frappe.db.set_single_value("Buying Settings", "allow_multiple_items", 1)
 	pr = frappe.new_doc("Purchase Receipt")
@@ -5374,9 +5381,6 @@ def make_purchase_receipt_with_multiple_items(**args):
 
 	return pr
 
-test_dependencies = ["BOM", "Item Price"]
-if "Asset" in frappe.get_installed_apps():
-	test_dependencies.append("Location")
 test_records = frappe.get_test_records("Purchase Receipt")
 
 
