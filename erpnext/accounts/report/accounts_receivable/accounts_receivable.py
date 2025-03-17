@@ -267,18 +267,6 @@ class ReceivablePayableReport:
 				row.invoiced_in_account_currency += amount_in_account_currency
 		else:
 			if self.is_invoice(ple):
-				# when invoice has is_return marked
-				if self.invoice_details.get(row.voucher_no, {}).get("is_return"):
-					# for Credit Note
-					if row.voucher_type == "Sales Invoice":
-						row.credit_note -= amount
-						row.credit_note_in_account_currency -= amount_in_account_currency
-					# for Debit Note
-					else:
-						row.invoiced -= amount
-						row.invoiced_in_account_currency -= amount_in_account_currency
-					return
-					
 				if row.voucher_no == ple.voucher_no == ple.against_voucher_no:
 					row.paid -= amount
 					row.paid_in_account_currency -= amount_in_account_currency
@@ -430,7 +418,7 @@ class ReceivablePayableReport:
 		if self.account_type == "Receivable":
 			si_list = frappe.db.sql(
 				"""
-				select name, due_date, po_no, is_return
+				select name, due_date, po_no
 				from `tabSales Invoice`
 				where posting_date <= %s
 				and company = %s
@@ -460,7 +448,7 @@ class ReceivablePayableReport:
 		if self.account_type == "Payable":
 			for pi in frappe.db.sql(
 				"""
-				select name, due_date, bill_no, bill_date, is_return
+				select name, due_date, bill_no, bill_date
 				from `tabPurchase Invoice`
 				where posting_date <= %s AND company = %s
 			""",
