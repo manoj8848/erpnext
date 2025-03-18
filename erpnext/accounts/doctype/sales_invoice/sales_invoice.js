@@ -553,17 +553,16 @@ cur_frm.cscript["Make Delivery Note"] = function () {
 	});
 };
 
-cur_frm.set_query("cash_bank_account", function(doc) {
+cur_frm.fields_dict.cash_bank_account.get_query = function (doc) {
 	return {
 		filters: [
 			["Account", "account_type", "in", ["Cash", "Bank"]],
 			["Account", "root_type", "=", "Asset"],
 			["Account", "is_group", "=", 0],
-			["Account", "company", "=", doc.company]
-		]
+			["Account", "company", "=", doc.company],
+		],
 	};
-});
-
+};
 cur_frm.fields_dict.write_off_account.get_query = function (doc) {
 	return {
 		filters: {

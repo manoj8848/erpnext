@@ -447,7 +447,7 @@ class TestStockEntry(FrappeTestCase):
 
 	def test_repack_with_additional_costs(self):
 		company = frappe.db.get_value("Warehouse", "Stores - TCP1", "company")
-
+		create_fiscal_with_company(company)
 		make_stock_entry(
 			item_code="_Test Item",
 			target="Stores - TCP1",
@@ -2210,7 +2210,7 @@ class TestStockEntry(FrappeTestCase):
 			company.insert()
 
 		warehouse = frappe.db.get_all("Warehouse", filters={"company": "_Test Company"})
-		get_or_create_fiscal_year('_Test Company')
+		create_fiscal_with_company('_Test Company')
 		self.source_warehouse = create_warehouse("Stores-test", properties={"parent_warehouse": "All Warehouses - _TC"}, company="_Test Company")
 		self.target_warehouse = create_warehouse("Department Stores-test", properties={"parent_warehouse": "All Warehouses - _TC"}, company="_Test Company")
 
@@ -4382,13 +4382,33 @@ def create_fiscal_with_company(company):
 		start_date = date(today.year - 1, 4, 1)
 		end_date = date(today.year, 3, 31)
 
-	fy_doc = frappe.new_doc("Fiscal Year")
-	fy_doc.year = "2024-2025"
-	fy_doc.year_start_date = start_date
-	fy_doc.year_end_date = end_date
-	fy_doc.append("companies", {"company": company})
+	FiscalYear = frappe.qb.DocType("Fiscal Year")
 
-	fy_doc.submit()
+	existing_fiscal_years = (
+		frappe.qb.from_(FiscalYear)
+		.select(FiscalYear.name)
+		.where(
+			(FiscalYear.year_start_date <= start_date) & (FiscalYear.year_end_date >= start_date)
+			| (FiscalYear.year_start_date <= end_date) & (FiscalYear.year_end_date >= end_date)
+			| (start_date <= FiscalYear.year_start_date) & (end_date >= FiscalYear.year_start_date)
+			| (start_date <= FiscalYear.year_end_date) & (end_date >= FiscalYear.year_end_date)
+		)
+	).run(as_dict=True)
+	
+	#fix for overlapping fiscal year
+	if existing_fiscal_years != []:
+		for fiscal_years in existing_fiscal_years:
+			fy_doc = frappe.get_doc("Fiscal Year",fiscal_years.get("name"))
+			if not frappe.db.exists("Fiscal Year Company", {"company": company}):
+				fy_doc.append("companies", {"company": company})
+				fy_doc.insert()
+	else:
+		fy_doc = frappe.new_doc("Fiscal Year")
+		fy_doc.year = "2024-2025"
+		fy_doc.year_start_date = start_date
+		fy_doc.year_end_date = end_date
+		fy_doc.append("companies", {"company": company})
+		fy_doc.submit()
 
 
 def get_fiscal_year(company):

@@ -1198,7 +1198,8 @@ class TestItem(FrappeTestCase):
 
 		wo.submit()
 		self.assertTrue(frappe.db.exists("Work Order", wo.name))
-		self.assertEqual(wo.alternate_item, alt_item.name, "Alternative item not found in Work Order")
+		alternate_item_in_wo = next((item.item_code for item in wo_items if item.item_code == alt_item.name), None)
+		self.assertEqual(alternate_item_in_wo, alt_item.name, "Alternative item not found in Work Order")
 
 def set_item_variant_settings(fields):
 	doc = frappe.get_doc("Item Variant Settings")

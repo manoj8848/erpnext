@@ -18,10 +18,6 @@ from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import (
 	make_purchase_invoice,
 	make_purchase_invoice_against_cost_center,
 )
-from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
-	create_sales_invoice,
-	create_sales_invoice_against_cost_center,
-)
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.setup.doctype.employee.test_employee import make_employee
 
