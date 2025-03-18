@@ -4469,11 +4469,11 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 
 		self.assertEqual(dn.status, "To Bill", "Delivery Note not created")
 
-		qty_change = frappe.get_all('Stock Ledger Entry', {'item_code': '_Test Item', 'voucher_no': dn.name, 'warehouse': 'Stores - _TIRC'}, ['actual_qty', 'valuation_rate'])
+		qty_change = frappe.get_all('Stock Ledger Entry', {'item_code': '_Test Item', 'voucher_no': dn.name, 'warehouse': 'Stores - _TIRC'}, ['actual_qty', 'incoming_rate'])
 		self.assertEqual(qty_change[0].get("actual_qty"), -5)
 
-		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': dn.name, 'account': 'Stock In Hand - _TIRC'}, 'credit'), qty_change[0].get("valuation_rate") * 5)
-		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': dn.name, 'account': 'Cost of Goods Sold - _TIRC'}, 'debit'), qty_change[0].get("valuation_rate") * 5)
+		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': dn.name, 'account': 'Stock In Hand - _TIRC'}, 'credit'), qty_change[0].get("incoming_rate") * 5)
+		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': dn.name, 'account': 'Cost of Goods Sold - _TIRC'}, 'debit'), qty_change[0].get("incoming_rate") * 5)
   
 		from erpnext.stock.doctype.delivery_note.delivery_note import (make_installation_note, make_sales_invoice)
 		install_note = make_installation_note(dn.name)
