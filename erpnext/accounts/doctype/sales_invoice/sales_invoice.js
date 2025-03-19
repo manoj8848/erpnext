@@ -563,7 +563,6 @@ cur_frm.fields_dict.cash_bank_account.get_query = function (doc) {
 		],
 	};
 };
-
 cur_frm.fields_dict.write_off_account.get_query = function (doc) {
 	return {
 		filters: {
