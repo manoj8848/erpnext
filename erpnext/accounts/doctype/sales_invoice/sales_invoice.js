@@ -553,7 +553,7 @@ cur_frm.cscript["Make Delivery Note"] = function () {
 	});
 };
 
-cur_frm.fields_dict("cash_bank_account", function(doc) {
+cur_frm.fields_dict.cash_bank_account.get_query = function (doc) {
 	return {
 		filters: [
 			["Account", "account_type", "in", ["Cash", "Bank"]],
@@ -562,8 +562,7 @@ cur_frm.fields_dict("cash_bank_account", function(doc) {
 			["Account", "company", "=", doc.company],
 		],
 	};
-});
-
+};
 
 cur_frm.fields_dict.write_off_account.get_query = function (doc) {
 	return {
