@@ -2198,9 +2198,9 @@ class TestStockEntry(FrappeTestCase):
 			"item_defaults": [{'company': "_Test Company", 'default_warehouse': warehouse}],
 		}
 		self.item_code = make_item("Test 1231", item_fields)
-		bin = get_bin(self.item_code.name, warehouse)
+		bin_qty = frappe.db.get_value("Bin",{"item_code","Test 1231"},'actual_qty')
 		
-		self.assertEqual(bin.actual_qty, item_fields["opening_stock"])
+		self.assertEqual(bin_qty, item_fields["opening_stock"])
 
 	def test_stock_reco_TC_SCK_127(self):
 		if not frappe.db.exists("Company", "_Test Company"):
@@ -2441,7 +2441,12 @@ class TestStockEntry(FrappeTestCase):
 			to_warehouse=target_warehouse,
 			# purpose="Material Receipt",
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		# Create Material Request
 		mr = make_material_request(
@@ -3234,7 +3239,12 @@ class TestStockEntry(FrappeTestCase):
 			qty=qty,
 			to_warehouse=target_warehouse,
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		# Create Material Request
 		mr = make_material_request(
@@ -3323,7 +3333,12 @@ class TestStockEntry(FrappeTestCase):
 			qty=qty,
 			to_warehouse=target_warehouse,
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		# Create Material Request
 		mr = make_material_request(
@@ -3416,7 +3431,12 @@ class TestStockEntry(FrappeTestCase):
 			qty=qty,
 			to_warehouse=target_warehouse,
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		# Create Material Request
@@ -3508,7 +3528,12 @@ class TestStockEntry(FrappeTestCase):
 			qty=qty,
 			to_warehouse=target_warehouse,
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		# Create Material Request
@@ -3602,7 +3627,12 @@ class TestStockEntry(FrappeTestCase):
 			qty=qty,
 			to_warehouse=target_warehouse,
 			company=company,
+			do_not_save=True
 		)
+		se_receipt.save()
+		se_receipt.items[0].expense_account = "Stock Adjustment - _TC"
+		se_receipt.save()
+		se_receipt.submit()
 		cost_center = frappe.db.get_all('Cost Center',{'company':company,'is_group':0},"name")
 		
 		# Create Material Request
@@ -3797,26 +3827,30 @@ class TestStockEntry(FrappeTestCase):
 				"s_warehouse":create_warehouse("Test Store 1",properties={"parent_warehouse": "All Warehouses - _TC"},company=company),
 				"item_code": item_1.item_code,
 				"qty": 10,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			},
 			{
 				"s_warehouse": create_warehouse("Test Store 2",properties={"parent_warehouse": "All Warehouses - _TC"},company=company),
 				"item_code": item_2.item_code,
 				"qty": 42,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			},
 			{
 				"t_warehouse": create_warehouse("Test Store 3",properties={"parent_warehouse": "All Warehouses - _TC"},company=company),
 				"item_code": item_3.item_code,
 				"qty": 8,
 				"is_finished_item": 1,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			},
 			{
 				"t_warehouse": create_warehouse("Test Store 4",properties={"parent_warehouse": "All Warehouses - _TC"},company=company),
 				"item_code": item_4.item_code,
 				"qty": 2,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			}
 		]
 		se.items = []
@@ -3940,13 +3974,21 @@ class TestStockEntry(FrappeTestCase):
 		item_1 = make_item("_Test Item 1",properties = {'valuation_rate':100})
 		get_or_create_fiscal_year('_Test Company')
 		warehouse_1 = create_warehouse("_Test warehouse PO", company=company)
-		se_1 = make_stock_entry(item_code=item_1.name, target=warehouse_1, qty=10, purpose="Material Receipt", company=company)
+		se_1 = make_stock_entry(item_code=item_1.name, target=warehouse_1, qty=10, purpose="Material Receipt", company=company,do_not_save=True)
+		se_1.save()
+		se_1.items[0].expense_account = "Stock Adjustment - _TC"
+		se_1.save()
+		se_1.submit()
 		self.assertEqual(se_1.items[0].item_code, item_1.name)
 		self.assertEqual(se_1.items[0].qty, 10)
 		self.check_stock_ledger_entries("Stock Entry", se_1.name, [[item_1.name, warehouse_1, 10]])
 		item_2 = make_item("_Test Item",properties = {'valuation_rate':100})
 		warehouse_2 = create_warehouse("Stores", company=company)
-		se_2 = make_stock_entry(item_code=item_2.name, target=warehouse_2, qty=20, purpose="Material Receipt", company=company)
+		se_2 = make_stock_entry(item_code=item_2.name, target=warehouse_2, qty=20, purpose="Material Receipt", company=company,do_not_save=True)
+		se_2.save()
+		se_2.items[0].expense_account = "Stock Adjustment - _TC"
+		se_2.save()
+		se_2.submit()
 		self.assertEqual(se_2.items[0].item_code, item_2.name)
 		self.assertEqual(se_2.items[0].qty, 20)
 		self.check_stock_ledger_entries("Stock Entry", se_2.name, [[item_2.name, warehouse_2, 20]])
@@ -3971,6 +4013,7 @@ class TestStockEntry(FrappeTestCase):
 		item = make_item("ADI-SH-W07", {'has_batch_no':1, "create_new_batch":1, "valuation_rate":100})
 		se = make_stock_entry(item_code=item.name,purpose="Manufacture", company=company,target=target_warehouse, qty=150, basic_rate=100,do_not_save=True)
 		se.items[0].is_finished_item = 1
+		se.items[0].expense_account = "Stock Adjustment - _TC"
 		se.save()
 		se.submit()
 		self.assertEqual(se.purpose, "Manufacture")
@@ -4018,45 +4061,65 @@ class TestStockEntry(FrappeTestCase):
 		item2 = make_item("_Test Item2281", item_fields2)
 
 		# Create stock transactions for item1 (Active)
-		make_stock_entry(
+		se_1 = make_stock_entry(
 			item_code=item1.name, 
 			purpose="Material Receipt", 
 			stock_entry_type="Material Receipt",
 			posting_date=nowdate(), 
 			company=company, 
 			target=target_warehouse, 
-			qty=15
+			qty=15,
+			do_not_save=True
 		)
+		se_1.save()
+		se_1.items[0].expense_account = "Stock Adjustment - _TC"
+		se_1.save()
+		se_1.submit()
 
-		make_stock_entry(
+		se_2 = make_stock_entry(
 			item_code=item1.name, 
 			purpose="Material Receipt", 
 			stock_entry_type="Material Receipt",
-			posting_date=add_days(nowdate(), 30), 
+			posting_date=nowdate(), 
 			company=company, 
 			target=target_warehouse, 
-			qty=25
+			qty=25,
+			do_not_save=True
 		)
+		se_2.save()
+		se_2.items[0].expense_account = "Stock Adjustment - _TC"
+		se_2.save()
+		se_2.submit()
 
-		make_stock_entry(
+		se_3 = make_stock_entry(
 			item_code=item1.name, 
 			purpose="Material Issue", 
 			stock_entry_type="Material Issue",
-			posting_date=add_days(nowdate(), 30), 
+			posting_date=nowdate(), 
 			company=company, 
 			source=target_warehouse, 
-			qty=10
+			qty=10,
+			do_not_save=True
 		)
+		se_3.save()
+		se_3.items[0].expense_account = "Stock Adjustment - _TC"
+		se_3.save()
+		se_3.submit()
 
-		make_stock_entry(
+		se_4 = make_stock_entry(
 			item_code=item1.name, 
 			purpose="Material Issue", 
 			stock_entry_type="Material Issue",
-			posting_date=add_days(nowdate(), 90), 
+			posting_date=nowdate(), 
 			company=company, 
 			source=target_warehouse, 
-			qty=20
+			qty=20,
+			do_not_save=True
 		)
+		se_4.save()
+		se_4.items[0].expense_account = "Stock Adjustment - _TC"
+		se_4.save()
+		se_4.submit()
 
 		# No stock transactions for item2 (Inactive)
 		
@@ -4097,6 +4160,7 @@ class TestStockEntry(FrappeTestCase):
 	@change_settings("Stock Settings", {"allow_negative_stock": 1})
 	def test_create_stock_entry_with_manufacture_purpose_TC_SCK_137(self):
 		company = create_company("_Test Company")
+		get_or_create_fiscal_year("_Test Company")
 		item_1 = make_item("W-N-001", properties={"valuation_rate":100})
 		item_2 = make_item("ST-N-001", properties={"valuation_rate":200})
 		item_3 = make_item("GU-SE-001", properties={"valuation_rate":300})
@@ -4106,20 +4170,23 @@ class TestStockEntry(FrappeTestCase):
 				"s_warehouse": create_warehouse("Test Store 1", company=company),
 				"item_code": item_1.name,
 				"qty": 10,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			},
 			{
 				"s_warehouse": create_warehouse("Test Store 2", company=company),
 				"item_code": item_2.name,
 				"qty": 50,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			},
 			{
 				"t_warehouse": create_warehouse("Test Store 2", company=company),
 				"item_code": item_3.name,
 				"qty": 10,
 				"is_finished_item":1,
-				"conversion_factor": 1
+				"conversion_factor": 1,
+				"expense_account":"Stock Adjustment - _TC"
 			}
 		]
 		se.items = []
