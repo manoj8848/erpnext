@@ -26,11 +26,6 @@ def validate_return(doc):
 	if doc.return_against:
 		validate_return_against(doc)
 
-		if doc.doctype in ("Sales Invoice", "Purchase Invoice") and not doc.update_stock:
-			return
-		
-		if doc.doctype in ("Sales Invoice", "Purchase Invoice") and not doc.update_stock:
-			return
 		validate_returned_items(doc)
 
 
@@ -121,7 +116,7 @@ def validate_returned_items(doc):
 		elif doc.doctype == "Delivery Note":
 			key = (d.item_code, d.get("dn_detail"))
 
-		if d.item_code and (flt(d.qty) < 0 or flt(d.get("received_qty")) < 0):
+		if d.item_code and (flt(d.qty) <= 0 or flt(d.get("received_qty")) <= 0):
 			if key not in valid_items:
 				frappe.msgprint(
 					_("Row # {0}: Returned Item {1} does not exist in {2} {3}").format(
@@ -163,6 +158,9 @@ def validate_returned_items(doc):
 
 def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 	fields = ["stock_qty"]
+	if (doc.doctype == "Purchase Invoice" or doc.doctype == "Sales Invoice") and not doc.update_stock:
+		fields = ["qty"]
+		 
 	if doc.doctype in ["Purchase Receipt", "Purchase Invoice", "Subcontracting Receipt"]:
 		if not args.get("return_qty_from_rejected_warehouse"):
 			fields.extend(["received_qty", "rejected_qty"])
@@ -172,13 +170,16 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 	already_returned_data = already_returned_items.get(key) or {}
 
 	company_currency = erpnext.get_company_currency(doc.company)
-	stock_qty_precision = get_field_precision(
-		frappe.get_meta(doc.doctype + " Item").get_field("stock_qty"), company_currency
+	field_precision = get_field_precision(
+ 		frappe.get_meta(doc.doctype + " Item").get_field(
+ 			"stock_qty" if doc.get("update_stock", "") else "qty"
+ 		),
+ 		company_currency,
 	)
 
 	for column in fields:
 		returned_qty = (
-			flt(already_returned_data.get(column, 0), stock_qty_precision)
+			flt(already_returned_data.get(column, 0), field_precision)
 			if len(already_returned_data) > 0
 			else 0
 		)
@@ -193,17 +194,17 @@ def validate_quantity(doc, key, args, ref, valid_items, already_returned_items):
 			reference_qty = ref.get(column) * ref.get("conversion_factor", 1.0)
 			current_stock_qty = args.get(column) * args.get("conversion_factor", 1.0)
 
-		max_returnable_qty = flt(flt(reference_qty, stock_qty_precision) - returned_qty, stock_qty_precision)
+		max_returnable_qty = flt(flt(reference_qty, field_precision) - returned_qty, field_precision)
 		label = column.replace("_", " ").title()
 
 		if reference_qty:
 			if flt(args.get(column)) > 0:
 				frappe.throw(_("{0} must be negative in return document").format(label))
-			elif returned_qty >= reference_qty and args.get(column):
+			elif returned_qty >= reference_qty and args.get(column) >= 0:
 				frappe.throw(
 					_("Item {0} has already been returned").format(args.item_code), StockOverReturnError
 				)
-			elif abs(flt(current_stock_qty, stock_qty_precision)) > max_returnable_qty:
+			elif abs(flt(current_stock_qty, field_precision)) > max_returnable_qty:
 				frappe.throw(
 					_("Row # {0}: Cannot return more than {1} for Item {2}").format(
 						args.idx, max_returnable_qty, args.item_code
@@ -261,7 +262,7 @@ def get_already_returned_items(doc):
 		
 	field = (
 		frappe.scrub(doc.doctype) + "_item"
-		if doc.doctype in ["Purchase Invoice", "Purchase Receipt", "Sales Invoice"]
+		if doc.doctype in ["Purchase Invoice", "Purchase Receipt", "Sales Invoice", "POS Invoice"]
 		else "dn_detail"
 	)
 
@@ -774,6 +775,7 @@ def get_return_against_item_fields(voucher_type):
 		"Delivery Note": "dn_detail",
 		"Sales Invoice": "sales_invoice_item",
 		"Subcontracting Receipt": "subcontracting_receipt_item",
+		"POS Invoice": "sales_invoice_item",
 	}
 	return return_against_item_fields[voucher_type]
 

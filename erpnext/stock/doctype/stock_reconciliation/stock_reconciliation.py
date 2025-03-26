@@ -924,6 +924,9 @@ class StockReconciliation(StockController):
 			if voucher_detail_no != row.name:
 				continue
 
+			if row.current_qty < 0:
+				return
+
 			val_rate = 0.0
 			current_qty = 0.0
 			if row.current_serial_and_batch_bundle:
@@ -1343,13 +1346,13 @@ def get_stock_balance_for(
 			or 0
 		)
 
-		if row.use_serial_batch_fields and row.batch_no:
+		if row.use_serial_batch_fields and row.batch_no and (qty or row.current_qty):
 			rate = get_incoming_rate(
 				frappe._dict(
 					{
 						"item_code": row.item_code,
 						"warehouse": row.warehouse,
-						"qty": row.qty * -1,
+						"qty": flt(qty or row.current_qty) * -1,
 						"batch_no": row.batch_no,
 						"company": company,
 						"posting_date": posting_date,

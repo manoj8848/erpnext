@@ -819,6 +819,7 @@ class PurchaseInvoice(BuyingController):
 		self.make_payment_gl_entries(gl_entries)
 		self.make_write_off_gl_entry(gl_entries)
 		self.make_gle_for_rounding_adjustment(gl_entries)
+		self.set_transaction_currency_and_rate_in_gl_map(gl_entries)
 		return gl_entries
 
 	def make_supplier_gl_entry(self, gl_entries):
@@ -836,12 +837,14 @@ class PurchaseInvoice(BuyingController):
 
 		if grand_total and not self.is_internal_transfer():
 			self.add_supplier_gl_entry(gl_entries, base_grand_total, grand_total)
+
 	def add_supplier_gl_entry(
 		self, gl_entries, base_grand_total, grand_total, against_account=None, remarks=None, skip_merge=False
 	):
 		against_voucher = self.name
 		if self.is_return and self.return_against and not self.update_outstanding_for_self:
 			against_voucher = self.return_against
+
 		# Did not use base_grand_total to book rounding loss gle
 		gl = {
 			"account": self.credit_to,
@@ -853,15 +856,17 @@ class PurchaseInvoice(BuyingController):
 			"credit_in_account_currency": base_grand_total
 			if self.party_account_currency == self.company_currency
 			else grand_total,
+			"credit_in_transaction_currency": grand_total,
 			"against_voucher": against_voucher,
 			"against_voucher_type": self.doctype,
-			"project": self.get("project") if "projects" in frappe.get_installed_apps() else "",
+			"project": self.project,
 			"cost_center": self.cost_center,
 			"_skip_merge": skip_merge,
 		}
 
 		if remarks:
 			gl["remarks"] = remarks
+
 		gl_entries.append(self.get_gl_dict(gl, self.party_account_currency, item=self))
 
 	def make_item_gl_entries(self, gl_entries):
@@ -885,9 +890,9 @@ class PurchaseInvoice(BuyingController):
 				)
 
 		valuation_tax_accounts = [
-			d.account_head
+			d.account_headnd (item.item_code in stock_items or item.is_fixed_asset)
 			for d in self.get("taxes")
-			if d.category in ("Valuation", "Total and Valuation")
+			if d.category in ("Valuation", "Valuation and Total")
 			and flt(d.base_tax_amount_after_discount_amount)
 		]
 
@@ -903,13 +908,15 @@ class PurchaseInvoice(BuyingController):
 
 		for item in self.get("items"):
 			if flt(item.base_net_amount):
-				account_currency = get_account_currency(item.expense_account)
+				if item.item_code:
+					frappe.get_cached_value("Item", item.item_code, "asset_category")
 
 				if (
 					self.update_stock
 					and self.auto_accounting_for_stock
-					and (item.item_code in stock_items)
+					and (item.item_code in stock_items or item.is_fixed_asset)
 				):
+					account_currency = get_account_currency(item.expense_account)
 					# warehouse account
 					warehouse_debit_amount = self.make_stock_adjustment_entry(
 						gl_entries, item, voucher_wise_stock_value, account_currency
@@ -922,9 +929,10 @@ class PurchaseInvoice(BuyingController):
 									"account": warehouse_account[item.warehouse]["account"],
 									"against": warehouse_account[item.from_warehouse]["account"],
 									"cost_center": item.cost_center,
-									"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": warehouse_debit_amount,
+									"debit_in_transaction_currency": item.net_amount,
 								},
 								warehouse_account[item.warehouse]["account_currency"],
 								item=item,
@@ -942,9 +950,10 @@ class PurchaseInvoice(BuyingController):
 									"account": warehouse_account[item.from_warehouse]["account"],
 									"against": warehouse_account[item.warehouse]["account"],
 									"cost_center": item.cost_center,
-									"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"debit": -1 * flt(credit_amount, item.precision("base_net_amount")),
+									"debit_in_transaction_currency": item.net_amount,
 								},
 								warehouse_account[item.from_warehouse]["account_currency"],
 								item=item,
@@ -959,9 +968,10 @@ class PurchaseInvoice(BuyingController):
 										"account": item.expense_account,
 										"against": self.supplier,
 										"debit": flt(item.base_net_amount, item.precision("base_net_amount")),
+										"debit_in_transaction_currency": item.net_amount,
 										"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 										"cost_center": item.cost_center,
-										"project": item.project if "projects" in frappe.get_installed_apps() else "",
+										"project": item.project,
 									},
 									account_currency,
 									item=item,
@@ -976,9 +986,13 @@ class PurchaseInvoice(BuyingController):
 										"account": item.expense_account,
 										"against": self.supplier,
 										"debit": warehouse_debit_amount,
+										"debit_in_transaction_currency": flt(
+											warehouse_debit_amount / self.conversion_rate,
+											item.precision("net_amount"),
+										),
 										"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 										"cost_center": item.cost_center,
-										"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+										"project": item.project or self.project,
 									},
 									account_currency,
 									item=item,
@@ -988,7 +1002,9 @@ class PurchaseInvoice(BuyingController):
 					# Amount added through landed-cost-voucher
 					if landed_cost_entries:
 						if (item.item_code, item.name) in landed_cost_entries:
-							for account, amount in landed_cost_entries[(item.item_code, item.name)].items():
+							for account, base_amount in landed_cost_entries[
+								(item.item_code, item.name)
+							].items():
 								gl_entries.append(
 									self.get_gl_dict(
 										{
@@ -996,9 +1012,10 @@ class PurchaseInvoice(BuyingController):
 											"against": item.expense_account,
 											"cost_center": item.cost_center,
 											"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
-											"credit": flt(amount["base_amount"]),
-											"credit_in_account_currency": flt(amount["amount"]),
-											"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else ""
+											"credit": flt(base_amount["base_amount"]),
+											"credit_in_account_currency": flt(base_amount["amount"]),
+											"credit_in_transaction_currency": item.net_amount,
+											"project": item.project or self.project,
 										},
 										item=item,
 									)
@@ -1017,9 +1034,10 @@ class PurchaseInvoice(BuyingController):
 									"account": supplier_warehouse_account,
 									"against": item.expense_account,
 									"cost_center": item.cost_center,
-									"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+									"project": item.project or self.project,
 									"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 									"credit": flt(item.rm_supp_cost),
+									"credit_in_transaction_currency": item.net_amount,
 								},
 								warehouse_account[self.supplier_warehouse]["account_currency"],
 								item=item,
@@ -1033,7 +1051,8 @@ class PurchaseInvoice(BuyingController):
 						else item.deferred_expense_account
 					)
 
-					dummy, amount = self.get_amount_and_base_amount(item, None)
+					account_currency = get_account_currency(expense_account)
+					amount, base_amount = self.get_amount_and_base_amount(item, None)
 
 					if provisional_accounting_for_non_stock_items:
 						self.make_provisional_gl_entry(gl_entries, item)
@@ -1044,9 +1063,10 @@ class PurchaseInvoice(BuyingController):
 								{
 									"account": expense_account,
 									"against": self.supplier,
-									"debit": amount,
+									"debit": base_amount,
+									"debit_in_transaction_currency": amount,
 									"cost_center": item.cost_center,
-									"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+									"project": item.project or self.project,
 								},
 								account_currency,
 								item=item,
@@ -1059,6 +1079,7 @@ class PurchaseInvoice(BuyingController):
 								exchange_rate_map[item.purchase_receipt]
 								and self.conversion_rate != exchange_rate_map[item.purchase_receipt]
 								and item.net_rate == net_rate_map[item.pr_detail]
+								and item.item_code in stock_items
 							):
 								discrepancy_caused_by_exchange_rate_difference = (
 									item.qty * item.net_rate
@@ -1071,7 +1092,7 @@ class PurchaseInvoice(BuyingController):
 											"against": self.supplier,
 											"debit": discrepancy_caused_by_exchange_rate_difference,
 											"cost_center": item.cost_center,
-											"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+											"project": item.project or self.project,
 										},
 										account_currency,
 										item=item,
@@ -1084,7 +1105,7 @@ class PurchaseInvoice(BuyingController):
 											"against": self.supplier,
 											"credit": discrepancy_caused_by_exchange_rate_difference,
 											"cost_center": item.cost_center,
-											"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+											"project": item.project or self.project,
 										},
 										account_currency,
 										item=item,
@@ -1105,7 +1126,9 @@ class PurchaseInvoice(BuyingController):
 					)
 
 					stock_rbnb = (
-						self.stock_received_but_not_billed
+						self.get_company_default("asset_received_but_not_billed")
+						if item.is_fixed_asset
+						else self.stock_received_but_not_billed
 					)
 
 					if not negative_expense_booked_in_pr:
@@ -1115,9 +1138,13 @@ class PurchaseInvoice(BuyingController):
 									"account": stock_rbnb,
 									"against": self.supplier,
 									"debit": flt(item.item_tax_amount, item.precision("item_tax_amount")),
+									"debit_in_transaction_currency": flt(
+										item.item_tax_amount / self.conversion_rate,
+										item.precision("item_tax_amount"),
+									),
 									"remarks": self.remarks or _("Accounting Entry for Stock"),
 									"cost_center": self.cost_center,
-									"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+									"project": item.project or self.project,
 								},
 								item=item,
 							)
@@ -1126,6 +1153,9 @@ class PurchaseInvoice(BuyingController):
 						self.negative_expense_to_be_booked += flt(
 							item.item_tax_amount, item.precision("item_tax_amount")
 						)
+
+			if item.is_fixed_asset and item.landed_cost_voucher_amount:
+				self.update_gross_purchase_amount_for_linked_assets(item)
 
 	def get_provisional_accounts(self):
 		self.provisional_accounts = frappe._dict()
@@ -1206,6 +1236,7 @@ class PurchaseInvoice(BuyingController):
 						"account": cost_of_goods_sold_account,
 						"against": item.expense_account,
 						"debit": stock_adjustment_amt,
+						"debit_in_transaction_currency": item.net_amount,
 						"remarks": self.get("remarks") or _("Stock Adjustment"),
 						"cost_center": item.cost_center,
 						"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
@@ -1239,6 +1270,7 @@ class PurchaseInvoice(BuyingController):
 							dr_or_cr + "_in_account_currency": base_amount
 							if account_currency == self.company_currency
 							else amount,
+							dr_or_cr + "_in_transaction_currency": amount,
 							"cost_center": tax.cost_center,
 						},
 						account_currency,
@@ -1285,6 +1317,10 @@ class PurchaseInvoice(BuyingController):
 								"cost_center": tax.cost_center,
 								"against": self.supplier,
 								"credit": applicable_amount,
+								"credit_in_transaction_currency": flt(
+ 									applicable_amount / self.conversion_rate,
+ 									frappe.get_precision("Purchase Invoice Item", "item_tax_amount"),
+ 								),
 								"remarks": self.remarks or _("Accounting Entry for Stock"),
 							},
 							item=tax,
@@ -1303,6 +1339,10 @@ class PurchaseInvoice(BuyingController):
 								"cost_center": tax.cost_center,
 								"against": self.supplier,
 								"credit": valuation_tax[tax.name],
+								"credit_in_transaction_currency": flt(
+ 									valuation_tax[tax.name] / self.conversion_rate,
+ 									frappe.get_precision("Purchase Invoice Item", "item_tax_amount"),
+ 								),
 								"remarks": self.remarks or _("Accounting Entry for Stock"),
 							},
 							item=tax,
@@ -1318,6 +1358,7 @@ class PurchaseInvoice(BuyingController):
 						"account": self.unrealized_profit_loss_account,
 						"against": self.supplier,
 						"credit": flt(self.total_taxes_and_charges),
+						"credit_in_transaction_currency": flt(self.total_taxes_and_charges),
 						"credit_in_account_currency": flt(self.base_total_taxes_and_charges),
 						"cost_center": self.cost_center,
 					},
@@ -1365,6 +1406,7 @@ class PurchaseInvoice(BuyingController):
 						"debit_in_account_currency": self.base_paid_amount
 						if self.party_account_currency == self.company_currency
 						else self.paid_amount,
+						"debit_in_transaction_currency": self.paid_amount,
 						"against_voucher": self.return_against
 						if cint(self.is_return) and self.return_against
 						else self.name,
@@ -1386,6 +1428,7 @@ class PurchaseInvoice(BuyingController):
 						"credit_in_account_currency": self.base_paid_amount
 						if bank_account_currency == self.company_currency
 						else self.paid_amount,
+						"credit_in_transaction_currency": self.paid_amount,
 						"cost_center": self.cost_center,
 					},
 					bank_account_currency,
@@ -1410,6 +1453,7 @@ class PurchaseInvoice(BuyingController):
 						"debit_in_account_currency": self.base_write_off_amount
 						if self.party_account_currency == self.company_currency
 						else self.write_off_amount,
+						"debit_in_transaction_currency": self.write_off_amount,
 						"against_voucher": self.return_against
 						if cint(self.is_return) and self.return_against
 						else self.name,
@@ -1430,6 +1474,7 @@ class PurchaseInvoice(BuyingController):
 						"credit_in_account_currency": self.base_write_off_amount
 						if write_off_account_currency == self.company_currency
 						else self.write_off_amount,
+						"credit_in_transaction_currency": self.write_off_amount,
 						"cost_center": self.cost_center or self.write_off_cost_center,
 					},
 					item=self,

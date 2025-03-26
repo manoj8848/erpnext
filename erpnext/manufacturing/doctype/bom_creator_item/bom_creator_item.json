@@ -15,6 +15,7 @@
   "is_expandable",
   "sourced_by_supplier",
   "bom_created",
+  "allow_alternative_item",
   "description_section",
   "description",
   "quantity_and_rate_section",
@@ -225,6 +226,12 @@
    "label": "BOM Created",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+    "default": "1",
+    "fieldname": "allow_alternative_item",
+    "fieldtype": "Check",
+    "label": "Allow Alternative Item"
   }
  ],
  "index_web_pages_for_search": 1,

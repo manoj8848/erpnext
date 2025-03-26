@@ -40,91 +40,66 @@ def validate_filters(filters):
 
 
 def get_data(filters):
-    is_projects_installed = "projects" in frappe.get_installed_apps()
-    query_result = frappe.db.sql(
-        f"""SELECT 
-                "tabPurchase Order"."transaction_date" AS "date",
-                "tabPurchase Order Item"."schedule_date" AS "required_date",
-                {'"tabPurchase Order Item"."project",' if is_projects_installed else ''}
-                "tabPurchase Order"."name" AS "purchase_order",
-                "tabPurchase Order"."status",
-                "tabPurchase Order"."supplier",
-                "tabPurchase Order Item"."item_code",
-                "tabPurchase Order Item"."qty",
-                "tabPurchase Order Item"."received_qty",
-                "tabPurchase Order Item"."qty" - "tabPurchase Order Item"."received_qty" AS "pending_qty",
-                SUM(COALESCE("tabPurchase Invoice Item"."qty", 0)) AS "billed_qty",
-                "tabPurchase Order Item"."base_amount" AS "amount",
-                "tabPurchase Order Item"."billed_amt" * COALESCE("tabPurchase Order"."conversion_rate", 1) AS "billed_amount",
-                "tabPurchase Order Item"."base_amount" - ("tabPurchase Order Item"."billed_amt" * COALESCE("tabPurchase Order"."conversion_rate", 1)) AS "pending_amount",
-                "tabPurchase Order"."set_warehouse" AS "warehouse",
-                "tabPurchase Order"."company",
-                "tabPurchase Order Item"."name",
-                (ARRAY_AGG("tabPurchase Invoice Item"."name"))[1] AS "invoice_items"
-            FROM 
-                "tabPurchase Order"
-            JOIN 
-                "tabPurchase Order Item" 
-                ON "tabPurchase Order Item"."parent" = "tabPurchase Order"."name"
-            LEFT JOIN 
-                "tabPurchase Invoice Item" 
-                ON "tabPurchase Invoice Item"."po_detail" = "tabPurchase Order Item"."name" 
-                AND "tabPurchase Invoice Item"."docstatus" = 1
-            WHERE 
-                "tabPurchase Order"."status" NOT IN ('Stopped', 'Closed')
-                AND "tabPurchase Order"."docstatus" = 1
-                
-            GROUP BY 
-                "tabPurchase Order"."transaction_date",
-                "tabPurchase Order Item"."schedule_date",
-                {'"tabPurchase Order Item"."project",' if is_projects_installed else ''}
-                "tabPurchase Order"."name",
-                "tabPurchase Order"."status",
-                "tabPurchase Order"."supplier",
-                "tabPurchase Order Item"."item_code",
-                "tabPurchase Order Item"."qty",
-                "tabPurchase Order Item"."received_qty",
-                "tabPurchase Order Item"."base_amount",
-                "tabPurchase Order Item"."billed_amt",
-                "tabPurchase Order"."conversion_rate",
-                "tabPurchase Order"."set_warehouse",
-                "tabPurchase Order"."company",
-                "tabPurchase Order Item"."name"
-            ORDER BY 
-                "tabPurchase Order"."transaction_date";
-        """,
-        as_dict=True
-    )
-    filtered_data = []
-    
-    for row in query_result:
-        include_row = True
-        
-        if filters.get("company") and row["company"] != filters.get("company"):
-            include_row = False
-            
-        if filters.get("name") and row["purchase_order"] != filters.get("name"):
-            include_row = False
-            
-        if filters.get("from_date") and filters.get("to_date"):
-            if not ((getdate(filters.get("from_date")) <= row["date"]) and (row["date"] <= getdate(filters.get("to_date")))):
-                include_row = False
-                
-        if filters.get("status"):
-            if isinstance(filters["status"], list):
-                if row["status"] not in filters["status"]:
-                    include_row = False
-            else:
-                if row["status"] != filters["status"]:
-                    include_row = False
-                    
-        if filters.get("project") and row["project"] != filters.get("project"):
-            include_row = False
-            
-        if include_row:
-            filtered_data.append(row)
+	po = frappe.qb.DocType("Purchase Order")
+	po_item = frappe.qb.DocType("Purchase Order Item")
+	pi_item = frappe.qb.DocType("Purchase Invoice Item")
+	is_projects_installed = "projects" in frappe.get_installed_apps()
 
-    return filtered_data
+	query = (
+		frappe.qb.from_(po)
+		.inner_join(po_item)
+		.on(po_item.parent == po.name)
+		.left_join(pi_item)
+		.on((pi_item.po_detail == po_item.name) & (pi_item.docstatus == 1))
+		.select(
+			po.transaction_date.as_("date"),
+			po_item.schedule_date.as_("required_date"),
+			po.name.as_("purchase_order"),
+			po.status,
+			po.supplier,
+			po_item.item_code,
+			po_item.qty,
+			po_item.received_qty,
+			(po_item.qty - po_item.received_qty).as_("pending_qty"),
+			Sum(IfNull(pi_item.qty, 0)).as_("billed_qty"),
+			po_item.base_amount.as_("amount"),
+			(po_item.billed_amt * IfNull(po.conversion_rate, 1)).as_("billed_amount"),
+			(po_item.base_amount - (po_item.billed_amt * IfNull(po.conversion_rate, 1))).as_(
+				"pending_amount"
+			),
+			po.set_warehouse.as_("warehouse"),
+			po.company,
+			po_item.name,
+		)
+		.where((po_item.parent == po.name) & (po.status.notin(("Stopped", "On Hold"))) & (po.docstatus == 1))
+		.groupby(
+			po_item.name,
+			po.transaction_date,
+			po.name
+		)
+		.orderby(po.transaction_date)
+	)
+	if is_projects_installed:
+		query = query.select(po_item.project)
+
+	if filters.get("company"):
+		query = query.where(po.company == filters.get("company"))
+ 
+	if filters.get("name"):
+		query = query.where(po.name.isin(filters.get("name")))
+
+	if filters.get("from_date") and filters.get("to_date"):
+		query = query.where(po.transaction_date.between(filters.get("from_date"), filters.get("to_date")))
+
+	if filters.get("status"):
+		query = query.where(po.status.isin(filters.get("status")))
+
+	if filters.get("project"):
+		query = query.where(po_item.project == filters.get("project"))
+
+	data = query.run(as_dict=True)
+
+	return data
 
 def update_received_amount(data):
 	pr_data = get_received_amount_data(data)

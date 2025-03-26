@@ -3914,6 +3914,36 @@ class TestPurchaseReceipt(FrappeTestCase):
 		batch_return.save()
 		batch_return.submit()
 
+	def test_pr_status_based_on_invoices_with_update_stock(self):
+		from erpnext.buying.doctype.purchase_order.purchase_order import (
+			make_purchase_invoice as _make_purchase_invoice,
+		)
+		from erpnext.buying.doctype.purchase_order.purchase_order import (
+			make_purchase_receipt as _make_purchase_receipt,
+		)
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import (
+			create_pr_against_po,
+			create_purchase_order,
+		)
+
+		item_code = "Test Item for PR Status Based on Invoices"
+		create_item(item_code)
+
+		po = create_purchase_order(item_code=item_code, qty=10)
+		pi = _make_purchase_invoice(po.name)
+		pi.update_stock = 1
+		pi.items[0].qty = 5
+		pi.submit()
+
+		po.reload()
+		self.assertEqual(po.per_billed, 50)
+
+		pr = _make_purchase_receipt(po.name)
+		self.assertEqual(pr.items[0].qty, 5)
+		pr.submit()
+		pr.reload()
+		self.assertEqual(pr.status, "To Bill")
+
 	def test_purchase_order_and_receipt_TC_SCK_072(self):
 		company = "_Test Company"
 		item1 = make_item("ST-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011010"})
@@ -3970,13 +4000,14 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(sl_entries[1].warehouse, warehouse2)
 
 	def test_purchase_order_and_receipt_TC_SCK_073(self):
+		create_supplier(supplier_name="_Test Supplier", default_currency="INR")
 		company = "_Test Indian Registered Company"
 		create_company(company)
 		item1 = make_item("ST-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011010"})
 		item2 = make_item("W-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011020"})
-		warehouse1 = create_warehouse("Raw Material - Iron Building - _TIRC", company=company)
+		warehouse1 = create_warehouse("Raw Material Iron Building - _TIRC", company=company)
 		warehouse2 = create_warehouse("Woods - _TIRC", company=company)
-		rejected_warehouse = create_warehouse("Rejection / Scrap - _TIRC", company=company)
+		rejected_warehouse = create_warehouse("Rejection Scrap - _TIRC", company=company)
 		posting_date = "2024-12-31"
 
 		# Create Purchase Order
@@ -4546,6 +4577,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 			"doctype": "Purchase Receipt",
 			"supplier": supplier,
 			"company": company,
+			"currency": "INR",
 			"items": [{
 				"item_code": item.item_code,
 				"qty": 20,

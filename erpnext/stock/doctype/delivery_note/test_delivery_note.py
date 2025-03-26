@@ -770,6 +770,48 @@ class TestDeliveryNote(FrappeTestCase):
 			{"warehouse": "_Test Warehouse - _TC"},
 		)
 
+	def test_delivery_note_internal_transfer_serial_no_status(self):
+		from erpnext.selling.doctype.customer.test_customer import create_internal_customer
+ 
+		item = make_item(
+			"_Test Item for Internal Transfer With Serial No Status",
+			properties={"has_serial_no": 1, "is_stock_item": 1, "serial_no_series": "INT-SN-.####"},
+		).name
+
+		warehouse = "_Test Warehouse - _TC"
+		target = "Stores - _TC"
+		company = "_Test Company"
+		customer = create_internal_customer(represents_company=company)
+		rate = 42
+
+		se = make_stock_entry(target=warehouse, qty=5, basic_rate=rate, item_code=item)
+		serial_nos = get_serial_nos_from_bundle(se.get("items")[0].serial_and_batch_bundle)
+
+		dn = create_delivery_note(
+			item_code=item,
+			company=company,
+			customer=customer,
+			qty=5,
+			rate=500,
+			warehouse=warehouse,
+			target_warehouse=target,
+			ignore_pricing_rule=0,
+			use_serial_batch_fields=1,
+			serial_no="\n".join(serial_nos),
+		)
+
+		for serial_no in serial_nos:
+			sn = frappe.db.get_value("Serial No", serial_no, ["status", "warehouse"], as_dict=1)
+			self.assertEqual(sn.status, "Active")
+			self.assertEqual(sn.warehouse, target)
+
+		dn.cancel()
+
+		for serial_no in serial_nos:
+			sn = frappe.db.get_value("Serial No", serial_no, ["status", "warehouse"], as_dict=1)
+			self.assertEqual(sn.status, "Active")
+			self.assertEqual(sn.warehouse, warehouse)
+
 	def test_delivery_of_bundled_items_to_target_warehouse(self):
 		from erpnext.selling.doctype.customer.test_customer import create_internal_customer
 
@@ -2339,7 +2381,7 @@ class TestDeliveryNote(FrappeTestCase):
 
 				for d in bundle_data:
 					self.assertEqual(d.incoming_rate, serial_no_valuation[d.serial_no])
-     
+	
 	def test_delivery_note_with_shipping_rule(self):
 		delivery_note = frappe.get_doc({
 			"doctype": "Delivery Note",
@@ -2358,7 +2400,7 @@ class TestDeliveryNote(FrappeTestCase):
 
 		delivery_note.insert()
 		delivery_note.submit()
-  
+
 		delivery_note = frappe.get_doc("Delivery Note", delivery_note.name)
 
 		taxes = delivery_note.taxes
@@ -2370,7 +2412,7 @@ class TestDeliveryNote(FrappeTestCase):
 			"Shipping charges are not applied correctly"
 		)
 		item_rate = delivery_note.items[0].get("net_rate")
-  
+
 		self.assertEqual(delivery_note.total, item_rate, "Net Total is incorrect")
 		self.assertEqual(
 			delivery_note.grand_total, 5500, "Grand Total is incorrect")
@@ -2422,7 +2464,7 @@ class TestDeliveryNote(FrappeTestCase):
 				"qty": 10 
 			}]
 		})
-  
+
 		delivery_note.insert(ignore_permissions=True)
 		delivery_note.submit()
 		
@@ -2680,26 +2722,39 @@ class TestDeliveryNote(FrappeTestCase):
 		dn = create_delivery_note(posting_date="2025-01-01",do_not_submit=True)
 		self.assertRaises(StockFreezeError, dn.submit)
 
+
+	def setUp(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		create_company()
+		create_warehouse(
+			warehouse_name="_Test Warehouse 1 - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC"},
+			company="_Test Company",
+		)
+		create_warehouse(
+			warehouse_name=" _Test Warehouse - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC"},
+			company="_Test Company",
+		)
+		
 	@if_app_installed("erpnext_crm")
 	def test_dn_submission_TC_SCK_148(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+		from erpnext.selling.doctype.sales_order.test_sales_order import get_or_create_fiscal_year
 		# from erpnext_crm.erpnext_crm.doctype.lead.lead import make_customer
 		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
 		"""Test Purchase Receipt Creation, Submission, and Stock Ledger Update"""
-
-		# Create Purchase Receiptif not frappe.db.exists("Company", "_Test Company"):
-		if not frappe.db.exists("Company", "_Test Company"):
-			company = frappe.new_doc("Company")
-			company.company_name = "_Test Company"
-			company.default_currency = "INR"
-			company.insert()
-
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company,create_customer
+		create_company()
+		get_or_create_fiscal_year("_Test Company")
+		create_customer("SS Ltd")
 		item_fields = {
 			"item_name": "Ball point Pen",
 			"is_stock_item": 1,
 			"stock_uom": "Box",
-			"uoms": [{'uom': "Pcs", 'conversion_factor': 0.05}],
+			"uoms": [{'uom': "Box", 'conversion_factor': 1}],
 		}
 
 		dn_fields = {
@@ -2714,9 +2769,9 @@ class TestDeliveryNote(FrappeTestCase):
 		dn_data = {
 			"company" : "_Test Company",
 			"item_code" : "Ball point Pen",
-			"warehouse" : create_warehouse("_Test Warehouse", properties=None, company=dn_fields['company']),
+			"warehouse" : create_warehouse("_Test Warehouse", properties={"parent_warehouse": "All Warehouses - _TC"}, company=dn_fields['company']),
 			"customer": "SS Ltd",
-            "schedule_date": "2025-02-03",
+			"schedule_date": "2025-02-03",
 			"qty" : 20,
 			# "rate" : 130,
 		}
@@ -2732,20 +2787,26 @@ class TestDeliveryNote(FrappeTestCase):
 		pr_data = {
 			"company" : "_Test Company",
 			"item_code" : "Ball point Pen",
-			"warehouse" : create_warehouse("_Test Warehouse", properties=None, company=pr_fields['company']),
+			"warehouse" : create_warehouse("_Test Warehouse",  properties={"parent_warehouse": "All Warehouses - _TC"}, company=pr_fields['company']),
 			"supplier": "Test Supplier 1",
-            "schedule_date": "2025-02-03",
+			"schedule_date": "2025-02-03",
 			"qty" : 5,
 			"uom" : "Box",
 			"stock_uom":"Box",
 			"conversion_factor": 1
 		}
-		
-		target_warehouse = create_warehouse("_Test Warehouse", properties=None, company=pr_fields['company'])
+		cost_center = frappe.db.get_all('Cost Center',{'company':'_Test Company'},['name'])
+		target_warehouse = create_warehouse("_Test Warehouse",  properties={"parent_warehouse": "All Warehouses - _TC"}, company=pr_fields['company'])
 		uom = frappe.get_doc("UOM", "Box")
 		uom.must_be_whole_number = 0
 		uom.save()
 		item = make_item("Ball point Pen", item_fields).name
+		create_warehouse(
+			warehouse_name="_Test Warehouse 1 - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC"},
+			company="_Test Company",
+		)
+		
 		supplier = create_supplier(
 			supplier_name="Test Supplier 1",
 			supplier_group="All Supplier Groups",
@@ -2758,13 +2819,13 @@ class TestDeliveryNote(FrappeTestCase):
 
 		sle = frappe.get_doc("Stock Ledger Entry", {"voucher_no": doc_pr.name})
 		
-
+		create_customer("_Test Customer Credit")
 		customer = frappe.get_doc("Customer",{'customer_name':"SS Ltd"}).insert()
-		target_warehouse = create_warehouse("_Test Warehouse", properties=None, company=dn_data['company'])
+		target_warehouse = create_warehouse("_Test Warehouse", properties={"parent_warehouse": "All Warehouses - _TC"}, company=dn_data['company'])
 		item = make_item("Ball point Pen", item_fields).name
-		dn = create_delivery_note(item_code=item, qty=30, uom="Pcs",stock_uom="Box", conversion_factor=0.05, company=dn_data['company'], customer=customer, warehouse=target_warehouse,do_not_submit=1)
+		dn = create_delivery_note(item_code=item, qty=30, uom="Box",stock_uom="Box", conversion_factor=0.05, company=dn_data['company'], customer=customer, warehouse=target_warehouse,cost_center = cost_center[1].name,do_not_submit=1)
 		
-		dn.items[0].uom = "Pcs"
+		dn.items[0].uom = "Box"
 		dn.items[0].conversion_factor = 0.05
 		
 		dn.save()

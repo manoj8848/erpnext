@@ -63,38 +63,35 @@ def get_data(conditions, filters):
 	data = frappe.db.sql(
 		f"""
 		SELECT
-			so.transaction_date AS date,
-			soi.delivery_date AS delivery_date,
-			so.name AS sales_order,
+			so.transaction_date as date,
+			soi.delivery_date as delivery_date,
+			so.name as sales_order,
 			so.status, so.customer, soi.item_code,
-			CURRENT_DATE - soi.delivery_date AS delay_days,
-			CASE 
-				WHEN so.status IN ('Completed', 'To Bill') THEN 0 
-				ELSE (CURRENT_DATE - soi.delivery_date) 
-			END AS delay,
+			DATEDIFF(CURRENT_DATE, soi.delivery_date) as delay_days,
+			IF(so.status in ('Completed','To Bill'), 0, (SELECT delay_days)) as delay,
 			soi.qty, soi.delivered_qty,
 			(soi.qty - soi.delivered_qty) AS pending_qty,
-			COALESCE(SUM(sii.qty), 0) AS billed_qty,
-			soi.base_amount AS amount,
-			(soi.delivered_qty * soi.base_rate) AS delivered_qty_amount,
-			(soi.billed_amt * COALESCE(so.conversion_rate, 1)) AS billed_amount,
-			(soi.base_amount - (soi.billed_amt * COALESCE(so.conversion_rate, 1))) AS pending_amount,
-			soi.warehouse AS warehouse,
+			IFNULL(SUM(sii.qty), 0) as billed_qty,
+			soi.base_amount as amount,
+			(soi.delivered_qty * soi.base_rate) as delivered_qty_amount,
+			(soi.billed_amt * IFNULL(so.conversion_rate, 1)) as billed_amount,
+			(soi.base_amount - (soi.billed_amt * IFNULL(so.conversion_rate, 1))) as pending_amount,
+			soi.warehouse as warehouse,
 			so.company, soi.name,
-			soi.description AS description
+			soi.description as description
 		FROM
-			"tabSales Order" so
-		JOIN "tabSales Order Item" soi ON soi.parent = so.name
-		LEFT JOIN "tabSales Invoice Item" sii ON sii.so_detail = soi.name AND sii.docstatus = 1
+			`tabSales Order` so,
+			`tabSales Order Item` soi
+		LEFT JOIN `tabSales Invoice Item` sii
+			ON sii.so_detail = soi.name and sii.docstatus = 1
 		WHERE
-			so.status NOT IN ('Stopped', 'Closed', 'On Hold')
-			AND so.docstatus = 1
+			soi.parent = so.name
+			and so.status not in ('Stopped', 'On Hold')
+			and so.docstatus = 1
 			{conditions}
-		GROUP BY soi.name, so.transaction_date, so.name, so.status, so.customer, soi.item_code,
-				soi.qty, soi.delivered_qty, soi.base_amount, soi.delivered_qty, 
-				soi.billed_amt, so.conversion_rate, soi.warehouse, so.company, soi.description
+		GROUP BY soi.name
 		ORDER BY so.transaction_date ASC, soi.item_code ASC
-		""",
+	""",
 		filters,
 		as_dict=1,
 	)

@@ -4032,7 +4032,7 @@ class TestStockEntry(FrappeTestCase):
 			item_code=item1.name, 
 			purpose="Material Receipt", 
 			stock_entry_type="Material Receipt",
-			posting_date=add_days(nowdate(), 30), 
+			posting_date=nowdate(), 
 			company=company, 
 			target=target_warehouse, 
 			qty=25
@@ -4042,7 +4042,7 @@ class TestStockEntry(FrappeTestCase):
 			item_code=item1.name, 
 			purpose="Material Issue", 
 			stock_entry_type="Material Issue",
-			posting_date=add_days(nowdate(), 30), 
+			posting_date=nowdate(),
 			company=company, 
 			source=target_warehouse, 
 			qty=10
@@ -4052,7 +4052,7 @@ class TestStockEntry(FrappeTestCase):
 			item_code=item1.name, 
 			purpose="Material Issue", 
 			stock_entry_type="Material Issue",
-			posting_date=add_days(nowdate(), 90), 
+			posting_date=nowdate(), 
 			company=company, 
 			source=target_warehouse, 
 			qty=20

@@ -130,6 +130,7 @@ class TestCouponCode(unittest.TestCase):
 			rate=5000,
 			qty=1,
 			do_not_submit=True,
+			do_not_save=True,
 		)
 
 		self.assertEqual(so.items[0].rate, 5000)

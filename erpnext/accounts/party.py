@@ -569,12 +569,13 @@ def validate_party_accounts(doc):
 
 
 @frappe.whitelist()
-def get_due_date(posting_date, party_type, party, company=None, bill_date=None):
+def get_due_date(posting_date, party_type, party, company=None, bill_date=None, template_name=None):
 	"""Get due date from `Payment Terms Template`"""
 	due_date = None
 	if (bill_date or posting_date) and party:
 		due_date = bill_date or posting_date
-		template_name = get_payment_terms_template(party, party_type, company)
+		if not template_name:
+			template_name = get_payment_terms_template(party, party_type, company)
 
 		if template_name:
 			due_date = get_due_date_from_template(template_name, posting_date, bill_date).strftime("%Y-%m-%d")
@@ -761,7 +762,7 @@ def validate_party_frozen_disabled(party_type, party_name):
 def validate_account_party_type(self):
 	if self.party_type and self.party:
 		account_type = frappe.get_cached_value("Account", self.account, "account_type")
-		if account_type and (account_type not in ["Receivable", "Payable"]):
+		if account_type and (account_type not in ["Receivable", "Payable", "Equity"]):
 			frappe.throw(
 				_(
 					"Party Type and Party can only be set for Receivable / Payable account<br><br>" "{0}"

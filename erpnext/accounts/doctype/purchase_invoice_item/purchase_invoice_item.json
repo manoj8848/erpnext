@@ -461,7 +461,8 @@
    "depends_on": "doc.use_serial_batch_fields === 1 && doc.has_serial_no ===  && parent.update_stock === 1",
    "fieldname": "serial_no",
    "fieldtype": "Text",
-   "label": "Serial No"
+   "label": "Serial No",
+    "no_copy": 1
   },
   {
    "depends_on": "doc.use_serial_batch_fields === 1 && doc.has_serial_no === 1 && parent.update_stock === 1",

@@ -102,6 +102,9 @@
   "delivery_note",
   "dn_detail",
   "delivered_qty",
+  "column_break_vwhb",
+  "pos_invoice",
+  "pos_invoice_item",
   "internal_transfer_section",
   "purchase_order",
   "column_break_92",
@@ -626,6 +629,7 @@
    "fieldname": "serial_no",
    "fieldtype": "Text",
    "label": "Serial No",
+   "no_copy": 1,
    "oldfieldname": "serial_no",
    "oldfieldtype": "Small Text"
   },
@@ -910,7 +914,29 @@
   "no_copy": 1,
   "print_hide": 1,
   "read_only": 1
- }
+},
+{
+ "fieldname": "pos_invoice_item",
+ "fieldtype": "Data",
+ "ignore_user_permissions": 1,
+ "label": "POS Invoice Item",
+ "no_copy": 1,
+ "print_hide": 1,
+ "read_only": 1
+},
+{
+ "fieldname": "column_break_vwhb",
+ "fieldtype": "Column Break"
+},
+{
+ "fieldname": "pos_invoice",
+ "fieldtype": "Link",
+ "label": "POS Invoice",
+ "no_copy": 1,
+ "options": "POS Invoice",
+ "print_hide": 1,
+ "search_index": 1 
+}
  ],
  "idx": 1,
  "istable": 1,
@@ -922,7 +948,7 @@
  "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [],
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": []
 }

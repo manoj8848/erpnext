@@ -75,7 +75,6 @@ class PurchaseReceiptItem(Document):
 		qty: DF.Float
 		quality_inspection: DF.Link | None
 		rate: DF.Currency
-		rate_difference_with_purchase_invoice: DF.Currency
 		rate_with_margin: DF.Currency
 		received_qty: DF.Float
 		received_stock_qty: DF.Float

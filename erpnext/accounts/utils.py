@@ -771,6 +771,8 @@ def update_reference_in_payment_entry(
 		frappe._dict({"difference_posting_date": d.difference_posting_date}), dimensions_dict
 	)
 
+	# Ledgers will be reposted by Reconciliation tool
+	payment_entry.flags.ignore_reposting_on_reconciliation = True
 	if not do_not_save:
 		payment_entry.save(ignore_permissions=True)
 	return row, update_advance_paid
@@ -1424,7 +1426,7 @@ def repost_gle_for_stock_vouchers(
 	if not warehouse_account:
 		warehouse_account = get_warehouse_account_map(company)
 
-	stock_vouchers = sort_stock_vouchers_by_posting_date(stock_vouchers)
+	stock_vouchers = sort_stock_vouchers_by_posting_date(stock_vouchers, company=company)
 	if repost_doc and repost_doc.gl_reposting_index:
 		# Restore progress
 		stock_vouchers = stock_vouchers[cint(repost_doc.gl_reposting_index) :]
@@ -1477,7 +1479,9 @@ def _delete_accounting_ledger_entries(voucher_type, voucher_no):
 	_delete_pl_entries(voucher_type, voucher_no)
 
 
-def sort_stock_vouchers_by_posting_date(stock_vouchers: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def sort_stock_vouchers_by_posting_date(
+ 	stock_vouchers: list[tuple[str, str]], company=None
+ ) -> list[tuple[str, str]]:
 	sle = frappe.qb.DocType("Stock Ledger Entry")
 	voucher_nos = [v[1] for v in stock_vouchers]
 
@@ -1488,7 +1492,12 @@ def sort_stock_vouchers_by_posting_date(stock_vouchers: list[tuple[str, str]]) -
 		.groupby(sle.voucher_type, sle.voucher_no, sle.posting_date, sle.posting_time, sle.creation, sle.posting_datetime)
 		.orderby(sle.posting_datetime)
 		.orderby(sle.creation)
-	).run(as_dict=True)
+	)
+ 
+	if company:
+		sles = sles.where(sle.company == company)
+
+	sles = sles.run(as_dict=True)
 	sorted_vouchers = [(sle.voucher_type, sle.voucher_no) for sle in sles]
 
 	unknown_vouchers = set(stock_vouchers) - set(sorted_vouchers)
@@ -2291,3 +2300,37 @@ def run_ledger_health_checks():
 					doc.general_and_payment_ledger_mismatch = True
 					doc.checked_on = run_date
 					doc.save()
+
+def sync_auto_reconcile_config(auto_reconciliation_job_trigger: int = 15):
+	auto_reconciliation_job_trigger = auto_reconciliation_job_trigger or frappe.db.get_single_value(
+		"Accounts Settings", "auto_reconciliation_job_trigger"
+	)
+	method = "erpnext.accounts.doctype.process_payment_reconciliation.process_payment_reconciliation.trigger_reconciliation_for_queued_docs"
+
+	sch_event = frappe.get_doc(
+		"Scheduler Event", {"scheduled_against": "Process Payment Reconciliation", "method": method}
+	)
+	if frappe.db.get_value("Scheduled Job Type", {"method": method}):
+		frappe.get_doc(
+			"Scheduled Job Type",
+			{
+				"method": method,
+			},
+		).update(
+			{
+				"cron_format": f"0/{auto_reconciliation_job_trigger} * * * *",
+				"scheduler_event": sch_event.name,
+			}
+		).save()
+	else:
+		frappe.get_doc(
+			{
+				"doctype": "Scheduled Job Type",
+				"method": method,
+				"scheduler_event": sch_event.name,
+				"cron_format": f"0/{auto_reconciliation_job_trigger} * * * *",
+				"create_log": True,
+				"stopped": False,
+				"frequency": "Cron",
+			}
+		).save()

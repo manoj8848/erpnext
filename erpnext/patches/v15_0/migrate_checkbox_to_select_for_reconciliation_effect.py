@@ -11,5 +11,13 @@ def execute():
 		)
 		frappe.db.set_value("Company", x.name, "reconciliation_takes_effect_on", new_value)
 	frappe.db.sql(
-		"""update `tabPayment Entry` set advance_reconciliation_takes_effect_on = if(reconcile_on_advance_payment_date = 0, 'Oldest Of Invoice Or Advance', 'Advance Payment Date')"""
+		"""
+		UPDATE `tabPayment Entry` 
+		SET advance_reconciliation_takes_effect_on = 
+			CASE 
+				WHEN reconcile_on_advance_payment_date = 0 
+				THEN 'Oldest Of Invoice Or Advance' 
+				ELSE 'Advance Payment Date' 
+			END
+		"""
 	)

@@ -941,7 +941,7 @@ def get_mapped_subcontracting_order(source_name, target_doc=None):
 					"material_request_item": "material_request_item",
 				},
 				"field_no_map": ["qty", "fg_item_qty", "amount"],
-				"condition": lambda item: item.qty != item.sco_qty,
+				"condition": lambda item: item.qty != item.subcontracted_quantity,
 			},
 		},
 		target_doc,

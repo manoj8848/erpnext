@@ -31,11 +31,6 @@ class TestQualityInspection(FrappeTestCase):
 			properties={"parent_warehouse": "All Warehouses - _TC"},
 			company="_Test Company",
 		)
-		create_warehouse(
-			warehouse_name="_Test Warehouse 1 - _TC",
-			properties={"parent_warehouse": "All Warehouses - _TC"},
-			company="_Test Company",
-		)
 		super().setUp()
 		create_item("_Test Item with QA")
 		frappe.db.set_value("Item", "_Test Item with QA", "inspection_required_before_delivery", 1)
@@ -331,9 +326,26 @@ class TestQualityInspection(FrappeTestCase):
 		pr.cancel()
 
 	def test_qa_for_pi_TC_SCK_160(self):
-		pr = make_purchase_invoice(item_code="_Test Item with QA")
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+		from erpnext.selling.doctype.sales_order.test_sales_order import get_or_create_fiscal_year
+		from datetime import date
+		create_company()
+		create_warehouse(
+			warehouse_name="_Test Warehouse 1 - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC"},
+			company="_Test Company",
+		)
+		get_or_create_fiscal_year("_Test Company")
+		create_supplier(supplier_name="_Test Supplier")
+		
+		account = frappe.db.get_value('Account',{'company':'_Test Company'},'name')
+		cost_center = frappe.db.get_all('Cost Center',{'company':'_Test Company'},['name'])
+		pr = make_purchase_invoice(item_code="_Test Item with QA",uom = "Box",expense_account = account,cost_center = cost_center[1]['name'],do_not_save =True)
+		pr.due_date = date.today()
+		pr.save()
+		pr.submit()
 		frappe.db.set_value("Item", "_Test Item with QA", "inspection_required_before_purchase", 1)
-
 		qa = create_quality_inspection(
 			reference_type="Purchase Invoice", reference_name=pr.name, status="Accepted", inspection_type="Incoming", do_not_submit=True
 		)
