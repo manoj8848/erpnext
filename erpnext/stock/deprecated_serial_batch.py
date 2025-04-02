@@ -228,7 +228,6 @@ class DeprecatedBatchNoValuation:
 				(sle.item_code == self.sle.item_code)
 				& (sle.warehouse == self.sle.warehouse)
 				& (sle.batch_no.isnotnull())
-				& (batch.use_batchwise_valuation == 0)
 				& (sle.is_cancelled == 0)
 				& (sle.batch_no.isin(self.non_batchwise_valuation_batches))
 			)
@@ -251,7 +250,6 @@ class DeprecatedBatchNoValuation:
 	def get_last_sle_for_non_batch(self):
 		from erpnext.stock.utils import get_combine_datetime
 		sle = frappe.qb.DocType("Stock Ledger Entry")
-		batch = frappe.qb.DocType("Batch")
 		posting_datetime = get_combine_datetime(self.sle.posting_date, self.sle.posting_time)
 		if not self.sle.creation:
 			posting_datetime = posting_datetime + datetime.timedelta(milliseconds=1)
@@ -262,8 +260,6 @@ class DeprecatedBatchNoValuation:
 			)
 		query = (
 			frappe.qb.from_(sle)
-			.inner_join(batch)
-			.on(sle.batch_no == batch.name)
 			.select(
 				sle.stock_value,
 				sle.qty_after_transaction,
@@ -271,8 +267,6 @@ class DeprecatedBatchNoValuation:
 			.where(
 				(sle.item_code == self.sle.item_code)
 				& (sle.warehouse == self.sle.warehouse)
-				& (sle.batch_no.isnotnull())
-				& (batch.use_batchwise_valuation == 0)
 				& (sle.is_cancelled == 0)
 			)
 			.where(timestamp_condition)
@@ -307,7 +301,6 @@ class DeprecatedBatchNoValuation:
 				(sabb.item_code == self.sle.item_code)
 				& (sabb.warehouse == self.sle.warehouse)
 				& (sabb_entry.batch_no.isnotnull())
-				& (batch.use_batchwise_valuation == 0)
 				& (sabb.is_cancelled == 0)
 				& (sabb.docstatus == 1)
 			)
@@ -364,7 +357,6 @@ class DeprecatedBatchNoValuation:
 				(bundle.item_code == self.sle.item_code)
 				& (bundle.warehouse == self.sle.warehouse)
 				& (bundle_child.batch_no.isnotnull())
-				& (batch.use_batchwise_valuation == 0)
 				& (bundle.is_cancelled == 0)
 				& (bundle.docstatus == 1)
 				& (bundle.type_of_transaction.isin(["Inward", "Outward"]))

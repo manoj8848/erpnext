@@ -6,6 +6,7 @@ import unittest
 
 import frappe
 from frappe.utils import now_datetime
+from datetime import date
 
 test_ignore = ["Company"]
 

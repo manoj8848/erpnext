@@ -10,11 +10,13 @@ from erpnext.accounts.doctype.budget.budget import BudgetError, get_actual_expen
 from erpnext.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+from frappe.tests.utils import if_app_installed
 
 test_dependencies = ["Monthly Distribution"]
 
 
 class TestBudget(unittest.TestCase):
+	@if_app_installed("projects")
 	def test_monthly_budget_crossed_ignore(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 
@@ -36,6 +38,7 @@ class TestBudget(unittest.TestCase):
 		budget.cancel()
 		jv.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_crossed_stop1(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 
@@ -56,6 +59,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_exception_approver_role(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 
@@ -84,6 +88,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_crossed_for_mr(self):
 		budget = make_budget(
 			applicable_on_material_request=1,
@@ -124,6 +129,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_crossed_for_po(self):
 		budget = make_budget(
 			applicable_on_purchase_order=1,
@@ -145,6 +151,7 @@ class TestBudget(unittest.TestCase):
 		budget.cancel()
 		po.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_crossed_stop2(self):
 		set_total_expense_zero(nowdate(), "project")
 
@@ -168,6 +175,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_yearly_budget_crossed_stop1(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 
@@ -185,6 +193,7 @@ class TestBudget(unittest.TestCase):
 
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_yearly_budget_crossed_stop2(self):
 		set_total_expense_zero(nowdate(), "project")
 
@@ -205,6 +214,7 @@ class TestBudget(unittest.TestCase):
 
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_on_cancellation1(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 
@@ -234,6 +244,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_on_cancellation2(self):
 		set_total_expense_zero(nowdate(), "project")
 
@@ -265,6 +276,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_against_group_cost_center(self):
 		set_total_expense_zero(nowdate(), "cost_center")
 		set_total_expense_zero(nowdate(), "cost_center", "_Test Cost Center 2 - _TC")
@@ -285,6 +297,7 @@ class TestBudget(unittest.TestCase):
 		budget.load_from_db()
 		budget.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_against_parent_group_cost_center(self):
 		cost_center = "_Test Cost Center 3 - _TC"
 
@@ -316,6 +329,7 @@ class TestBudget(unittest.TestCase):
 		budget.cancel()
 		jv.cancel()
 
+	@if_app_installed("projects")
 	def test_monthly_budget_against_main_cost_center(self):
 		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
 		from erpnext.accounts.doctype.cost_center_allocation.test_cost_center_allocation import (

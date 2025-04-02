@@ -340,8 +340,9 @@ class ProductionPlan(Document):
 
 		for item in items:
 			item.pending_qty = (
-				flt(item.qty) - max(item.work_order_qty, item.delivered_qty, 0) * item.conversion_factor
-			)
+				flt(item.qty) - max(item.work_order_qty, item.delivered_qty, 0)
+			) * item.conversion_factor
+
 
 		pi = frappe.qb.DocType("Packed Item")
 
@@ -402,6 +403,7 @@ class ProductionPlan(Document):
 				mr_item.item_code,
 				mr_item.warehouse,
 				mr_item.description,
+				mr_item.bom_no,
 				((mr_item.qty - mr_item.ordered_qty) * mr_item.conversion_factor).as_("pending_qty"),
 			)
 			.distinct()
@@ -1886,7 +1888,7 @@ def get_raw_materials_of_sub_assembly_items(
 			& (bom.name == bom_no)
 			& (item.is_stock_item.isin([0, 1]) if include_non_stock_items else item.is_stock_item == 1)
 		)
-		.groupby(bei.item_code, bei.stock_uom)
+		.groupby(bei.item_code, bei.stock_uom,item.name,bei.description,bei.bom_no,bei.source_warehouse,item_default.default_warehouse,item_uom.conversion_factor)
 	).run(as_dict=True)
 
 	for item in items:

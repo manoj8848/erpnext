@@ -54,7 +54,7 @@ class MaintenanceSchedule(TransactionBase):
 		for d in self.get("items"):
 			self.validate_maintenance_detail()
 			s_list = []
-			s_list = self.create_schedule_list(d.start_date, d.end_date, d.no_of_visits, d.sales_person)
+			s_list = self.create_schedule_list(d.start_date, d.end_date, d.no_of_visits, d.service_person)
 			for i in range(d.no_of_visits):
 				child = self.append("schedules")
 				child.item_code = d.item_code
@@ -64,7 +64,7 @@ class MaintenanceSchedule(TransactionBase):
 					child.serial_no = d.serial_no
 				child.idx = count
 				count = count + 1
-				child.sales_person = d.sales_person
+				child.service_person = d.service_person
 				child.completion_status = "Pending"
 				child.item_reference = d.name
 
@@ -117,12 +117,12 @@ class MaintenanceSchedule(TransactionBase):
 					self.update_amc_date(serial_nos, d.end_date)
 
 			no_email_sp = []
-			if d.sales_person and d.sales_person not in email_map:
-				sp = frappe.get_doc("Sales Person", d.sales_person)
+			if d.service_person and d.service_person not in email_map:
+				sp = frappe.get_doc("Sales Person", d.service_person)
 				try:
-					email_map[d.sales_person] = sp.get_email_id()
+					email_map[d.service_person] = sp.get_email_id()
 				except frappe.ValidationError:
-					no_email_sp.append(d.sales_person)
+					no_email_sp.append(d.service_person)
 
 			if no_email_sp:
 				frappe.msgprint(
@@ -145,7 +145,7 @@ class MaintenanceSchedule(TransactionBase):
 				event = frappe.get_doc(
 					{
 						"doctype": "Event",
-						"owner": email_map.get(d.sales_person, self.owner),
+						"owner": email_map.get(d.service_person, self.owner),
 						"subject": description,
 						"description": description,
 						"starts_on": cstr(key["scheduled_date"]) + " 10:00:00",
@@ -256,7 +256,7 @@ class MaintenanceSchedule(TransactionBase):
 				"start_date",
 				"end_date",
 				"periodicity",
-				"sales_person",
+				"service_person",
 				"no_of_visits",
 				"serial_no",
 			]

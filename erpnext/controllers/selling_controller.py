@@ -52,7 +52,9 @@ class SellingController(StockController):
 		super().set_missing_values(for_validate)
 
 		# set contact and address details for customer, if they are not mentioned
-		self.set_missing_lead_customer_details(for_validate=for_validate)
+		if hasattr(self, "set_missing_lead_customer_details") and callable(self.set_missing_lead_customer_details):
+			self.set_missing_lead_customer_details(for_validate=for_validate)
+
 		self.set_price_list_and_item_details(for_validate=for_validate)
 
 	@if_app_installed("erpnext_crm")

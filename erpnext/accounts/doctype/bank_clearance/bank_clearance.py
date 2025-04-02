@@ -158,8 +158,6 @@ def get_payment_entries_for_bank_clearance(
 		as_dict=1,
 	)
 
-	if bank_account:
-		condition += "and bank_account = %(bank_account)s"
 
 	payment_entries = frappe.db.sql(
 		f"""
@@ -182,7 +180,6 @@ def get_payment_entries_for_bank_clearance(
 			"account": account,
 			"from": from_date,
 			"to": to_date,
-			"bank_account": bank_account,
 		},
 		as_dict=1,
 	)

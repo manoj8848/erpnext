@@ -192,7 +192,8 @@
    "in_list_view": 1,
    "label": "Deposit",
    "oldfieldname": "debit",
-   "options": "currency"
+   "options": "currency",
+   "default": 0.0
   },
   {
    "fieldname": "withdrawal",
@@ -200,7 +201,8 @@
    "in_list_view": 1,
    "label": "Withdrawal",
    "oldfieldname": "credit",
-   "options": "currency"
+   "options": "currency",
+   "default": 0.0
   },
   {
    "fieldname": "column_break_10",

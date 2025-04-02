@@ -9,6 +9,7 @@ def get_data():
 			"Auto Repeat": "reference_document",
 			"Purchase Receipt": "return_against",
 			"Stock Reservation Entry": "from_voucher_no",
+			"Quality Inspection": "reference_name",
 		}
 	transactions = [
 		{
@@ -35,7 +36,6 @@ def get_data():
 		"internal_links": {
 			"Material Request": ["items", "material_request"],
 			"Purchase Order": ["items", "purchase_order"],
-			"Quality Inspection": ["items", "quality_inspection"],
 		},
 		"transactions": transactions,
 	}

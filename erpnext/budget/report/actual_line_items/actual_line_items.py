@@ -1,9 +1,11 @@
 import frappe
 
 def execute(filters=None):
-    # Define columns to display in the report
+    if not filters:
+        filters = {}
+
     columns = [
-        {"label": "WBS", "fieldname": "wbs", "fieldtype": "Link","options":"Work Breakdown Structure" ,"width": 200},
+        {"label": "WBS", "fieldname": "wbs", "fieldtype": "Link", "options": "Work Breakdown Structure", "width": 200},
         {"label": "WBS Name", "fieldname": "wbs_name", "fieldtype": "Data", "width": 150},
         {"label": "WBS Level", "fieldname": "wbs_level", "fieldtype": "Int", "width": 100},
         {"label": "Voucher Type", "fieldname": "voucher_type", "fieldtype": "Data", "width": 100},
@@ -15,22 +17,53 @@ def execute(filters=None):
         {"label": "Amount", "fieldname": "amount", "fieldtype": "Float", "width": 100},
     ]
 
-    # Build query conditions based on filters
     conditions = []
+    params = {}
+
+    if filters.get("fiscal_year"):
+        fiscal_year = filters["fiscal_year"]
+        fiscal_year_data = frappe.db.get_value("Fiscal Year", fiscal_year, ["year_start_date", "year_end_date"], as_dict=True)
+
+        if fiscal_year_data:
+            from_date = fiscal_year_data["year_start_date"]
+            to_date = fiscal_year_data["year_end_date"]
+            conditions.append("be.posting_date BETWEEN %(from_date)s AND %(to_date)s")
+            params["from_date"] = from_date
+            params["to_date"] = to_date
+
+    elif filters.get("from_date") and filters.get("to_date"):
+        conditions.append("be.posting_date BETWEEN %(from_date)s AND %(to_date)s")
+        params["from_date"] = filters["from_date"]
+        params["to_date"] = filters["to_date"]
+
     if filters.get("project"):
         conditions.append("be.project IN %(project)s")
+        params["project"] = tuple(filters["project"]) 
+
     if filters.get("wbs"):
         conditions.append("be.wbs IN %(wbs)s")
+        params["wbs"] = tuple(filters["wbs"])
 
-    # Add condition to fetch only specified voucher types
+    if filters.get("voucher_type"):
+        conditions.append("be.voucher_type = %(voucher_type)s")
+        params["voucher_type"] = filters["voucher_type"]
+
+    if filters.get("supplier"):
+        conditions.append("pi.supplier IN %(supplier)s")
+        params["supplier"] = tuple(filters["supplier"])
+
+    if filters.get("item_code"):
+        conditions.append("pii.item_code IN %(item_code)s")
+        params["item_code"] = tuple(filters["item_code"])
+
+    if filters.get("item_group"):
+        conditions.append("pii.item_group IN %(item_group)s")
+        params["item_group"] = tuple(filters["item_group"])
+
     vouchers = ["Purchase Invoice", "Purchase Receipt"]
     conditions.append("be.voucher_type IN %(vouchers)s")
+    params["vouchers"] = tuple(vouchers)
 
-    # Prepare filters dictionary
-    filters = filters or {}
-    filters["vouchers"] = vouchers
-
-    # Prepare SQL query with CASE statement
     base_query = """
         SELECT 
             be.wbs AS wbs,
@@ -70,19 +103,17 @@ def execute(filters=None):
         LEFT JOIN 
             `tabMaterial Request Item` AS mri ON mri.parent = mr.name
     """
-    query_conditions = " AND ".join(conditions)
-    final_query = f"{base_query} WHERE {query_conditions}" if query_conditions else base_query
 
-    # Execute query
-    data = frappe.db.sql(final_query, filters, as_dict=True)
+    if conditions:
+        base_query += " WHERE " + " AND ".join(conditions)
 
-    # Calculate Grand Totals
+    data = frappe.db.sql(base_query, params, as_dict=True)
+
     total_qty = sum(row.get("qty", 0) for row in data)
-    total_rate = sum(row.get("rate", 0) for row in data)
     total_amount = sum(row.get("amount", 0) for row in data)
 
-    # Append Grand Total Row
-    grand_total_row = {
+    data.append({})
+    data.append({
         "wbs": "Grand Total",
         "wbs_name": "",
         "wbs_level": None,
@@ -91,12 +122,8 @@ def execute(filters=None):
         "voucher_date": None,
         "item": "",
         "qty": total_qty,
-        "rate": total_rate,
+        "rate": "",
         "amount": total_amount,
-    }
-
-    # Leave one row space before Grand Total
-    data.append({})
-    data.append(grand_total_row)
+    })
 
     return columns, data

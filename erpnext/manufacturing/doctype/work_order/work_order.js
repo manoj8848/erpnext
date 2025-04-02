@@ -292,6 +292,12 @@ frappe.ui.form.on("Work Order", {
 						label: __("Sequence Id"),
 						read_only: 1,
 					},
+					{
+						fieldtype: "Link",
+						fieldname: "bom",
+						label: __("BOM"),
+						read_only: 1,
+					},
 				],
 				data: operations_data,
 				in_place_edit: true,
@@ -332,6 +338,7 @@ frappe.ui.form.on("Work Order", {
 						qty: pending_qty,
 						pending_qty: pending_qty,
 						sequence_id: data.sequence_id,
+						bom: data.bom,
 					});
 				}
 			}

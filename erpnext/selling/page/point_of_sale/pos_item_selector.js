@@ -123,7 +123,7 @@ erpnext.PointOfSale.ItemSelector = class {
 				data-item-code="${escape(item.item_code)}" data-serial-no="${escape(serial_no)}"
 				data-batch-no="${escape(batch_no)}" data-uom="${escape(uom)}"
 				data-rate="${escape(price_list_rate || 0)}"
-				data-rate="${escape(price_list_rate || 0)}"
+				data-stock-uom="${escape(item.stock_uom)}"
 				title="${item.item_name}">
 
 				${get_item_image_html()}
@@ -269,7 +269,7 @@ erpnext.PointOfSale.ItemSelector = class {
 			me.events.item_selected({
 				field: "qty",
 				value: "+1",
-				stock_uom  
+				item: { item_code, batch_no, serial_no, uom, rate, stock_uom },
 			});
 			me.search_field.set_focus();
 		});
@@ -334,6 +334,7 @@ erpnext.PointOfSale.ItemSelector = class {
 
 	filter_items({ search_term = "" } = {}) {
 		const selling_price_list = this.events.get_frm().doc.selling_price_list;
+
 		if (search_term) {
 			search_term = search_term.toLowerCase();
 

@@ -206,11 +206,14 @@ def get_items(start, page_length, price_list, item_group, pos_profile, search_te
 				"item_code": item.item_code,
 				"selling": True,
 				"valid_from": ["<=", current_date],
-				"valid_upto": ["in", [None, "", current_date]],
 			},
+			or_filters=[
+				["valid_upto","in",[None,""]],
+				["valid_upto",">=",current_date]
+			],
 			order_by="valid_from desc",
-			limit=1,
-		)
+			limit=1	
+			)
 
 		if not item_price:
 			result.append(item)

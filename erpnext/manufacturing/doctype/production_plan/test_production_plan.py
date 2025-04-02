@@ -66,11 +66,13 @@ class TestProductionPlan(FrappeTestCase):
 		pln.reload()
 		self.assertTrue(pln.status, "Material Requested")
 
-		material_requests = frappe.get_all(
-			"Material Request Item",
-			fields=["distinct parent"],
-			filters={"production_plan": pln.name},
-			as_list=1,
+		mri = frappe.qb.DocType('Material Request Item')
+		material_requests = (
+			frappe.qb.from_(mri)
+			.select(mri.parent)
+			.where(mri.production_plan == pln.name)
+			.distinct()
+			.run()
 		)
 
 		self.assertTrue(len(material_requests), 2)

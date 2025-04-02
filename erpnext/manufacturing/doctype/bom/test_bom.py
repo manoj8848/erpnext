@@ -6,7 +6,7 @@ from collections import deque
 from functools import partial
 
 import frappe
-from frappe.tests.utils import FrappeTestCase, timeout
+from frappe.tests.utils import FrappeTestCase, timeout, if_app_installed
 from frappe.utils import cstr, flt
 
 from erpnext.controllers.tests.test_subcontracting_controller import (
@@ -30,7 +30,7 @@ from erpnext.controllers.tests.test_subcontracting_controller import get_rm_item
 from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_invoice 
 from erpnext.subcontracting.doctype.subcontracting_order.subcontracting_order import make_subcontracting_receipt
-from frappe.tests.utils import FrappeTestCase, if_app_installed
+
 
 test_records = frappe.get_test_records("BOM")
 test_dependencies = ["Item", "Quality Inspection Template"]
@@ -768,6 +768,8 @@ class TestBOM(FrappeTestCase):
 		self.assertTrue("_Test RM Item 3 Manufacture Item" in items)
 	
 	def test_subcontrcting_supply_raw_material_TC_B_100(self):
+		from erpnext.accounts.doctype.fiscal_year.test_fiscal_year import create_fiscal_year
+		create_fiscal_year("_Test Company")
 		item_1 = create_item(item_code="Testing Service", is_stock_item=0)
 		item_1.item_group = "Services"
 		item_1.save()
@@ -830,6 +832,8 @@ class TestBOM(FrappeTestCase):
 		self.assertEqual(pi.status, "Paid")
 	
 	def test_subcontrcting_supply_raw_material_TC_B_101(self):
+		from erpnext.accounts.doctype.fiscal_year.test_fiscal_year import create_fiscal_year
+		create_fiscal_year("_Test Company")
 		item_1 = create_item(item_code="Testing Service", is_stock_item=0)
 		item_1.item_group = "Services"
 		item_1.save()

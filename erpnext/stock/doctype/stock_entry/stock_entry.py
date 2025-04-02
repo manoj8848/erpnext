@@ -875,7 +875,12 @@ class StockEntry(StockController):
 
 					if frappe.db.exists(
 						"Stock Entry",
-						{"docstatus": 1, "work_order": self.work_order, "purpose": "Manufacture"},
+						{
+ 							"docstatus": 1,
+ 							"work_order": self.work_order,
+ 							"purpose": "Manufacture",
+ 							"name": ("!=", self.name),
+ 						},
 					):
 						frappe.throw(
 							_("Only one {0} entry can be created against the Work Order {1}").format(
@@ -1630,7 +1635,7 @@ class StockEntry(StockController):
 		if self.purpose == "Material Issue":
 			ret["expense_account"] = item.get("expense_account") or item_group_defaults.get("expense_account")
 
-		if self.purpose == "Manufacture":
+		if self.purpose == "Manufacture" or not ret.get("expense_account"):
 			ret["expense_account"] = frappe.get_cached_value(
 				"Company", self.company, "stock_adjustment_account"
 			)

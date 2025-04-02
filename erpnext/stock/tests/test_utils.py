@@ -24,7 +24,7 @@ class StockTestMixin:
 			"Stock Ledger Entry",
 			fields=["*"],
 			filters=filters,
-			order_by="timestamp(posting_date, posting_time), creation",
+			order_by="posting_date, posting_time, creation",
 		)
 		self.assertGreaterEqual(len(sles), len(expected_sles))
 

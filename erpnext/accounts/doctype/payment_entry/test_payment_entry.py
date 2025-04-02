@@ -2301,11 +2301,12 @@ def make_test_item(item_name=None):
 
 		else:
 			item= make_item(
-				"Test TDS Item",
+				item_name or"Test TDS Item",
 				{
 					"is_stock_item": 1,
 				},
 			)
+			
 			return item
 	else:
 		if app_name in frappe.get_installed_apps():

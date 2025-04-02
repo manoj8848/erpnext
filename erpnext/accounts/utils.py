@@ -9,8 +9,8 @@ import frappe
 import frappe.defaults
 from frappe import _, qb, throw
 from frappe.model.meta import get_field_precision
-from frappe.query_builder import AliasedQuery, Criterion, Table
-from frappe.query_builder.functions import Count, Sum, Min
+from frappe.query_builder import AliasedQuery, Case, Criterion, Table
+from frappe.query_builder.functions import Count, Max, Sum
 from frappe.query_builder.utils import DocType
 from frappe.utils import (
 	add_days,
@@ -27,6 +27,7 @@ from frappe.utils import (
 )
 from pypika import Order
 from pypika.terms import ExistsCriterion
+from pypika.functions import Min
 
 import erpnext
 
@@ -1999,6 +2000,15 @@ class QueryPaymentLedger:
 				.select(
 					ple.against_voucher_no.as_("voucher_no"),
 					Sum(ple.amount_in_account_currency).as_("amount_in_account_currency"),
+					Max(
+ 						Case().when(
+ 							(
+ 								(ple.voucher_no == ple.against_voucher_no)
+ 								& (ple.voucher_type == ple.against_voucher_type)
+ 							),
+ 							(ple.posting_date),
+ 						)
+ 					).as_("invoice_date"),
 				)
 				.where(ple.delinked == 0)
 				.where(Criterion.all(filter_on_against_voucher_no))
@@ -2006,7 +2016,7 @@ class QueryPaymentLedger:
 				.where(Criterion.all(self.dimensions_filter))
 				.where(Criterion.all(self.voucher_posting_date))
 				.groupby(ple.posting_date, ple.against_voucher_type, ple.against_voucher_no, ple.party_type, ple.party)
-				.orderby(ple.posting_date, ple.voucher_no)
+				.orderby(ple.invoice_date, ple.voucher_no)
 				.having(Sum(ple.amount_in_account_currency) > 0)
 				.limit(self.limit)
 				.run()

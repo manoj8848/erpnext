@@ -69,7 +69,6 @@ class SalesOrderItem(Document):
 		pricing_rules: DF.SmallText | None
 		produced_qty: DF.Float
 		production_plan_qty: DF.Float
-		project: DF.Link | None
 		projected_qty: DF.Float
 		purchase_order: DF.Link | None
 		purchase_order_item: DF.Data | None

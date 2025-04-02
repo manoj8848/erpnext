@@ -787,7 +787,7 @@ def get_sre_reserved_batch_nos_details(item_code: str, warehouse: str, batch_nos
 			& (sre.status.notin(["Delivered", "Cancelled"]))
 			& (sre.reservation_based_on == "Serial and Batch")
 		)
-		.groupby(sb_entry.batch_no)
+		.groupby(sb_entry.batch_no, sb_entry.creation)
 		.orderby(sb_entry.creation)
 	)
 

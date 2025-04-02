@@ -10,24 +10,14 @@ from pypika import functions as fn
 
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
 
-SLE_COUNT_LIMIT = 10_000
-
-
-def _estimate_table_row_count(doctype: str):
-	table = get_table_name(doctype)
-	row_count = frappe.db.sql(f"""
-        SELECT reltuples::BIGINT AS estimate
-        FROM pg_class
-        WHERE relname = '{table}';
-    """)
-	return cint(row_count[0][0]) if row_count else 0
+SLE_COUNT_LIMIT = 100_000
 
 
 def execute(filters=None):
 	if not filters:
 		filters = {}
 
-	sle_count = _estimate_table_row_count("Stock Ledger Entry")
+	sle_count = frappe.db.estimate_count("Stock Ledger Entry")
 	
 
 	if (

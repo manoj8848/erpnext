@@ -3059,12 +3059,11 @@ class TestMaterialRequest(FrappeTestCase):
 			fields["gst_hsn_code"] = "01011010"
 
 		qty = 10
-		# frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 		frappe.db.set_value("Company", company, "stock_adjustment_account", "Stock Adjustment - TCP1")
 		default_warehouse = frappe.db.get_all('Warehouse',{'company':'_Test Company with perpetual inventory','is_group':0},['name'])[0].name
 		target_warehouse = default_warehouse
 		item = make_item("Test Use Serial and Batch Item SN Items", fields).name
-		account =  frappe.db.get_value('Account',{'company':company},'name')
+		account =  frappe.db.get_value('Account',{'company':company,'account_currency':"INR","account_type":"Cash"},'name')
 		new_stock = _make_stock_entry(
 			item_code=item,
 			qty=10,
@@ -5052,26 +5051,30 @@ class TestMaterialRequest(FrappeTestCase):
 			properties={"parent_warehouse": "All Warehouses - _TC"},
 			company="_Test Company",
 		)
-		create_supplier(supplier_name="_Test Supplier")
-		frappe.db.set_value('Account','Creditors - _TC','account_currency','USD')
-		create_item("_Test Item")
+		warehouse = frappe.db.get_all('Warehouse',{'company':'_Test Company','is_group':0},['name'])[0].name
+		create_supplier(supplier_name="_Test Supplier",default_currency = "INR")
+		create_item("_Test Item",warehouse=warehouse)
 		
 		cost_center = frappe.db.get_all('Cost Center',{'company':'_Test Company'},['name'])
 		mr = make_material_request(uom = "Box",cost_center = cost_center[1].name)
+		
 		
 		#partially qty
 		po = make_purchase_order(mr.name)
 		po.supplier = "_Test Supplier"
 		po.get("items")[0].rate = 100
 		po.get("items")[0].qty = 5
+		po.currency = "INR"
 		po.insert()
 		po.submit()
+		
 
 		#remaining qty
 		po1 = make_purchase_order(mr.name)
 		po1.supplier = "_Test Supplier"
 		po1.get("items")[0].rate = 100
 		po1.get("items")[0].qty = 5
+		po1.currency = "INR"
 		po1.insert()
 		po1.submit()
 
@@ -8103,10 +8106,10 @@ def create_fiscal_year(company=None):
 		company = company
 	else:
 		create_company()
-		company="_Test Company MR"
+		company="_Test Company"
 	fy_list = frappe.db.get_all("Fiscal Year", {"year_start_date":start_date, "year_end_date": end_date}, pluck='name')
 	for i in fy_list:
-		if frappe.db.get_value("Fiscal Year Company", {'parent': i}, 'company') == "_Test Company MR":
+		if frappe.db.get_value("Fiscal Year Company", {'parent': i}, 'company') == "_Test Company":
 			frappe.msgprint(f"Fiscal Year already exists for {company}", alert=True)
 			return
 	

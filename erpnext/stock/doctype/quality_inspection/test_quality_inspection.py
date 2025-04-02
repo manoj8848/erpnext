@@ -338,10 +338,8 @@ class TestQualityInspection(FrappeTestCase):
 		)
 		get_or_create_fiscal_year("_Test Company")
 		create_supplier(supplier_name="_Test Supplier")
-		
-		account = frappe.db.get_value('Account',{'company':'_Test Company'},'name')
-		cost_center = frappe.db.get_all('Cost Center',{'company':'_Test Company'},['name'])
-		pr = make_purchase_invoice(item_code="_Test Item with QA",uom = "Box",expense_account = account,cost_center = cost_center[1]['name'],do_not_save =True)
+
+		pr = make_purchase_invoice(item_code="_Test Item with QA",uom = "Box",do_not_save =True)
 		pr.due_date = date.today()
 		pr.save()
 		pr.submit()

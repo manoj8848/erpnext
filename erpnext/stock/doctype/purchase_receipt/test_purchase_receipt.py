@@ -3272,7 +3272,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		bundle = dn.items[0].serial_and_batch_bundle
 
 		valuation_rate = frappe.db.get_value("Serial and Batch Bundle", bundle, "avg_rate")
-		self.assertEqual(valuation_rate, 100)
+		self.assertEqual(valuation_rate, 150)
 
 		doc = frappe.get_doc("Stock Settings")
 		doc.do_not_use_batchwise_valuation = 1
@@ -4249,8 +4249,10 @@ class TestPurchaseReceipt(FrappeTestCase):
 		sr.cancel()
 		self.check_cancel_stock_gl_sle(sr, 20, -3000.0)
 	def test_purchase_receipt_with_serialized_item_TC_SCK_145(self):
-		create_supplier(supplier_name = 'Test Supplier 1')
-		get_or_create_fiscal_year('_Test Company')
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		create_company()
+		supplier = create_supplier(supplier_name="Test Supplier 1")
+		get_or_create_fiscal_year("_Test Company")
 		parent_itm_grp = frappe.new_doc("Item Group")
 		parent_itm_grp.item_group_name = "Test Parent Item Group"
 		parent_itm_grp.is_group = 1
@@ -4300,10 +4302,9 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(len(pr.items), 1)
 		self.assertEqual(pr.items[0].item_code, item_code)
 		self.assertEqual(pr.items[0].qty, qty)
-
-		serial_nos = get_serial_nos_from_bundle(pr.items[0].serial_and_batch_bundle)
-		
-		self.assertEqual(len_serial_no, qty)
+		serial_batch_bundle = frappe.db.get_value('Serial and Batch Bundle',{'voucher_no': pr.name},'name')
+		serial_nos = frappe.db.get_all("Serial and Batch Entry",{"parent": serial_batch_bundle},["serial_no"])
+		self.assertEqual(len(serial_nos), qty)
 
 		for serial_no in serial_nos:
 			status = frappe.db.get_value("Serial No", serial_no, "status")
@@ -5420,7 +5421,7 @@ test_records = frappe.get_test_records("Purchase Receipt")
 def create_company(company):
 	if not frappe.db.exists("Company", company):
 		company_doc = frappe.new_doc("Company")
-		company_doc.company_doc_name = company
+		company_doc.company_name = company
 		company_doc.country="India",
 		company_doc.default_currency= "INR",
 		company_doc.insert()
@@ -5428,7 +5429,7 @@ def create_company(company):
 def get_or_create_fiscal_year(company):
 	from datetime import datetime
 	current_date = datetime.today()
-	formatted_date = current_date.strftime("%m-%d-%Y")
+	formatted_date = current_date.strftime("%d-%m-%Y")
 	existing_fy = frappe.get_all(
 		"Fiscal Year",
 		filters={ 

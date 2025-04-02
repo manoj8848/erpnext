@@ -67,19 +67,19 @@ frappe.query_reports["Actual Line Items"] = {
                 return frappe.db.get_link_options('Supplier', txt, {});
             }
         },
-        {
-            "fieldname": "ec_type",
-            "label": __("Expense Claim Type"),
-            "fieldtype": "Link",
-            "options": "Expense Claim Type",
-            // "depends_on": "eval:doc.voucher_type == 'Expense Claim'"
-        },
-        {
-            "fieldname": "se_type",
-            "label": __("Stock Entry Type"),
-            "fieldtype": "Link",
-            "options": "Stock Entry Type"
-        },
+        // {
+        //     "fieldname": "ec_type",
+        //     "label": __("Expense Claim Type"),
+        //     "fieldtype": "Link",
+        //     "options": "Expense Claim Type",
+        //     // "depends_on": "eval:doc.voucher_type == 'Expense Claim'"
+        // },
+        // {
+        //     "fieldname": "se_type",
+        //     "label": __("Stock Entry Type"),
+        //     "fieldtype": "Link",
+        //     "options": "Stock Entry Type"
+        // },
         {
             "fieldname": "item_code",
             "label": __("Item Code"),
@@ -96,14 +96,14 @@ frappe.query_reports["Actual Line Items"] = {
                 return frappe.db.get_link_options('Item Group', txt, {});
             }
         },
-        {
-            "fieldname": "purchase_order",
-            "label": __("Purchase Order"),
-            "fieldtype": "MultiSelectList",
-            get_data: function (txt) {
-                return frappe.db.get_link_options('Purchase Order', txt, {});
-            }
-        },
+        // {
+        //     "fieldname": "purchase_order",
+        //     "label": __("Purchase Order"),
+        //     "fieldtype": "MultiSelectList",
+        //     get_data: function (txt) {
+        //         return frappe.db.get_link_options('Purchase Order', txt, {});
+        //     }
+        // },
         // {
         //     "fieldname": "gl_account",
         //     "label": __("GL Account"),
