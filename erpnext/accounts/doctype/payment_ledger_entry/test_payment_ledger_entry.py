@@ -15,11 +15,13 @@ from erpnext.stock.doctype.item.test_item import create_item
 
 class TestPaymentLedgerEntry(FrappeTestCase):
 	def setUp(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		self.ple = qb.DocType("Payment Ledger Entry")
 		self.create_company()
 		self.create_item()
 		self.create_customer()
 		self.clear_old_entries()
+		get_or_create_fiscal_year("_Test Payment Ledger")
 
 	def tearDown(self):
 		frappe.db.rollback()

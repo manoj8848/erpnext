@@ -8672,15 +8672,10 @@ def get_or_create_fiscal_year(company):
 	from datetime import datetime
 	current_date = datetime.today()
 	formatted_date = current_date.strftime("%d-%m-%Y")
-	existing_fy = frappe.get_all(
-		"Fiscal Year",
-		filters={ 
-			"year_start_date": ["<=", formatted_date],
-			"year_end_date": [">=", formatted_date],
-			"disabled": 0
-		},
-		fields=["name"]
-	)
+	existing_fy = frappe.db.sql('''
+		SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
+		WHERE TO_DATE(%s, 'DD-MM-YYYY') BETWEEN year_start_date AND year_end_date and disabled = 0
+''', (formatted_date,),as_dict = True)
 
 	if existing_fy:
 		fiscal_year = frappe.get_doc("Fiscal Year",existing_fy[0].name)
