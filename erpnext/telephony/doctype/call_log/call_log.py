@@ -157,19 +157,28 @@ def get_employees_with_number(number):
 
 	return employee_doc_name_and_emails
 
-@if_app_installed("erpnext_crm")
 def link_existing_conversations(doc, state):
-	from erpnext_crm.erpnext_crm.doctype.utils import get_scheduled_employees_for_popup, strip_number
 	"""
 	Called from hooks on creation of Contact or Lead to link all the existing conversations.
 	"""
+
+	def _strip_number(number):
+		if not number:
+			return
+		# strip + and 0 from the start of the number for proper number comparisions
+		# eg. +7888383332 should match with 7888383332
+		# eg. 07888383332 should match with 7888383332
+		number = number.lstrip("+")
+		number = number.lstrip("0")
+		return number
+
 	if doc.doctype != "Contact":
 		return
 	try:
 		numbers = [d.phone for d in doc.phone_nos]
 
 		for number in numbers:
-			number = strip_number(number)
+			number = _strip_number(number)
 			if not number:
 				continue
 			logs = frappe.db.sql_list(
