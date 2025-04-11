@@ -75,12 +75,12 @@ jobs:
         working-directory: /home/runner/frappe-bench
         run: |
           bench get-app erpnext https://github.com/8848digital/erpnext.git --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/ERPNext-India.git --branch pre-prod
+          bench get-app https://vinod-8848digital:${{secrets.GH_PAT}}@github.com/8848digital/ERPNext-India.git --branch pre-prod
           bench get-app https://github.com/8848digital/india_compliance.git --branch pre-prod
           bench get-app https://github.com/8848digital/Assets --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/CRM --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/projects.git --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/sales_commission.git --branch pre-prod
+          bench get-app https://vinod-8848digital:${{secrets.GH_PAT}}@github.com/8848digital/CRM --branch pre-prod
+          bench get-app https://vinod-8848digital:${{secrets.GH_PAT}}@github.com/8848digital/projects.git --branch pre-prod
+          bench get-app https://vinod-8848digital:${{secrets.GH_PAT}}@github.com/8848digital/sales_commission.git --branch pre-prod
           bench get-app --branch version-15 payments
           bench setup requirements --dev
       - name: Create Site
