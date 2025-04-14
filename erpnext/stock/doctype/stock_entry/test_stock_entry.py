@@ -3616,7 +3616,7 @@ class TestStockEntry(FrappeTestCase):
 		frappe.db.set_value("Company", company, "stock_adjustment_account", 'Stock Adjustment - _TC')
     
 		get_fiscal_year(company)
-		create_warehouse("_Test Warehouse Group - _TC", company=company
+		create_warehouse("_Test Warehouse Group - _TC", company=company)
 		if not frappe.db.exists("Company", company):
 			company_doc = frappe.new_doc("Company")
 			company_doc.company_doc_name = company

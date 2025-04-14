@@ -3414,6 +3414,22 @@ class TestPurchaseOrder(FrappeTestCase):
 		po.submit()
 		self.assertEqual(po.items[0].rate, 130)
 
+	def test_close_or_unclose_po(self):
+		from .purchase_order import close_or_unclose_purchase_orders
+
+		po_1 = create_purchase_order()
+		po_2 = create_purchase_order()
+
+		names = [po_1.name, po_2.name]
+
+		close_or_unclose_purchase_orders(json.dumps(names), "Closed")
+
+		po_1.load_from_db()
+		po_2.load_from_db()
+
+		self.assertEqual(po_1.status, "Closed")
+		self.assertEqual(po_2.status, "Closed")
+
 	def test_po_pr_pi_multiple_flow_TC_B_065(self):
 		
 		# Scenario : PO=>2PR=>2PI
