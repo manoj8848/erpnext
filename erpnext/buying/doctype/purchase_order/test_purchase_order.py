@@ -46,6 +46,7 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_
 from io import BytesIO
 from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_company_and_supplier as create_data
+from .purchase_order import close_or_unclose_purchase_orders
 
 
 class TestPurchaseOrder(FrappeTestCase):
@@ -3414,8 +3415,22 @@ class TestPurchaseOrder(FrappeTestCase):
 		po.submit()
 		self.assertEqual(po.items[0].rate, 130)
 
-	def test_close_or_unclose_po(self):
-		from .purchase_order import close_or_unclose_purchase_orders
+	def test_close_or_unclose_purchase_orders_no_permission(self):
+
+		po_1 = create_purchase_order()
+		po_2 = create_purchase_order()
+
+		names = [po_1.name, po_2.name]
+
+		frappe.set_user("Guest")
+		try:
+			close_or_unclose_purchase_orders(json.dumps(names), "Closed")
+
+		except Exception as e:
+			self.assertIsInstance(e, frappe.exceptions.PermissionError)
+			self.assertIn("Not permitted", str(e))
+
+	def test_close_or_unclose_purchase_orders_with_close_status(self):
 
 		po_1 = create_purchase_order()
 		po_2 = create_purchase_order()
@@ -3429,6 +3444,14 @@ class TestPurchaseOrder(FrappeTestCase):
 
 		self.assertEqual(po_1.status, "Closed")
 		self.assertEqual(po_2.status, "Closed")
+
+		close_or_unclose_purchase_orders(json.dumps(names), "Open")
+
+		po_1.load_from_db()
+		po_2.load_from_db()
+
+		self.assertEqual(po_1.status, "To Receive and Bill")
+		self.assertEqual(po_2.status, "To Receive and Bill")
 
 	def test_po_pr_pi_multiple_flow_TC_B_065(self):
 		
