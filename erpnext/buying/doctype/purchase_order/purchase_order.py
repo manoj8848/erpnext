@@ -42,7 +42,7 @@ class PurchaseOrder(BuyingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
 		from erpnext.accounts.doctype.purchase_taxes_and_charges.purchase_taxes_and_charges import PurchaseTaxesandCharges
