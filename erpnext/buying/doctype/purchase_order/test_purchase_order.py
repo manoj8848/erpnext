@@ -3421,7 +3421,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		po.submit()
 		self.assertEqual(po.items[0].rate, 130)
 
-	def test_close_or_unclose_purchase_orders_with_close_status(self):
+	def test_close_or_unclose_purchase_orders_with_close_status_code_coverage(self):
 
 		po_1 = create_purchase_order()
 		po_2 = create_purchase_order()
@@ -3444,7 +3444,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(po_1.status, "To Receive and Bill")
 		self.assertEqual(po_2.status, "To Receive and Bill")
 
-	def test_validate_available_budget(self):
+	def test_validate_available_budget_code_coverage(self):
 		from unittest.mock import patch
 		project_name = "test_project"
 		if not frappe.db.exists("Project",{"project_name": project_name}):
@@ -3526,7 +3526,7 @@ class TestPurchaseOrder(FrappeTestCase):
 			msg_args, _ = mock_msgprint.call_args
 			self.assertIn("Available Budget Limit Exceeded", msg_args[0])
 
-	def test_update_committed_overall_budget(self):
+	def test_update_committed_overall_budget_code_coverage(self):
 		project_name = "test_project"
 		if not frappe.db.exists("Project",{"project_name": project_name}):
 			frappe.get_doc(
@@ -3582,6 +3582,83 @@ class TestPurchaseOrder(FrappeTestCase):
 		po.save()
 		po.submit()
 		self.assertEqual(po.docstatus, 1)
+
+		po.load_from_db()
+		po.cancel()
+
+	def test_validate_bom_for_subcontracting_items_code_coverage(self):
+		item = make_test_item("__Test_item_")
+		frappe.db.set_value("Item",{"item_code": item.item_code}, "is_sub_contracted_item", 1)
+		args = {
+			"item_code": item.item_code,
+			"do_not_save": True
+		}
+		po = create_purchase_order(**args)
+		po.is_old_subcontracting_flow = 1
+		# Expecting validation error due to missing BOM
+		try:
+			po.save()
+		except frappe.exceptions.ValidationError as e:
+			self.assertIn("BOM is not specified for subcontracting item", str(e))
+
+	def test_validate_supplier_score_board_code_coverage(self):
+		from frappe.exceptions import ValidationError
+		criteria = "test supplier cretiria"
+		supplier_scorecard = "_Test Supplier"
+		if not frappe.db.exists("Supplier Scorecard Criteria", criteria):
+			frappe.get_doc(
+				{
+					"doctype": "Supplier Scorecard Criteria",
+					"criteria_name": criteria,
+					"max_score": 100,
+					"formula": "10",
+				}
+			).insert(ignore_permissions=True)
+
+		if not frappe.db.exists("Supplier Scorecard", supplier_scorecard):
+			frappe.get_doc(
+				{
+					"doctype": "Supplier Scorecard",
+					"supplier": supplier_scorecard,
+					"period": "Per Week",
+					"standings": [
+						{
+							"standing_name": "Very Poor",
+							"standing_color": "Red",
+							"min_grade": 0.00,
+							"max_grade": 100.00,
+							"prevent_pos": 1
+						}
+					],
+					"criteria": [
+						{
+							"criteria_name": criteria,
+							"weight": 100
+						}
+					]
+				}
+			).insert(ignore_permissions=True)
+		args = {
+			"supplier": supplier_scorecard,
+			"do_not_save": True
+		}
+		try:
+			po = create_purchase_order(**args)
+			po.save()
+			self.fail("ValidationError was not raised")
+		except ValidationError as e:
+			error_message = str(e)
+			self.assertIn("Purchase Orders are not allowed for _Test Supplier", error_message)
+
+		get_supplier_scorecard = frappe.get_doc("Supplier Scorecard", supplier_scorecard)
+		get_supplier_scorecard.standings[0].prevent_pos = 0
+		get_supplier_scorecard.standings[0].warn_pos = 1
+		get_supplier_scorecard.save()
+
+		po_1 = create_purchase_order(**args)
+		po_1.save()
+		po_1.submit()
+		self.assertEqual(po_1.docstatus, 1)
 
 	def test_po_pr_pi_multiple_flow_TC_B_065(self):
 		# Scenario : PO=>2PR=>2PI
