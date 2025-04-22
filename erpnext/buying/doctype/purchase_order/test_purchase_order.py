@@ -3585,6 +3585,147 @@ class TestPurchaseOrder(FrappeTestCase):
 		po.load_from_db()
 		po.cancel()
 
+	def test_locked_update_committed_overall_budget_code_coverage(self):
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC",
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+
+		args = {
+			"qty":1,
+			"rate": 100,
+			"do_not_submit": True
+		}
+		po = create_purchase_order(**args)
+		po.items[0].work_breakdown_structure = wbs.name
+		po.save()
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.submit()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 0)
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.cancel()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+	def test_locked_committed_overall_budget_mr_po_code_coverage(self):
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC",
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		args = {
+			"qty": 1,
+			"rate": 100
+		}
+		mr = make_material_request(**args)
+		self.assertEqual(mr.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		po = make_purchase_order(mr.name)
+		po.supplier = "_Test Supplier"
+		po.items[0].work_breakdown_structure = wbs.name
+		po.save()
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.submit()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 0)
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.cancel()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
 	def test_validate_bom_for_subcontracting_items_code_coverage(self):
 		item = make_test_item("__Test_item_")
 		frappe.db.set_value("Item",{"item_code": item.item_code}, "is_sub_contracted_item", 1)
@@ -3602,62 +3743,66 @@ class TestPurchaseOrder(FrappeTestCase):
 
 	def test_validate_supplier_score_board_code_coverage(self):
 		from frappe.exceptions import ValidationError
-		criteria = "test supplier cretiria"
-		supplier_scorecard = "_Test Supplier"
-		if not frappe.db.exists("Supplier Scorecard Criteria", criteria):
-			frappe.get_doc(
-				{
-					"doctype": "Supplier Scorecard Criteria",
-					"criteria_name": criteria,
-					"max_score": 100,
-					"formula": "10",
-				}
-			).insert(ignore_permissions=True)
 
-		if not frappe.db.exists("Supplier Scorecard", supplier_scorecard):
-			frappe.get_doc(
-				{
-					"doctype": "Supplier Scorecard",
-					"supplier": supplier_scorecard,
-					"period": "Per Week",
-					"standings": [
-						{
-							"standing_name": "Very Poor",
-							"standing_color": "Red",
-							"min_grade": 0.00,
-							"max_grade": 100.00,
-							"prevent_pos": 1
-						}
-					],
-					"criteria": [
-						{
-							"criteria_name": criteria,
-							"weight": 100
-						}
-					]
-				}
-			).insert(ignore_permissions=True)
+		criteria = "test supplier cretiria"
+		supplier_name = "_Test Supplier"
+
+		# Create Supplier Scorecard Criteria if not exists
+		if not frappe.db.exists("Supplier Scorecard Criteria", criteria):
+			frappe.get_doc({
+				"doctype": "Supplier Scorecard Criteria",
+				"criteria_name": criteria,
+				"max_score": 100,
+				"formula": "10",
+			}).insert(ignore_permissions=True)
+
+		# Create Supplier Scorecard if not exists
+		if not frappe.db.exists("Supplier Scorecard", supplier_name):
+			frappe.get_doc({
+				"doctype": "Supplier Scorecard",
+				"supplier": supplier_name,
+				"period": "Per Week",
+				"standings": [
+					{
+						"standing_name": "Very Poor",
+						"standing_color": "Red",
+						"min_grade": 0.00,
+						"max_grade": 100.00,
+						"prevent_pos": 1
+					}
+				],
+				"criteria": [
+					{
+						"criteria_name": criteria,
+						"weight": 100
+					}
+				]
+			}).insert(ignore_permissions=True)
+
 		args = {
-			"supplier": supplier_scorecard,
+			"supplier": supplier_name,
 			"do_not_save": True
 		}
-		try:
-			po = create_purchase_order(**args)
+
+		# Test: Supplier with prevent_pos = 1 should raise ValidationError
+		po = create_purchase_order(**args)
+		with self.assertRaises(ValidationError) as e:
 			po.save()
-			self.fail("ValidationError was not raised")
-		except ValidationError as e:
-			error_message = str(e)
-			self.assertIn("Purchase Orders are not allowed for _Test Supplier", error_message)
 
-		get_supplier_scorecard = frappe.get_doc("Supplier Scorecard", supplier_scorecard)
-		get_supplier_scorecard.standings[0].prevent_pos = 0
-		get_supplier_scorecard.standings[0].warn_pos = 1
-		get_supplier_scorecard.save()
+		self.assertIn("Purchase Orders are not allowed for _Test Supplier", str(e.exception))
 
-		po_1 = create_purchase_order(**args)
-		po_1.save()
-		po_1.submit()
-		self.assertEqual(po_1.docstatus, 1)
+		# Update Supplier Scorecard to test warn_pos branch
+		scorecard = frappe.get_doc("Supplier Scorecard", supplier_name)
+		scorecard.standings[0].prevent_pos = 0
+		scorecard.standings[0].warn_pos = 1
+		scorecard.save()
+
+		# Test: Supplier with warn_pos = 1 should not raise error and allow submission
+		po_warn = create_purchase_order(**args)
+		po_warn.save()
+		po_warn.submit()
+
+		self.assertEqual(po_warn.docstatus, 1)
 
 	def test_po_pr_pi_multiple_flow_TC_B_065(self):
 		# Scenario : PO=>2PR=>2PI
