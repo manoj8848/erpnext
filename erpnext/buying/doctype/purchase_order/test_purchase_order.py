@@ -3883,6 +3883,22 @@ class TestPurchaseOrder(FrappeTestCase):
 		item = make_test_item("test_items_1")
 		item.is_stock_item = 0
 		item.save()
+		filters = {
+			"is_active": 1,
+			"finished_good": "_Test FG Item",
+			"finished_good_qty": 1,
+			"service_item": item.item_code,
+			"finished_good_bom": "BOM-_Test FG Item-001",
+			"service_item_uom": "Nos",
+			"conversion_factor": 1
+		}
+		if not frappe.db.exists("Subcontracting BOM", filters):
+			sub_contracting_bom = frappe.get_doc({
+				"doctype": "Subcontracting BOM",
+				**filters
+			})
+			sub_contracting_bom.insert()
+
 		args = {
 			"item_code": item.item_code,
 			"do_not_save": True
