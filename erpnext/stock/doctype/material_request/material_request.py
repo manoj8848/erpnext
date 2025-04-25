@@ -30,7 +30,7 @@ class MaterialRequest(BuyingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from erpnext.stock.doctype.material_request_item.material_request_item import MaterialRequestItem
 		from frappe.types import DF
 

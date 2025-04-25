@@ -7455,6 +7455,17 @@ class TestMaterialRequest(FrappeTestCase):
 			self.assertEqual(sh_gle[0], sh_gle[1])
 			self.assertEqual(cogs_gle[0], cogs_gle[1])
 			self.assertEqual(current_bin_qty, bin_qty)
+	
+	def test_check_modified_date_con_fail(self):
+		mr = frappe.copy_doc(test_records[0]).insert()
+		mr = frappe.get_doc("Material Request", mr.name)
+		mr.submit()
+		new_modified = frappe.utils.add_days(mr.modified, 1)
+		frappe.db.set_value("Material Request", mr.name, "modified", new_modified)
+		frappe.db.commit()
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			mr.check_modified_date()
+		self.assertIn("has been modified. Please refresh.", str(ctx.exception))
 
 def get_in_transit_warehouse(company):
 	if not frappe.db.exists("Warehouse Type", "Transit"):
