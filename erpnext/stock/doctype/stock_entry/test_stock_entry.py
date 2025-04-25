@@ -1882,6 +1882,59 @@ class TestStockEntry(FrappeTestCase):
 			self.assertEqual(sle.incoming_rate, 100)
 			self.assertEqual(sle.stock_value_difference, 100)
 			self.assertEqual(sle.stock_value, 100 * i)
+
+	def test_stock_entry_amount(self):
+		warehouse = "_Test Warehouse - _TC"
+		rm_item_code = "Test Stock Entry Amount 1"
+		make_item(rm_item_code, {"is_stock_item": 1})
+
+		fg_item_code = "Test Repack Stock Entry Amount 1"
+		make_item(fg_item_code, {"is_stock_item": 1})
+
+		make_stock_entry(
+			item_code=rm_item_code,
+			qty=1,
+			to_warehouse=warehouse,
+			basic_rate=200,
+			posting_date=nowdate(),
+		)
+
+		se = make_stock_entry(
+			item_code=rm_item_code,
+			qty=1,
+			purpose="Repack",
+			basic_rate=100,
+			do_not_save=True,
+		)
+
+		se.items[0].s_warehouse = warehouse
+		se.append(
+			"items",
+			{
+				"item_code": fg_item_code,
+				"qty": 1,
+				"t_warehouse": warehouse,
+				"uom": "Nos",
+				"conversion_factor": 1.0,
+			},
+		)
+		se.set_stock_entry_type()
+		se.submit()
+
+		self.assertEqual(se.items[0].amount, 200)
+		self.assertEqual(se.items[0].basic_amount, 200)
+
+		make_stock_entry(
+			item_code=rm_item_code,
+			qty=1,
+			to_warehouse=warehouse,
+			basic_rate=300,
+			posting_date=add_days(nowdate(), -1),
+		)
+
+		se.reload()
+		self.assertEqual(se.items[0].amount, 300)
+		self.assertEqual(se.items[0].basic_amount, 300)
 	
 	def test_create_partial_material_transfer_stock_entry_and_TC_SCK_048(self):
 		from erpnext.stock.doctype.material_request.test_material_request import make_material_request
@@ -3977,18 +4030,24 @@ class TestStockEntry(FrappeTestCase):
 	def test_create_two_stock_entries_TC_SCK_230(self):
 		company = create_company_se()
 		frappe.db.set_value("Company", company, "stock_adjustment_account", 'Stock Adjustment - _CS')
-		item_1 = make_item("_Test Item 1",properties = {'valuation_rate':100})
-		item_1.valuation_rate = 100
-		item_1.save()
+		item_1 = make_item("_Test Item 1")
 		get_or_create_fiscal_year('_Test Company SE')
 		warehouse_1 = create_warehouse("_Test warehouse PO", company=company)
-		se_1 = make_stock_entry(item_code=item_1.name, target=warehouse_1, qty=10, purpose="Material Receipt", company=company)
+		se_1 = make_stock_entry(item_code=item_1.name, target=warehouse_1, qty=10, purpose="Material Receipt", company=company,do_not_save=True)
+		se_1.save()
+		se_1.items[0].allow_zero_valuation_rate = 1
+		se_1.save()
+		se_1.submit()
 		self.assertEqual(se_1.items[0].item_code, item_1.name)
 		self.assertEqual(se_1.items[0].qty, 10)
 		self.check_stock_ledger_entries("Stock Entry", se_1.name, [[item_1.name, warehouse_1, 10]])
-		item_2 = make_item("_Test Item",properties = {'valuation_rate':100})
+		item_2 = make_item("_Test Item")
 		warehouse_2 = create_warehouse("Stores", company=company)
-		se_2 = make_stock_entry(item_code=item_2.name, target=warehouse_2, qty=20, purpose="Material Receipt", company=company)
+		se_2 = make_stock_entry(item_code=item_2.name, target=warehouse_2, qty=20, purpose="Material Receipt", company=company,do_not_save=True)
+		se_2.save()
+		se_2.items[0].allow_zero_valuation_rate = 1
+		se_2.save()
+		se_2.submit()
 		self.assertEqual(se_2.items[0].item_code, item_2.name)
 		self.assertEqual(se_2.items[0].qty, 20)
 		self.check_stock_ledger_entries("Stock Entry", se_2.name, [[item_2.name, warehouse_2, 20]])
@@ -4516,7 +4575,7 @@ def create_fiscal_with_company(company):
 	if existing_fiscal_years != []:
 		for fiscal_years in existing_fiscal_years:
 			fy_doc = frappe.get_doc("Fiscal Year",fiscal_years.get("name"))
-			if not frappe.db.exists("Fiscal Year Company", {"company": company}):
+			if not frappe.db.exists("Fiscal Year Company", {"company": company, "parent":fy_doc.name}):
 				fy_doc.append("companies", {"company": company})
 				fy_doc.save()
 	else:

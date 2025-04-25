@@ -4452,6 +4452,8 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
   
 	@if_app_installed("india_compliance")
 	def test_sales_order_creating_si_with_product_bundle_and_gst_rule_TC_S_059(self):
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_registered_company
+		create_registered_company()
 		create_test_warehouse(name= "Stores - _TIRC", warehouse_name="Stores", company="_Test Indian Registered Company")
 		get_or_create_fiscal_year("_Test Indian Registered Company")
 		make_item("_Test Item", {"is_stock_item": 1})
@@ -4893,6 +4895,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		po = make_purchase_order(mr.name)
 		po.supplier = "_Test Supplier"
 		po.cost_center = "Main - _TC"
+		po.currency = "INR"
 		po.save()
 		po.submit()
 		
@@ -4916,7 +4919,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		self.assertEqual(pi.status, "Unpaid")
   
 		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': pi.name,'account':'Creditors - _TC'}, 'credit'), 5000)
-		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': pi.name,'account':'Stock Received But Not Billed - _TC'}, 'debit'), 5000)
+		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': pi.name,'account':'_Test Account Cost for Goods Sold - _TC'}, 'debit'), 5000)
 
 	def test_sales_order_for_stock_unreserve_TC_S_071(self):
 		so = self.test_sales_order_for_stock_reservation_TC_S_063(get_so_with_stock_reserved=1)
@@ -4980,6 +4983,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		po = make_purchase_order(mr.name)
 		po.supplier = "_Test Supplier"
 		po.cost_center = "_Test Cost Center - _TC"
+		po.currency = "INR"
 		po.save()
 		po.submit()
 		
@@ -5074,6 +5078,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		from erpnext.stock.doctype.material_request.material_request import make_supplier_quotation
 		sq = make_supplier_quotation(mr.name)
 		sq.supplier = "_Test Supplier"
+		sq.currency ="INR"
 		sq.save()
 		sq.submit()
   
@@ -5595,6 +5600,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		purchase_orders = make_purchase_order_for_default_supplier(so.name,selected_items=so.items)
 		for i in purchase_orders[0].items:
 			i.rate = 3000
+		purchase_orders[0].currency = "INR"
 		purchase_orders[0].submit()
 
 		update_status("Delivered", purchase_orders[0].name)
@@ -5652,6 +5658,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		for i in purchase_orders[0].items:
 			i.rate = 3000
 			i.item_tax_template = "GST 18% - _TC"
+		purchase_orders[0].currency = "INR"
 		purchase_orders[0].tax_category = "In-State"
 		purchase_orders[0].taxes_and_charges = "Input GST In-state - _TC"
 		purchase_orders[0].save()
@@ -6015,8 +6022,9 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 
 	def create_and_submit_sales_order_with_gst(self, item_code, qty=None, rate=None):
 		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_registered_company
-		get_or_create_fiscal_year("_Test Indian Registered Company")
 		create_registered_company()
+		create_registered_customer()
+		get_or_create_fiscal_year("_Test Indian Registered Company")
 		create_test_warehouse(name= "Stores - _TIRC", warehouse_name="Stores", company="_Test Indian Registered Company")
 		make_item("_Test Item", {"is_stock_item": 1})
 		make_stock_entry(item_code="_Test Item", qty=10, rate=rate, target="Stores - _TIRC")
@@ -6038,7 +6046,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			customer="_Test Registered Customer",
 			warehouse="Stores - _TIRC",
 			cost_center="Main - _TIRC",
-			selling_price_list='_Test Price List',
+			currency="INR",
 			item_code=item_code,
 			qty=qty,
 			rate=rate,
@@ -6089,8 +6097,10 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		payment_entry.submit()
   
 		self.assertEqual(payment_entry.status, "Submitted", "Payment Entry not created")
-		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': payment_entry.name, 'account': 'Debtors - _TC'}, 'credit'), payment_entry.paid_amount)
-		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': payment_entry.name, 'account': 'Cash - _TC'}, 'debit'), payment_entry.paid_amount)
+		debit_account = frappe.db.get_value("Company", "_Test Company", "default_bank_account") or 'Cash - _TC'
+		credit_account = frappe.db.get_value("Company", "_Test Company", "default_advance_received_account") or 'Debtors - _TC'
+		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': payment_entry.name, 'account': credit_account}, 'credit'), payment_entry.paid_amount)
+		self.assertEqual(frappe.db.get_value('GL Entry', {'voucher_no': payment_entry.name, 'account': debit_account}, 'debit'), payment_entry.paid_amount)
 		return payment_entry
 
 	def validate_gl_entries(self, voucher_no, amount):
@@ -6174,6 +6184,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			self.assertRaises(frappe.ValidationError,sales_order.submit)
 			customer.credit_limits=[]
 			customer.save()
+			frappe.db.rollback()
 		except Exception as e:
 			pass
 		
@@ -6673,3 +6684,38 @@ def get_or_create_fiscal_year(company):
 def _make_blanket_order(**args):
 	from erpnext.manufacturing.doctype.blanket_order.test_blanket_order import make_blanket_order
 	return make_blanket_order(**args)
+
+def create_registered_customer():
+	if not frappe.db.exists("Customer", "_Test Registered Customer"):
+		customer = frappe.get_doc({
+			"doctype": "Customer",
+			"customer_name": "_Test Registered Customer",
+			"customer_type": "Company",
+			"customer_group": "Commercial",
+			"territory": "India",
+            "gstin": "24AANFA2641L1ZF",
+            "gst_category": "Registered Regular"
+		})
+		customer.insert()
+
+	if not frappe.db.exists("Address", "_Test Registered Customer-Billing"):
+		address = frappe.get_doc({
+			"doctype": "Address",
+			"address_title": "_Test Registered Customer",
+			"address_type": "Billing",
+            "address_line1": "Test Address - 1",
+            "city": "Test City",
+            "state": "Gujarat",
+            "pincode": "380015",
+            "country": "India",
+            "gstin": "24AAQCA8719H1ZC",
+            "gst_category": "Registered Regular",
+            "is_primary_address": 1,
+            "is_company_address": 1,
+            "is_shipping_address": 1,
+			"links": [{
+				"link_doctype": "Customer",
+				"link_name": "_Test Registered Customer"
+			}]
+		})
+		address.insert()

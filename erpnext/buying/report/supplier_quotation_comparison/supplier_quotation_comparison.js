@@ -52,7 +52,7 @@ frappe.query_reports["Supplier Quotation Comparison"] = {
 			fieldtype: "MultiSelectList",
 			options: "Supplier",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Supplier", txt);fieldtype: "MultiSelectList",
+				return frappe.db.get_link_options("Supplier", txt)
 			},
 		},
 		{

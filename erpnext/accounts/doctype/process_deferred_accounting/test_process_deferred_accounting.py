@@ -206,7 +206,7 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		item.no_of_months = 12
 		if frappe.db.has_column("Item", "gst_hsn_code"):
 			item.gst_hsn_code = "01011010"
-		item.save()
+		item.save(ignore_permissions=True)
 
 		# Step 5: Create Sales Invoice
 		si = create_sales_invoice(

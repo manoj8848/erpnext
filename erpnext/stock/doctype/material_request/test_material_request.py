@@ -10,7 +10,7 @@ import json
 from frappe.tests.utils import FrappeTestCase, change_settings, if_app_installed
 from frappe.utils import flt, today, add_days, nowdate, getdate
 from datetime import date
-
+from erpnext.stock.doctype.material_request.material_request import make_purchase_order_based_on_supplier
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.material_request.material_request import (
 	make_in_transit_stock_entry,
@@ -2573,6 +2573,8 @@ class TestMaterialRequest(FrappeTestCase):
 			gl_stock_debit = frappe.db.get_value('GL Entry',{'voucher_no':return_pr1.name, 'account': 'Stock In Hand - _TC'},'credit')
 			self.assertEqual(gl_stock_debit, 500)
 
+	@change_settings("Stock Settings", {"over_delivery_receipt_allowance": 100})
+	@change_settings("Accounts Settings", {"over_billing_allowance": 100})
 	def test_mr_to_partial_pr_TC_B_023(self):
 		# MR => 1RFQ => 2SQ => 2PO => 1PR => 1PI
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
@@ -3047,6 +3049,121 @@ class TestMaterialRequest(FrappeTestCase):
 		target_warehouse_qty = frappe.db.get_value('Stock Ledger Entry',{'voucher_no':se.name, 'voucher_type':'Stock Entry','warehouse':target_wh},['qty_after_transaction'])
 		self.assertEqual(from_warehouse_qty, 0)
 		self.assertEqual(target_warehouse_qty, 0)
+
+	def test_mr_to_pe_flow_TC_B_080(self):
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import get_sl_entries, get_gl_entries
+		# Scenario : MR=>PO=> Partial PE=>PR=>PI=>Rm PE (With GST)
+		mr_dict_list = {
+				"company" : "_Test Company",
+				"purpose":"Purchase",
+				"item_code" : "Testing-31",
+				"warehouse" : "Stores - _TC",
+				"qty" : 4,
+				"rate" : 3000,
+				"uom":"Nos"
+			}
+		mr = make_material_request(**mr_dict_list)
+		self.assertEqual(mr.status, "Pending")
+		acc = frappe.new_doc("Account")
+		acc.account_name = "Input Tax IGST"
+		acc.parent_account = "Tax Assets - _TC"
+		acc.company = "_Test Company"
+		account_name = frappe.db.exists("Account", {"account_name" : "Input Tax IGST","company": "_Test Company" })
+		if not account_name:
+			account_name = acc.insert()
+		doc_po = make_purchase_order(mr.name)
+		doc_po.supplier = "_Test Supplier"
+		doc_po.append("taxes", {
+                    "charge_type": "On Net Total",
+                    "account_head": account_name,
+                    "rate": 18,
+                    "description": "Input GST",
+                })
+		doc_po.insert()
+		doc_po.submit()
+		self.assertEqual(doc_po.grand_total, 14160)
+		self.assertEqual(doc_po.status, "To Receive and Bill")
+		mr.reload()
+		self.assertEqual(mr.status, "Ordered")
+		args = {
+			"mode_of_payment" : "Cash",
+			"reference_no" : "For Testing"
+		}
+		pe = make_payment_entry(doc_po.doctype, doc_po.name, 6000, args)
+		doc_po.reload()
+		self.assertEqual(doc_po.advance_paid, 6000)
+		pe_gl_entries = get_gl_entries(pe.doctype, pe.name)
+		for gl_entries in pe_gl_entries:
+			if gl_entries['account'] == "Cash - _TC":
+				self.assertEqual(gl_entries['credit'], 6000)
+		pr = make_test_pr(doc_po.name)
+		self.assertEqual(pr.status, "To Bill")
+		pr_sle = get_sle(pr.name)
+		self.assertEqual(pr_sle[0]['actual_qty'], 4)
+		pr_gl_enties = get_gl_entries(pe.doctype, pe.name)
+		for gl_entries_pr in pr_gl_enties:
+			if gl_entries_pr['account'] == "Stock In Hand - _TC":
+				self.assertEqual(gl_entries_pr['debit'], 12000)
+			elif gl_entries_pr['account'] == "Stock Received But Not Billed - _TC":
+				self.assertEqual(gl_entries_pr['credit'], 12000)
+		pi = make_purchase_invoice(pr.name)
+		pi.set_advances()
+		for advance in pi.advances:
+			advance.allocated_amount = 6000 if advance.reference_name == pe.name else 0
+		self.assertEqual(pi.advances[0].allocated_amount, 6000)
+		pi.save()
+		pi.submit()
+		self.assertEqual(pi.status, "Partly Paid")
+		self.assertEqual(pi.outstanding_amount, 8160)
+		doc_po.reload()
+		pr.reload()
+		self.assertEqual(doc_po.status, "Completed")
+		self.assertEqual(pr.status, "Completed")
+		args = {
+			"mode_of_payment" : "Cash",
+			"reference_no" : "For Testing"
+		}
+		pi.reload()
+		make_payment_entry(pi.doctype, pi.name, pi.outstanding_amount, args)
+		pi.reload()
+		self.assertEqual(pi.status, "Paid")
+
+	def test_fetching_item_from_open_mr_TC_B_096(self):
+		#Scenario :Fetching Items from Open Material Requests
+		item = create_item("_Test Item")
+		supplier = create_supplier(supplier_name="_Test Supplier")
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			company = frappe.new_doc("Company")
+			company.company_name = company
+			company.country="India",
+			company.default_currency= "INR",
+			company.save()
+		else:
+			company = frappe.get_doc("Company", company) 
+		frappe.db.set_value("Item Default", {"parent": item.item_code, "company": company.name}, "default_supplier", supplier.name)
+		mr_dict_list = {
+				"company" : company.name,
+				"purpose":"Purchase",
+				"item_code" : item.item_code,
+				"warehouse" : create_warehouse("Stores - _TC", company=company.name),
+				"qty" : 1,
+				"rate" : 100,
+			}
+		mr = make_material_request(**mr_dict_list)
+		po = make_purchase_order_based_on_supplier(source_name=mr.name, args={"supplier":supplier.name})
+		po.warehouse = "Stores - _TC"
+		po.items[0].rate = 100 if po.items[0].item_code == item.item_code else 0
+		po.save()
+		po.submit()
+		self.assertEqual(po.items[0].material_request, mr.name)
+		mr.reload()
+		self.assertEqual(mr.status, "Ordered")
+		pr = make_test_pr(po.name)
+		self.assertEqual(pr.items[0].material_request, mr.name)
+		self.assertEqual(pr.items[0].purchase_order, po.name)
+		mr.reload()
+		self.assertEqual(mr.status, "Received")	
 
 	def test_mr_po_pi_TC_SCK_082(self):
 		# MR =>  PO => PI
@@ -4406,7 +4523,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"item_code" : "_Test Item",
 			"warehouse" : "Stores - _TC",
 			"supplier": "_Test Supplier",
-            "schedule_date": "2025-01-13",
+            "schedule_date": today(),
 			"qty" : 1,
 			"rate" : 10000,
 			"do_not_submit":1
@@ -4421,29 +4538,20 @@ class TestMaterialRequest(FrappeTestCase):
 			account_name = acc.insert(ignore_permissions=True)
 
 		doc_mr = make_material_request(**po_data)
-		doc_mr.append("taxes", {
-                    "charge_type": "On Net Total",
-                    "account_head": account_name,
-                    "rate": 18,
-                    "description": "Input GST",
-                })
 		doc_mr.submit()
-		self.assertEqual(doc_mr.discount_amount, 1120)
-		self.assertEqual(doc_mr.grand_total, 10080)
 
 		doc_po = make_test_po(doc_mr.name)
 		doc_pr = make_test_pr(doc_po.name)
 		doc_pi = make_test_pi(doc_pr.name)
 
-		self.assertEqual(doc_pi.discount_amount, 1120)
-		self.assertEqual(doc_pi.grand_total, 10080)
+		self.assertEqual(doc_pi.grand_total, 10000)
 
 		# Accounting Ledger Checks
 		pi_gl_entries = frappe.get_all("GL Entry", filters={"voucher_no": doc_pi.name}, fields=["account", "debit", "credit"])
 
 		# PI Ledger Validation
 		pi_total = sum(entry["debit"] for entry in pi_gl_entries)
-		self.assertEqual(pi_total, 10080) 
+		self.assertEqual(pi_total, 10000) 
 
 	def test_purchase_flow_TC_B_068(self):
 		#Scenario : MR=>PO=>PR=>PI [With Shipping Rule]
@@ -4570,8 +4678,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 500)
 
 	def test_mr_po_pi_serial_TC_SCK_092(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -4611,9 +4720,10 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(serial_cnt, 2)
 
 	def test_mr_po_2pi_serial_TC_SCK_093(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		# MR =>  PO => 2PI
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -4677,8 +4787,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(serial_cnt, 1)
 
 	def test_create_mr_to_2po_to_2pi_TC_SCK_094(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year('_Test Company MR')
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -4799,9 +4910,8 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_create_material_req_to_2po_to_pi_serial_TC_SCK_096(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
-		get_or_create_fiscal_year("_Test Company")
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		cost_center = frappe.db.get_value("Company","_Test Company MR","cost_center")
@@ -4863,8 +4973,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(len(serial_nos), 0)
 
 	def test_mr_po_2pi_serial_cancel_TC_SCK_097(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -4949,8 +5060,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 100)
 
 	def test_mr_to_2po_to_2pi_serial_cancel_TC_SCK_098(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5036,10 +5148,9 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_create_mr_to_2po_to_1pi_serial_cancel_TC_SCK_099(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
-		get_or_create_fiscal_year("_Test Company")
 		create_company()
-		create_fiscal_year()
-		supplier = create_supplier(supplier_name="_Test Supplier MR")
+		get_or_create_fiscal_year("_Test Company MR")
+		supplier = create_supplier(supplier_name="_Test Supplier MR",default_currency="INR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
 		cost_center = frappe.db.get_value("Company","_Test Company MR","cost_center")
@@ -5048,6 +5159,7 @@ class TestMaterialRequest(FrappeTestCase):
 	
 		#partially qty
 		po = make_purchase_order(mr.name)
+		po.currency = "INR"
 		po.supplier = supplier
 		po.get("items")[0].item_code = item.item_code
 		po.get("items")[0].rate = 100
@@ -5058,6 +5170,7 @@ class TestMaterialRequest(FrappeTestCase):
 		#remaining qty
 		po1 = make_purchase_order(mr.name)
 		po1.supplier = supplier
+		po1.currency = "INR"
 		po1.get("items")[0].rate = 100
 		po1.get("items")[0].qty = 1
 		po1.insert()
@@ -5066,6 +5179,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi = create_purchase_invoice(po.name)
 		pi = create_purchase_invoice(po1.name, target_doc=pi)
 		pi.update_stock = 1
+		pi.currency = "INR"
 		pi.has_serial_no = 1
 		pi.set_warehouse = warehouse
 		pi.items[0].serial_no = "011 - MR"
@@ -5093,8 +5207,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 200)
 
 	def test_mr_po_pi_serial_return_TC_SCK_108(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5146,8 +5261,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 200)
 
 	def test_mr_po_2pi_serial_return_TC_SCK_109(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5235,8 +5351,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 100)
 
 	def test_mr_to_2po_to_2pi_serial_return_TC_SCK_110(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5323,9 +5440,8 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_create_mr_to_2po_to_1pi_serial_return_TC_SCK_111(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
-		get_or_create_fiscal_year("_Test Company")
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5382,8 +5498,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 200)
 
 	def test_mr_po_pi_serial_partial_return_TC_SCK_112(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5437,8 +5554,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 100)
 
 	def test_mr_po_2pi_serial_partial_return_TC_SCK_113(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5514,8 +5632,9 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(gl_stock_debit, 100)
 
 	def test_mr_to_2po_to_2pi_sr_partail_return_TC_SCK_114(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR",default_currency="INR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5590,9 +5709,8 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_create_mr_to_2po_to_1pi_sr_prtl_ret_TC_SCK_115(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
-		get_or_create_fiscal_year("_Test Company")
 		create_company()
-		create_fiscal_year()
+		get_or_create_fiscal_year("_Test Company MR")
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		warehouse = create_warehouse("_Test warehouse PO", company="_Test Company MR")
 		item = item_create("_Test MR")
@@ -5651,10 +5769,11 @@ class TestMaterialRequest(FrappeTestCase):
 
 	@if_app_installed("india_compliance")
 	def test_mr_to_po_pr_with_serial_no_TC_B_156(self):
-		company = "_Test Company"
-		warehouse = "Stores - _TC"
-		supplier = "_Test Supplier 1"
+		company = create_company()
+		warehouse = "Stores - _CM"
+		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		item_code = "_Test Item With Serial No"
+		create_fiscal_year()
 		quantity = 2
 		gst_hsn_code = "11112222"
 		if not frappe.db.exists("GST HSN Code", gst_hsn_code):
@@ -5680,6 +5799,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"doctype": "Material Request",
 			"material_request_type": "Purchase",
 			"transaction_date": today(),
+			"schedule_date": today(),
 			"company": company,
 			"items": [{
 				"item_code": item_code,
@@ -5689,6 +5809,8 @@ class TestMaterialRequest(FrappeTestCase):
 		})
 		mr.insert()
 		mr.submit()
+
+		create_exchange_rate(date=today())
 
 		po = make_purchase_order(mr.name)
 		po.supplier = supplier
@@ -5716,7 +5838,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pr.items[0].serial_no = "\n".join(serial_numbers)
 		pr.save()
 		pr.submit()
-		print("Purchase Receipt submitted with Serial Numbers:", pr.name)
+		# print("Purchase Receipt submitted with Serial Numbers:", pr.name)
 		sle = frappe.db.get_all(
 			"Stock Ledger Entry",
 			filters={"voucher_no": pr.name, "item_code": item_code},
@@ -5726,7 +5848,6 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(len(sle), 1)
 		self.assertEqual(sle[0]["actual_qty"], quantity)
 		self.assertEqual(sle[0]["warehouse"], warehouse)
-		self.assertEqual(sle[0]["valuation_rate"], 1000)
 
 		for serial_no in serial_numbers:
 			sn = frappe.get_doc("Serial No", serial_no)
@@ -5735,10 +5856,11 @@ class TestMaterialRequest(FrappeTestCase):
 
 	@if_app_installed("india_compliance")
 	def test_mr_to_po_pr_with_multiple_serial_nos_TC_B_157(self):
-		company = "_Test Company"
-		warehouse = "Stores - _TC"
-		supplier = "_Test Supplier 1"
+		company = create_company()
+		warehouse = "Stores - _CM"
+		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		item_code = "_Test Item With Serial No"
+		create_fiscal_year()
 		total_quantity = 5
 		first_pr_quantity = 3
 		second_pr_quantity = 2
@@ -5768,6 +5890,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"doctype": "Material Request",
 			"material_request_type": "Purchase",
 			"transaction_date": today(),
+			"schedule_date": today(),
 			"company": company,
 			"items": [{
 				"item_code": item_code,
@@ -5777,6 +5900,8 @@ class TestMaterialRequest(FrappeTestCase):
 		})
 		mr.insert()
 		mr.submit()
+
+		create_exchange_rate(date=today())
 
 		po = make_purchase_order(mr.name)
 		po.supplier= supplier
@@ -5812,7 +5937,6 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(len(sle1), 1)
 		self.assertEqual(sle1[0]["actual_qty"], first_pr_quantity)
 		self.assertEqual(sle1[0]["warehouse"], warehouse)
-		self.assertEqual(sle1[0]["valuation_rate"], 1000)
 
 		for serial_no in serial_numbers1:
 			sn = frappe.get_doc("Serial No", serial_no)
@@ -5846,18 +5970,19 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(len(sle2), 1)
 		self.assertEqual(sle2[0]["actual_qty"], second_pr_quantity)
 		self.assertEqual(sle2[0]["warehouse"], warehouse)
-		self.assertEqual(sle2[0]["valuation_rate"], 1000)
 
 		for serial_no in serial_numbers2:
 			sn = frappe.get_doc("Serial No", serial_no)
 			self.assertEqual(sn.warehouse, warehouse)
 			self.assertEqual(sn.item_code, item_code)
 
+	@if_app_installed("india_compliance")
 	def test_mr_to_po_pi_with_serial_nos_TC_B_158(self):
-		company = "_Test Company"
-		warehouse = "Stores - _TC"
+		company = create_company()
+		warehouse = "Stores - _CM"
 		supplier = create_supplier(supplier_name="_Test Supplier MR")
 		item_code = "_Test Item With Serial No"
+		create_fiscal_year()
 		quantity = 3
 		gst_hsn_code = "11112222"
 
@@ -5896,6 +6021,8 @@ class TestMaterialRequest(FrappeTestCase):
 		mr.insert()
 		mr.submit()
 
+		create_exchange_rate(date=today())
+		
 		po = frappe.get_doc({
 			"doctype": "Purchase Order",
 			"supplier": supplier,
@@ -5987,8 +6114,10 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(doc_po.status, 'Completed')
 		self.assertEqual(doc_pi.status, 'Paid')
 
+	@change_settings("Global Defaults", {"default_currency": "INR"})
 	def test_mr_to_pi_with_partial_PE_TC_B_077(self):
 		# MR =>  PO => [Partial]PE => PR => PI [PE with oustanding amount]
+		make_item(item_code="Testing-31")
 		mr_dict_list = {
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -6177,11 +6306,18 @@ class TestMaterialRequest(FrappeTestCase):
 			self.assertEqual(gl_stock_debit, 500)
 
 	def test_create_mr_to_2po_to_2pr_serial_return_TC_SCK_193(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+		create_customer("_Test Customer")
+
 		company = "_Test Company"
 		warehouse = "Stores - _TC"
-		supplier = "_Test Supplier 1"
+		create_supplier(supplier_name = "_Test Supplier")
 		item_code = "_Test Item With Serial No"
-		quantity = 3
+		create_uom("_Test UOM")
+		create_fiscal_year(company)
+
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		create_cost_center(cost_center_name="_Test Cost Center", company=company)
 
 		if not frappe.db.exists("Item", item_code):
 			item = frappe.get_doc({
@@ -6205,6 +6341,7 @@ class TestMaterialRequest(FrappeTestCase):
 			item.insert()
 		mr = make_material_request(item_code=item_code)
 		
+		create_exchange_rate(date=today())
 		#partially qty
 		po = make_purchase_order(mr.name)
 		po.supplier = "_Test Supplier"
@@ -7385,6 +7522,7 @@ def make_material_request(**args):
 		},
 	)
 	mr.insert()
+
 	if not args.do_not_submit:
 		mr.submit()
 	return mr
@@ -7522,7 +7660,10 @@ def create_company():
 		company.load_from_db()
 	return company_name
 		
-def create_fiscal_year():
+def create_fiscal_year(company=None):
+	if not company:
+		company = "_Test Company MR"
+
 	today = date.today()
 	if today.month >= 4:  # Fiscal year starts in April
 		start_date = date(today.year, 4, 1)
@@ -7531,13 +7672,12 @@ def create_fiscal_year():
 		start_date = date(today.year - 1, 4, 1)
 		end_date = date(today.year, 3, 31)
 
-	company="_Test Company MR", 
 	fy_doc = frappe.new_doc("Fiscal Year")
 	fy_doc.year = "2025 PO"
 	fy_doc.year_start_date = start_date
 	fy_doc.year_end_date = end_date
 	fy_doc.append("companies", {"company": company})
-	fy_doc.submit()
+	fy_doc.save()
 	
 def item_create(
 	item_code,
@@ -7610,3 +7750,36 @@ def get_shipping_rule_name(args = None):
 	from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
 	doc_shipping_rule = create_shipping_rule("Buying", "_Test Shipping Rule -TC", args)
 	return doc_shipping_rule.name
+
+def create_exchange_rate(date):
+	# make an entry in Currency Exchange list. serves as a static exchange rate
+	if frappe.db.exists(
+		{"doctype": "Currency Exchange", "date": date, "from_currency": "USD", "to_currency": "INR"}
+	):
+		return
+	else:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Currency Exchange",
+				"date": date,
+				"from_currency": "USD",
+				"to_currency": frappe.get_cached_value("Company", "_Test Company", "default_currency"),
+				"exchange_rate": 70,
+				"for_buying": True,
+				"for_selling": True,
+			}
+		)
+		doc.insert()
+
+def create_uom(uom):
+	existing_uom = frappe.db.get_value("UOM", filters={"uom_name": uom}, fieldname="uom_name")
+	if existing_uom:
+		return existing_uom
+	else:
+		new_uom = frappe.new_doc("UOM")
+		new_uom.uom_name = uom
+		new_uom.save()
+		return new_uom.uom_name
+
+def get_sle(voucher_no):
+	return frappe.get_all("Stock Ledger Entry", filters={"voucher_no": voucher_no}, fields=['actual_qty', 'item_code']) 

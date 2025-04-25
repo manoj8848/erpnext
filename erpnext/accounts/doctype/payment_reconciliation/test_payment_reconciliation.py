@@ -1696,7 +1696,7 @@ class TestPaymentReconciliation(FrappeTestCase):
 				}
 			]
 		})
-		pe.insert().submit()
+		pe.insert(ignore_permissions=True).submit()
 
 		# Step 3: Perform Payment Reconciliation
 		pr = frappe.get_doc("Payment Reconciliation")
@@ -1784,7 +1784,7 @@ class TestPaymentReconciliation(FrappeTestCase):
 				}
 			]
 		})
-		pe.insert().submit()
+		pe.insert(ignore_permissions=True).submit()
 
 		# Step 3: Perform Payment Reconciliation
 		pr = frappe.get_doc("Payment Reconciliation")
@@ -1876,7 +1876,7 @@ class TestPaymentReconciliation(FrappeTestCase):
 				}
 			]
 		})
-		pe.insert().submit()
+		pe.insert(ignore_permissions=True).submit()
 
 		# Step 4: Perform Payment Reconciliation
 		pr = frappe.get_doc("Payment Reconciliation")

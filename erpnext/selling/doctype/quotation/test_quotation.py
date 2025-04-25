@@ -1275,6 +1275,7 @@ class TestQuotation(FrappeTestCase):
 			i.rate = 3000
 			i.item_tax_template = "GST 18% - _TC"
 		purchase_orders[0].tax_category = "In-State"
+		purchase_orders[0].currency = "INR"
 		purchase_orders[0].taxes_and_charges = "Input GST In-state - _TC"
 		purchase_orders[0].save()
 		purchase_orders[0].submit()

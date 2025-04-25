@@ -246,7 +246,7 @@ class Item(Document):
 					"price_list_rate": self.standard_rate,
 				}
 			)
-			item_price.insert()
+			item_price.insert(ignore_permissions=True)
 
 	def set_opening_stock(self):
 		"""set opening stock"""
@@ -1186,7 +1186,7 @@ def get_last_purchase_details(item_code, doc_name=None, conversion_rate=1.0):
 
 	return out
 
-def get_purchase_voucher_details(doctype, item_code, document_name):
+def get_purchase_voucher_details(doctype, item_code, document_name=None):
 	parent_doc = frappe.qb.DocType(doctype)
 	child_doc = frappe.qb.DocType(doctype + " Item")
 	query = (
@@ -1204,8 +1204,11 @@ def get_purchase_voucher_details(doctype, item_code, document_name):
 		)
 		.where(parent_doc.docstatus == 1)
 		.where(child_doc.item_code == item_code)
-		.where(parent_doc.name != document_name)
 	)
+
+	if document_name:
+		query = query.where(parent_doc.name != document_name)
+
 	if doctype in ("Purchase Receipt", "Purchase Invoice"):
 		query = query.select(parent_doc.posting_date, parent_doc.posting_time)
 		query = query.orderby(

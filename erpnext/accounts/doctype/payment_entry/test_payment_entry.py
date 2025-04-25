@@ -983,12 +983,13 @@ class TestPaymentEntry(FrappeTestCase):
 
 
 	def test_gl_of_multi_currency_payment_transaction(self):
+		from erpnext.accounts.doctype.account.test_account import create_account as _create_account
 		from erpnext.setup.doctype.currency_exchange.test_currency_exchange import (
 			save_new_records,
 			test_records,
 		)
 		save_new_records(test_records)
-		paid_from = create_account(
+		paid_from = _create_account(
 			parent_account="Current Liabilities - _TC",
 			account_name="_Test Cash USD",
 			company="_Test Company",
@@ -2187,6 +2188,7 @@ def create_customer(name="_Test Customer 2 USD", currency="USD"):
 		customer.save()
 		customer = customer.name
 	return customer
+
 def create_supplier(**args):
 	args = frappe._dict(args)
 
@@ -2214,7 +2216,7 @@ def create_supplier(**args):
 		doc.supplier_group = args.supplier_group or "Services"
   
 
-	doc.insert(ignore_mandatory=True)
+	doc.insert(ignore_mandatory=True, ignore_permissions=True)
 	
 	return doc
 
@@ -2299,7 +2301,7 @@ def make_test_item(item_name=None):
 					"doctype": 'GST HSN Code',
 					"hsn_code": '888890',
 					"description": 'test'
-				}).insert()
+				}).insert(ignore_permissions=True)
 				
 			
 			item= make_item(
@@ -2367,14 +2369,20 @@ def create_purchase_invoice(**args):
 	pi.save()
 	return pi
 
-def create_company():
+def create_company(
+    company_name="_Test Company", 
+    country="India", 
+    currency="INR",
+    abbr="_TC"
+    ):
 	if not frappe.db.exists("Company", "_Test Company"):
 		frappe.get_doc({
 			"doctype": "Company",
-			"company_name": "_Test Company",
+			"company_name": company_name,
 			"company_type": "Company",
-			"default_currency": "INR",
+			"default_currency": currency,
+			"country": country,
 			"company_email": "test@example.com",
-			"abbr":"_TC"
+			"abbr": abbr
 		}).insert()
 		

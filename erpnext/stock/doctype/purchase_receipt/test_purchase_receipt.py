@@ -3944,6 +3944,54 @@ class TestPurchaseReceipt(FrappeTestCase):
 		pr.reload()
 		self.assertEqual(pr.status, "To Bill")
 
+	def test_recreate_stock_ledgers(self):
+		item_code = "Test Item for Recreate Stock Ledgers"
+		create_item(item_code)
+
+		pr = make_purchase_receipt(item_code=item_code, qty=10, rate=100)
+		pr.submit()
+
+		sles = frappe.get_all(
+			"Stock Ledger Entry",
+			filters={"voucher_type": pr.doctype, "voucher_no": pr.name},
+			pluck="name",
+		)
+
+		self.assertTrue(sles)
+
+		for row in sles:
+			doc = frappe.get_doc("Stock Ledger Entry", row)
+			doc.delete()
+
+		sles = frappe.get_all(
+			"Stock Ledger Entry",
+			filters={"voucher_type": pr.doctype, "voucher_no": pr.name},
+			pluck="name",
+		)
+
+		self.assertFalse(sles)
+
+		frappe.get_doc(
+			{
+				"doctype": "Repost Item Valuation",
+				"based_on": "Transaction",
+				"voucher_type": pr.doctype,
+				"voucher_no": pr.name,
+				"posting_date": pr.posting_date,
+				"posting_time": pr.posting_time,
+				"company": pr.company,
+				"recreate_stock_ledgers": 1,
+			}
+		).submit()
+
+		sles = frappe.get_all(
+			"Stock Ledger Entry",
+			filters={"voucher_type": pr.doctype, "voucher_no": pr.name},
+			pluck="name",
+		)
+
+		self.assertTrue(sles)
+
 	def test_purchase_order_and_receipt_TC_SCK_072(self):
 		company = "_Test Company"
 		item1 = make_item("ST-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011010"})
@@ -4258,6 +4306,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		sr.cancel()
 		self.check_cancel_stock_gl_sle(sr, 20, -3000.0)
 	def test_purchase_receipt_with_serialized_item_TC_SCK_145(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
 		create_company()
 		supplier = create_supplier(supplier_name="Test Supplier 1")
@@ -4969,6 +5018,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 		# Create Purchase Receipt
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
 		create_warehouse(
 			warehouse_name="_Test Warehouse 1 - _TC",
@@ -5048,6 +5098,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 	def test_stock_ledger_report_TC_SCK_225(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
 		item = []
 		warehouse = []
@@ -5091,6 +5142,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 	def test_stock_ledger_report_TC_SCK_226(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_company()
 		item = []
 		warehouse = []

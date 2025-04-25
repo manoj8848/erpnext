@@ -4231,15 +4231,20 @@ class TestSalesInvoice(FrappeTestCase):
 		self.assertEqual(expected, actual)
   
 	def test_sales_invoice_without_sales_order_TC_S_006(self):
+		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 		get_or_create_fiscal_year("_Test Company")
+		create_customer(customer_name="_Test Customer",company="_Test Company")
+		item = create_item(item_code="_Test Item 1", valuation_rate=100)
+		make_stock_entry(item_code="_Test Item 1", target="_Test Warehouse - _TC", qty=50, basic_rate=100)
 		setting = frappe.get_doc("Selling Settings")
 		setting.so_required = 'No'
 		setting.save()
   
 		self.assertEqual(setting.so_required, 'No')
   
-		si = create_sales_invoice(cost_center='Main - _TC', selling_price_list='Standard Selling', income_account='Sales - _TC', expense_account='Cost of Goods Sold - _TC',
+		si = create_sales_invoice(cost_center='Main - _TC', item_code=item.name, selling_price_list='Standard Selling', income_account='Sales - _TC', expense_account='Cost of Goods Sold - _TC',
 							debit_to='Debtors - _TC', qty=5, rate=3000, do_not_save=True)
 		si.save()
 		si.submit()
@@ -4260,21 +4265,25 @@ class TestSalesInvoice(FrappeTestCase):
   
 		self.assertEqual(dn.status, 'Completed', 'Delivery Note not submitted')
   
-		qty_change = frappe.db.get_value('Stock Ledger Entry', {'item_code': '_Test Item', 'voucher_no': dn.name, 'warehouse': '_Test Warehouse - _TC'}, 'actual_qty')
+		qty_change = frappe.db.get_value('Stock Ledger Entry', {'item_code': '_Test Item 1', 'voucher_no': dn.name, 'warehouse': '_Test Warehouse - _TC'}, 'actual_qty')
 		self.assertEqual(qty_change, -5)
 
 	def test_sales_invoice_with_update_stock_checked_TC_S_007(self):
+		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 		get_or_create_fiscal_year("_Test Company")
-		si = create_sales_invoice(cost_center='Main - _TC', selling_price_list='Standard Selling', income_account='Sales - _TC', expense_account='Cost of Goods Sold - _TC',
+		create_customer(customer_name="_Test Customer",company="_Test Company")
+		item = create_item(item_code="_Test Item 1", valuation_rate=100)
+		make_stock_entry(item_code="_Test Item 1", target="_Test Warehouse - _TC", qty=50, basic_rate=100)
+		si = create_sales_invoice(cost_center='Main - _TC',item_code=item.name, selling_price_list='Standard Selling', income_account='Sales - _TC', expense_account='Cost of Goods Sold - _TC',
 							debit_to='Debtors - _TC', qty=5, rate=3000, do_not_save=True)
 		si.update_stock = 1
 		si.save()
 		si.submit()
-  
 		self.assertEqual(si.status, 'Unpaid', 'Sales Invoice not submitted')
   
-		qty_change = frappe.get_all('Stock Ledger Entry', {'item_code': '_Test Item', 'voucher_no': si.name, 'warehouse': '_Test Warehouse - _TC'}, ['actual_qty', 'valuation_rate'])
+		qty_change = frappe.get_all('Stock Ledger Entry', {'item_code': '_Test Item 1', 'voucher_no': si.name, 'warehouse': '_Test Warehouse - _TC'}, ['actual_qty', 'valuation_rate'])
 		self.assertEqual(qty_change[0].get("actual_qty"), -5)
   
 		si2_acc_credit = frappe.db.get_value('GL Entry', {'voucher_type': 'Sales Invoice', 'voucher_no': si.name, 'account': 'Sales - _TC'}, 'credit')
@@ -4380,24 +4389,26 @@ class TestSalesInvoice(FrappeTestCase):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item,create_payment_entry
 		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import get_jv_entry_account 
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
-		get_or_create_fiscal_year("_Test Company")
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		create_company(company_name="_Test Company 3", country="India", currency="INR", abbr="_TC5")
+		get_or_create_fiscal_year("_Test Company 3")
 		create_cost_center(
 			cost_center_name="_Test Cost Center",
-			company="_Test Company",
-			parent_cost_center="_Test Company - _TC"
+			company="_Test Company 3",
+			parent_cost_center="_Test Company 3 - _TC3"
 		)
 
 		create_account(
 			account_name="_Test Receivable USD",
-			parent_account="Current Assets - _TC",
-			company="_Test Company",
+			parent_account="Current Assets - _TC3",
+			company="_Test Company 3",
 			account_currency="USD",
 			account_type="Receivable",
 		)
 		create_account(
 			account_name="_Test Cash",
-			parent_account="Cash In Hand - _TC",
-			company="_Test Company",
+			parent_account="Cash In Hand - _TC3",
+			company="_Test Company 3",
 			account_currency="INR",
 			account_type="Cash",
 		)
@@ -4405,8 +4416,8 @@ class TestSalesInvoice(FrappeTestCase):
 		create_customer(
 			customer_name="_Test Customer USD",
 			currency="USD",
-			company="_Test Company",
-			account="_Test Receivable USD - _TC"
+			company="_Test Company 3",
+			account="_Test Receivable USD - _TC3"
 		)
 
 		item = make_test_item(item_name="_Test Item USD")
@@ -4415,9 +4426,9 @@ class TestSalesInvoice(FrappeTestCase):
 			item.append(
 				"item_defaults",
 				{
-					"default_warehouse": '_Test Warehouse - _TC',
+					"default_warehouse": '_Test Warehouse - _TC5',
 					"company": "_Test Company",
-					"selling_cost_center": "_Test Cost Center - _TC",
+					"selling_cost_center": "_Test Cost Center - _TC5",
 				},
 			)
 			item.save()
@@ -4430,14 +4441,13 @@ class TestSalesInvoice(FrappeTestCase):
 			pe = create_payment_entry(
 				party_type="Customer",
 				party=customer.name,
-				company="_Test Company",
+				company="_Test Company 3",
 				payment_type="Receive",
-				paid_from="_Test Receivable USD - _TC",
-				paid_to="_Test Cash - _TC",
+				paid_from="_Test Receivable USD - _TC3",
+				paid_to="_Test Cash - _TC3",
 				paid_amount=100,
 				save=True
 			)
-			
 			pe.source_exchange_rate = 60
 			pe.received_amount = 6000
 			pe.save()
@@ -4445,11 +4455,14 @@ class TestSalesInvoice(FrappeTestCase):
 
 			si = create_sales_invoice(
 				customer="_Test Customer USD",
-				company="_Test Company",
-				parent_cost_center="_Test Cost Center - _TC",
+				company="_Test Company 3",
+				parent_cost_center="_Test Cost Center - _TC3",
+				cost_center="_Test Cost Center - _TC3",
 				conversion_rate=63,
 				currency="USD",	
-				debit_to="_Test Receivable USD - _TC",
+				debit_to="_Test Receivable USD - _TC3",
+				income_account="Sales - _TC3",
+				expense_account="Cost of Goods Sold - _TC3",
 				item_code=item.name,
 				qty=1,
 				rate=120,
@@ -4479,8 +4492,8 @@ class TestSalesInvoice(FrappeTestCase):
 			)
 
 			expected_jv_entries = [
-				["Exchange Gain/Loss - _TC", 300.0, 0.0, pe.posting_date],
-				["_Test Receivable USD - _TC", 0.0, 300.0, pe.posting_date]
+				["Exchange Gain/Loss - _TC3", 300.0, 0.0, pe.posting_date],
+				["_Test Receivable USD - _TC3", 0.0, 300.0, pe.posting_date]
 			]
 
 			check_gl_entries(
@@ -4712,16 +4725,19 @@ class TestSalesInvoice(FrappeTestCase):
 	def test_sales_invoice_without_sales_order_with_gst_TC_S_016(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 
 		create_registered_company()
-		
+		get_or_create_fiscal_year("_Test Indian Registered Company")
 		if not frappe.db.exists("Warehouse", "Stores - _TIRC"):
 			create_warehouse("Stores - _TIRC", company="_Test Indian Registered Company")
-
+		create_item(item_code = "_Test Item",company="_Test Indian Registered Company",warehouse="Stores - _TIRC")
 		setting = frappe.get_doc("Selling Settings")
 		setting.so_required = 'No'
 		setting.save()
-
+		item = frappe.get_doc("Item", "_Test Item")
+		item.is_stock_item = 1
+		item.save()
 		self.assertEqual(setting.so_required, 'No')
 		make_stock_entry(item_code="_Test Item", qty=10, rate=5000, target="Stores - _TIRC")
 
@@ -4789,16 +4805,21 @@ class TestSalesInvoice(FrappeTestCase):
 	def test_sales_invoice_with_update_stock_checked_with_gst_TC_S_017(self): 
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		create_registered_company()
-
+		
+		create_item(item_code = "_Test Item",company="_Test Indian Registered Company",warehouse="Stores - _TIRC")
 		if not frappe.db.exists("Warehouse", "Stores - _TIRC"):
 			create_warehouse("Stores - _TIRC", company="_Test Indian Registered Company")
-
+		get_or_create_fiscal_year("_Test Indian Registered Company")
+		
 		company = frappe.get_all("Company", {"name": "_Test Indian Registered Company"}, ["gstin", "gst_category"])
 		customer = frappe.get_all("Customer", {"name": "_Test Registered Customer"}, ["gstin", "gst_category"])
 		company_add = frappe.get_all("Address", {"name": "_Test Indian Registered Company-Billing"}, ["name", "gstin", "gst_category"])
 		customer_add = frappe.get_all("Address", {"name": "_Test Registered Customer-Billing"}, ["name", "gstin", "gst_category"])
-
+		item = frappe.get_doc("Item", "_Test Item")
+		item.is_stock_item = 1
+		item.save()
 		make_stock_entry(item_code="_Test Item", qty=10, rate=5000, target="Stores - _TIRC")
   
 		if company[0].get("gst_category") == "Registered Regular" and customer[0].get("gst_category") == "Registered Regular" and customer[0].get("gstin") and customer[0].get("gstin"):
@@ -4874,7 +4895,7 @@ class TestSalesInvoice(FrappeTestCase):
 
 		shipping_charge = 200  
 		expected_grand_total = 20000 + shipping_charge
-		self.assertEqual(sales_invoice.grand_total, expected_grand_total)
+		self.assertEqual(sales_invoice.grand_total , expected_grand_total)
 
 		si_gl_entries = frappe.get_all(
 			"GL Entry",
@@ -4885,7 +4906,7 @@ class TestSalesInvoice(FrappeTestCase):
 		expected_si_gl = {
 			sales_invoice.debit_to: 20200,       
 			income_account: -20000,            
-			shipping_rule_account: -200         
+			shipping_rule_account: -200        
 		}
 
 		for entry in si_gl_entries:
@@ -4941,7 +4962,7 @@ class TestSalesInvoice(FrappeTestCase):
 			}).insert()
 		
 		# Set default accounts for test company
-		frappe.db.set_value("Company", "_Test Company", {
+		frappe.set_value("Company", "_Test Company", {
 			"default_receivable_account": "Debtors - _TC",
 			"default_income_account": "Sales - _TC",
 			"default_expense_account": "Cost of Goods Sold - _TC",
@@ -4949,22 +4970,25 @@ class TestSalesInvoice(FrappeTestCase):
 		})
 		
 		# Set up shipping rule account
-		if not frappe.db.exists("Shipping Rule", "_Test Shipping Rule"):
+		if not frappe.db.exists("Shipping Rule", "_Test Shipping Rule 1"):
 			shipping_rule = frappe.get_doc({
 				"doctype": "Shipping Rule",
-				"shipping_rule_name": "_Test Shipping Rule",
+				"shipping_rule_name": "_Test Shipping Rule 1",
+				"label": "_Test Shipping Rule 1",
+				"cost_center": "_Test Cost Center - _TC",
+				"calculate_based_on": "Net Total",
 				"conditions": [{
 					"doctype": "Shipping Rule Condition",
 					"from_value": 0,
 					"to_value": 100000,
 					"shipping_amount": 200
 				}],
-				"account": "Shipping Charges - _TC"
+				"account": "_Test Account Shipping Charges - _TC"
 			}).insert()
 		else:
-			frappe.db.set_value("Shipping Rule", "_Test Shipping Rule", "account", "Shipping Charges - _TC")
+			frappe.set_value("Shipping Rule", "_Test Shipping Rule", "account", "Shipping Charges - _TC")
 
-		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
+		frappe.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 		make_stock_entry(item="_Test Item Home Desktop 100", target="Stores - _TC", qty=10, rate=4000)
 
 		sales_invoice = create_sales_invoice(
@@ -4977,10 +5001,9 @@ class TestSalesInvoice(FrappeTestCase):
 			warehouse="Stores - _TC",
 			currency="INR",
 			selling_price_list="Standard Selling",
-			shipping_rule="_Test Shipping Rule",
+			shipping_rule="_Test Shipping Rule 1",
 			update_stock=1,
 		)
-
 		self.assertEqual(sales_invoice.docstatus, 1)
 		self.assertEqual(sales_invoice.status, "Unpaid")
 
@@ -5015,8 +5038,6 @@ class TestSalesInvoice(FrappeTestCase):
 		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")
-		# Enable perpetual inventory and set up accounts
-		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 		
 		# Create or get inventory account if not exists
 		if not frappe.db.exists("Account", "Stock In Hand - _TC"):
@@ -5030,11 +5051,12 @@ class TestSalesInvoice(FrappeTestCase):
 			}).insert()
 		
 		# Set default accounts for test company
-		frappe.db.set_value("Company", "_Test Company", {
+		frappe.set_value("Company", "_Test Company", {
 			"default_receivable_account": "Debtors - _TC",
 			"default_income_account": "Sales - _TC",
 			"default_expense_account": "Cost of Goods Sold - _TC",
-			"default_inventory_account": "Stock In Hand - _TC"
+			"default_inventory_account": "Stock In Hand - _TC",
+			"enable_perpetual_inventory":1
 		})
 
 		make_stock_entry(item="_Test Item Home Desktop 100", target="Stores - _TC", qty=10, rate=1000)
@@ -5150,14 +5172,14 @@ class TestSalesInvoice(FrappeTestCase):
 				}).insert()
 
 		# Set default accounts for test company
-		frappe.db.set_value("Company", "_Test Company", {
+		frappe.set_value("Company", "_Test Company", {
 			"default_receivable_account": "Debtors - _TC",
 			"default_income_account": "Sales - _TC",
 			"default_expense_account": "Cost of Goods Sold - _TC",
-			"default_inventory_account": "Stock In Hand - _TC"
+			"default_inventory_account": "Stock In Hand - _TC",
+			"enable_perpetual_inventory":1
 		})
 
-		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 		make_stock_entry(item="_Test Item Home Desktop 100", target="Stores - _TC", qty=10, rate=2500)
 
 		sales_invoice = create_sales_invoice(
@@ -5415,6 +5437,35 @@ class TestSalesInvoice(FrappeTestCase):
 		pos.save().submit()
 		pos_return = make_sales_return(pos.name)
 		self.assertEqual(abs(pos_return.payments[0].amount), pos.payments[0].amount)
+
+	def test_create_return_invoice_for_self_update(self):
+		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+		from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+		invoice = create_sales_invoice()
+
+		payment_entry = get_payment_entry(dt=invoice.doctype, dn=invoice.name)
+		payment_entry.reference_no = "test001"
+		payment_entry.reference_date = getdate()
+
+		payment_entry.save()
+		payment_entry.submit()
+
+		r_invoice = make_return_doc(invoice.doctype, invoice.name)
+
+		r_invoice.update_outstanding_for_self = 0
+		r_invoice.save()
+
+		self.assertEqual(r_invoice.update_outstanding_for_self, 1)
+
+		r_invoice.submit()
+
+		self.assertNotEqual(r_invoice.outstanding_amount, 0)
+
+		invoice.reload()
+
+		self.assertEqual(invoice.outstanding_amount, 0)
 
 	def test_prevents_fully_returned_invoice_with_zero_quantity(self):
 		from erpnext.controllers.sales_and_purchase_return import StockOverReturnError, make_return_doc
@@ -5756,6 +5807,8 @@ class TestSalesInvoice(FrappeTestCase):
 		amended_si.docstatus = 0
 		amended_si.amended_from = si.name
 		amended_si.customer = '_Test Customer Selling'
+		amended_si.customer_address = ''
+		amended_si.shipping_address_name = ''
 		amended_si.save()
 		amended_si.submit()
 		self.assertEqual(amended_si.status, "Unpaid")
@@ -5885,15 +5938,17 @@ class TestSalesInvoice(FrappeTestCase):
 	def test_si_with_sr_calculate_with_fixed_TC_S_139(self):
 		from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")
+		item = create_item("_Test Item 1")
 		shipping_rule = create_shipping_rule(
 			shipping_rule_type="Selling", 
 			shipping_rule_name="Shipping Rule - Test Fixed",
 			args={"calculate_based_on": "Fixed", "shipping_amount": 100}
     	)
 		self.assertEqual(shipping_rule.docstatus, 1)
-		make_stock_entry(item_code="_Test Item", qty=10, rate=500, target="_Test Warehouse - _TC")
+		make_stock_entry(item_code="_Test Item 1", qty=10, rate=500, target="_Test Warehouse - _TC")
 		si = create_sales_invoice(qty=5,rate=200, do_not_submit=True)
 
 		si.shipping_rule = shipping_rule.name
@@ -5909,15 +5964,17 @@ class TestSalesInvoice(FrappeTestCase):
 		from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		from erpnext.stock.doctype.item.test_item import create_item
 		get_or_create_fiscal_year("_Test Company")
+		item = create_item("_Test Item 1")
 		shipping_rule = create_shipping_rule(
 			shipping_rule_type="Selling", 
 			shipping_rule_name="Shipping Rule - Test Net Total",
 			args={"calculate_based_on": "Net Total"}
     	)
 		self.assertEqual(shipping_rule.docstatus, 1)
-		make_stock_entry(item_code="_Test Item", qty=10, rate=500, target="_Test Warehouse - _TC")
-		si = create_sales_invoice(qty=5,rate=200, do_not_submit=True)
+		make_stock_entry(item_code=item.name, qty=10, rate=500, target="_Test Warehouse - _TC")
+		si = create_sales_invoice(item_code=item.name, qty=5,rate=200, do_not_submit=True)
 
 		si.shipping_rule = shipping_rule.name
 		si.save()
@@ -6265,21 +6322,22 @@ class TestSalesInvoice(FrappeTestCase):
 
 	def test_direct_sales_invoice_via_update_stock_TC_SCK_132(self):
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+		from erpnext.stock.doctype.item.test_item import create_item
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")
 		customer = "_Test Customer"
 		warehouse = "_Test Warehouse - _TC"
-		item_code = "_Test Item"
+		item_code = "_Test Item 4"
 		qty = 5
-
+		item = create_item(item_code,is_stock_item=1,company="_Test Company",warehouse=warehouse)
 		# Create stock entry to add initial stock
-		make_stock_entry(item_code=item_code, qty=10, rate=100, target=warehouse)
+		make_stock_entry(item_code=item.name, qty=10, rate=100, target=warehouse)
 
 		# Create Sales Invoice
 		si = create_sales_invoice(
 			customer=customer,
 			warehouse=warehouse,
-			item_code=item_code,
+			item_code=item.name,
 			qty=qty,
 			rate=100,
 			update_stock=1,
@@ -6688,7 +6746,7 @@ class TestSalesInvoice(FrappeTestCase):
 			customer.default_sales_partner="_Test Sales Distributor"
 			customer.default_commission_rate=5
 			customer.save()
-			item = make_test_item("_Test Item")	
+			item = make_test_item("_Test Item 3")	
 			si = create_sales_invoice(
 					customer="_Test Customer",
 					company="_Test Company",
@@ -6801,28 +6859,41 @@ class TestSalesInvoice(FrappeTestCase):
 			make_test_item,
 			create_account
 		)
+		from erpnext.accounts.utils import get_fiscal_year
 		from erpnext.accounts.doctype.tax_withholding_category.test_tax_withholding_category import create_tax_withholding_category
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")
 		create_account()
-
+		fiscal_year = get_fiscal_year(date=nowdate(),company="_Test Company")
 		create_tax_withholding_category(
 			category_name="Test - TCS - 194C - Company",
 			rate=2,
-			from_date=frappe.utils.get_date_str('01-04-2024'),
-			to_date=frappe.utils.get_date_str('31-03-2025'),
+			from_date=fiscal_year[1],
+			to_date=fiscal_year[2],
 			account="_Test TCS Payable - _TC",
 			single_threshold=30000,
 			cumulative_threshold=100000,
 			consider_party_ledger_amount=1,
 		)
-		
+		if frappe.db.exists("Tax Withholding Category","Test - TCS - 194C - Company"):
+			twh = frappe.get_doc("Tax Withholding Category","Test - TCS - 194C - Company")
+			if twh.rates:
+				if twh.rates[0].from_date == fiscal_year[1] and twh.rates[0].to_date == fiscal_year[2]:
+					return
+				twh.rates[0].from_date = fiscal_year[1]
+				twh.rates[0].to_date = fiscal_year[2]
+				twh.save()
 		customer = frappe.get_doc("Customer","_Test Customer")
+		category_doc = frappe.get_doc("Tax Withholding Category", "Test - TDS - 194C - Company")
+		for rate in category_doc.rates:
+			rate.from_date = add_days(today(), -30)
+			rate.to_date = add_days(today(), 30)
+		category_doc.save()
 		if not customer.tax_withholding_category or customer.tax_withholding_category != "Test - TCS - 194C - Company":
 			customer.tax_withholding_category = "Test - TCS - 194C - Company"
 			customer.save()
 			
-		item = make_test_item("_Test Item")
+		item = make_test_item("_Test Item 1")
 		sales_invoice =  create_sales_invoice(
 			customer="_Test Customer",
 			company="_Test Company",
@@ -6830,11 +6901,15 @@ class TestSalesInvoice(FrappeTestCase):
 			qty=1,
 			rate=150000,
 		)
-		expected_gle =[
-			['Debtors - _TC', sales_invoice.grand_total, 0.0,sales_invoice.posting_date],
-			['Sales - _TC', 0.0, (sales_invoice.grand_total-sales_invoice.total_taxes_and_charges),sales_invoice.posting_date],
-			['_Test TCS Payable - _TC', 0.0, sales_invoice.total_taxes_and_charges,sales_invoice.posting_date],
-		]
+		expected_gle = [
+						['Debtors - _TC', round(sales_invoice.grand_total - 0.4, 2), 0.0, sales_invoice.posting_date],
+						['Sales - _TC', 0.0, round(sales_invoice.grand_total - sales_invoice.total_taxes_and_charges, 2), sales_invoice.posting_date],
+						['_Test TCS Payable - _TC', 0.0, round(sales_invoice.total_taxes_and_charges, 2), sales_invoice.posting_date],
+						['_Test Write Off - _TC', 0.4, 0.0, sales_invoice.posting_date]
+					]
+
+
+
 		check_gl_entries(self,voucher_no=sales_invoice.name,expected_gle=expected_gle,posting_date=nowdate(),voucher_type="Sales Invoice")
 		if customer.tax_withholding_category:
 			customer.load_from_db()
@@ -6868,7 +6943,6 @@ def check_gl_entries(doc, voucher_no, expected_gle, posting_date, voucher_type="
 	gl_entries = q.run(as_dict=True)
 	expected_gle = sorted(expected_gle, key=lambda x: x[0])
 	gl_entries = sorted(gl_entries, key=lambda x: x['account'])
-
  
 	for i, gle in enumerate(gl_entries):
 		doc.assertEqual(expected_gle[i][0], gle.account)
@@ -6952,9 +7026,8 @@ def create_sales_invoice(**args):
 				"serial_and_batch_bundle": bundle_id,
 			},
 		)
-
 	if not args.do_not_save:
-		si.insert()
+		si.insert(ignore_permissions=True)
 		if not args.do_not_submit:
 			si.submit()
 		else:
@@ -7063,19 +7136,25 @@ def get_taxes_and_charges():
 
 def create_internal_parties():
 	from erpnext.selling.doctype.customer.test_customer import create_internal_customer
-    
+
+	create_customer_group("_Test Customer Group")
+	create_territory("_Test Territory")
+
+	create_company(company_name="_Test Company 1", country="India", currency="INR", abbr="_TC1")
 	create_internal_customer(
 		customer_name="_Test Internal Customer",
 		represents_company="_Test Company 1",
 		allowed_to_interact_with="Wind Power LLC",
 	)
 
+	create_company(company_name="_Test Company with perpetual inventory", country="India", currency="INR", abbr="_TCPI")
 	create_internal_customer(
 		customer_name="_Test Internal Customer 2",
 		represents_company="_Test Company with perpetual inventory",
 		allowed_to_interact_with="_Test Company with perpetual inventory",
 	)
 
+	create_company(company_name="_Test Company", country="India", currency="INR", abbr="_TC")
 	create_internal_customer(
 		customer_name="_Test Internal Customer 3",
 		represents_company="_Test Company",
@@ -7104,6 +7183,7 @@ def create_internal_parties():
 
 
 def create_internal_supplier(supplier_name, represents_company, allowed_to_interact_with):
+	create_supplier_group("_Test Supplier Group")
 	if not frappe.db.exists("Supplier", supplier_name):
 		supplier = frappe.get_doc(
 			{
@@ -7128,14 +7208,15 @@ def setup_accounts():
 	## Create internal transfer account
 	account = create_account(
 		account_name="Unrealized Profit",
-		parent_account="Current Liabilities - TCP1",
+		parent_account="Current Liabilities - _TCPI",
 		company="_Test Company with perpetual inventory",
 	)
 
 	frappe.db.set_value(
 		"Company", "_Test Company with perpetual inventory", "unrealized_profit_loss_account", account
 	)
-
+	frappe.db.set_value(
+		"Company", "_Test Company", "stock_adjustment_account", "Cost of Goods Sold - _TC")
 
 def add_taxes(doc):
 	doc.append(
@@ -7283,11 +7364,14 @@ def create_company_and_supplier():
 				"gstin": "27AAAAP0267H2ZN",
 				"gst_category": "Registered Regular"
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
-		set_parent_company_fiscal_year = frappe.get_doc("Fiscal Year", fiscal_year)
-		set_parent_company_fiscal_year.append("companies",{"company": parent_company})
-		set_parent_company_fiscal_year.save()
+	fiscal_year_doc = frappe.get_doc("Fiscal Year", fiscal_year)
+	linked_companies = {d.company for d in fiscal_year_doc.companies}
+
+	if parent_company not in linked_companies:
+		fiscal_year_doc.append("companies", {"company": parent_company})
+		fiscal_year_doc.save(ignore_permissions=True)
 
 	if not frappe.db.exists("Company", child_company):
 		frappe.get_doc(
@@ -7301,11 +7385,11 @@ def create_company_and_supplier():
 				"gst_category": "Registered Regular",
 				"parent_company": parent_company
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
-		set_child_company_fiscal_year = frappe.get_doc("Fiscal Year", fiscal_year)
-		set_child_company_fiscal_year.append("companies",{"company": child_company})
-		set_child_company_fiscal_year.save()
+	if child_company not in linked_companies:
+		fiscal_year_doc.append("companies", {"company": child_company})
+		fiscal_year_doc.save(ignore_permissions=True)
 
 
 	if not frappe.db.exists("Price List", price_list):
@@ -7322,7 +7406,7 @@ def create_company_and_supplier():
 					}
 				]
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
 	if not frappe.db.exists("Supplier", supplier):
 		frappe.get_doc(
@@ -7340,7 +7424,7 @@ def create_company_and_supplier():
 					}
 				]
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
 		frappe.get_doc(
 			{
@@ -7367,7 +7451,7 @@ def create_company_and_supplier():
 					}
 				]
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
 	if not frappe.db.exists("Customer", customer):
 		frappe.get_doc(
@@ -7385,7 +7469,7 @@ def create_company_and_supplier():
 					}
 				]
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
 		frappe.get_doc(
 			{
@@ -7412,7 +7496,7 @@ def create_company_and_supplier():
 					}
 				]
 			}
-		).insert()
+		).insert(ignore_permissions=True)
 
 	create_test_tax_data()
 
@@ -7554,4 +7638,40 @@ def create_registered_company():
 			"abbr":"_TIRC"
 		}).insert(ignore_permissions=True)
 
+def create_company(
+    company_name=None, 
+    country=None, 
+    currency=None,
+    abbr=None
+    ):
+	if not frappe.db.exists("Company", company_name):
+		frappe.get_doc({
+			"doctype": "Company",
+			"company_name": company_name,
+			"company_type": "Company",
+			"default_currency": currency,
+			"country": country,
+			"company_email": "test@example.com",
+			"abbr": abbr
+		}).insert()
 
+def create_customer_group(customer_group):
+	if not frappe.db.exists("Customer Group", {"customer_group_name": customer_group}):
+		frappe.get_doc({"doctype": "Customer Group", "customer_group_name": customer_group}).insert(
+			ignore_permissions=True
+		)
+
+def create_supplier_group(supplier_group):
+	if not frappe.db.exists("Supplier Group", {"supplier_group_name": supplier_group}):
+		frappe.get_doc({"doctype": "Supplier Group", "supplier_group_name": supplier_group}).insert(
+			ignore_permissions=True
+		)
+
+def create_territory(territory):
+	if not frappe.db.exists("Territory", {"territory_name": territory}):
+		frappe.get_doc(
+			{
+				"doctype": "Territory",
+				"territory_name": territory,
+			}
+		).insert(ignore_permissions=True)

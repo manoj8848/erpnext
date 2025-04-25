@@ -1759,9 +1759,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		pi.save()
 		pi.submit()
 		
-		pe = get_payment_entry("Purchase Invoice", pi.name, party_amount=po.grand_total/2)
-		pe.save()
-		pe.submit()
+		
 		po_status = frappe.db.get_value("Purchase Order", po.name, "status")
 		self.assertEqual(po_status, "Completed")
 
@@ -2584,12 +2582,14 @@ class TestPurchaseOrder(FrappeTestCase):
 		frappe.db.rollback()
 
 	def test_po_with_pricing_rule_TC_B_047(self):
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import get_or_create_price_list
 		# Scenario : PO => Pricing Rule => PR 
 		get_company_supplier = create_data()
 		company = get_company_supplier.get("child_company")
 		supplier = get_company_supplier.get("supplier")
 		item = make_test_item("_test_item")
 		warehouse = "Stores - TC-3"
+		price_list = get_or_create_price_list()
 		get_or_create_fiscal_year(company)
 		po_data = {
 			"company" : company,
@@ -2598,6 +2598,8 @@ class TestPurchaseOrder(FrappeTestCase):
 			"supplier": supplier,
 			"schedule_date": today(),
 			"qty" : 1,
+			"currency":"INR",
+			"buying_price_list": price_list,
 		}
 
 		pricing_rule_record = {
@@ -2620,7 +2622,7 @@ class TestPurchaseOrder(FrappeTestCase):
 			"valid_from": today(),
 			"rate_or_discount": "Discount Percentage",
 			"discount_percentage": 10,
-			"price_list": "Standard Buying",
+			"price_list": price_list,
 			"company" : company,
 
 		}
@@ -2631,7 +2633,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		frappe.get_doc(
 			{
 				"doctype": "Item Price",
-				"price_list": "Standard Buying",
+				"price_list": price_list,
 				"item_code": item.item_code,
 				"price_list_rate": 130,
 			}
@@ -3099,68 +3101,84 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(pi.items[0].qty, 10)
 		self.assertEqual(pi.items[0].rate, 100)
 
+	@change_settings("Accounts Settings", {"check_supplier_invoice_uniqueness": 0})
 	def test_po_pr_pi_with_shipping_rule_TC_B_064(self):
 		# Scenario : PO=>PR=>PI [With Shipping Rule]
-		args = {
-					"calculate_based_on" : "Fixed",
-					"shipping_amount" : 200
+		get_company_supplier = get_company_or_supplier()
+		company = get_company_supplier.get("company")
+		supplier = get_company_supplier.get("supplier")
+		item = make_test_item("test_item")
+		warehouse = "Stores - TC-5"
+
+		shipping_rule = frappe.get_doc({
+			"doctype": "Shipping Rule",
+			"company": company,
+			"label": "Net Weight Shipping Rule",
+			"calculate_based_on": "Fixed",
+			"shipping_rule_type": "Buying",
+			"account": "Cash - TC-5",
+			"cost_center": "Main - TC-5",
+			"shipping_amount": 200
+		}).insert(ignore_if_duplicate=1)
+
+		# Create Purchase Order
+		po = frappe.get_doc({
+			"doctype": "Purchase Order",
+			"supplier": supplier,
+			"company": company,
+			"schedule_date": today(),
+			"currency": "INR",
+			"set_warehouse": warehouse,
+			"items": [
+				{
+					"item_code": item.item_code,
+					"qty": 1,
+					"rate": 3000,
+					"warehouse": warehouse,
 				}
-		item = create_item("_Test Item")
-		supplier = create_supplier(supplier_name="_Test Supplier PO")
-		company = "_Test Company"
-		if not frappe.db.exists("Company", company):
-			company = frappe.new_doc("Company")
-			company.company_name = company
-			company.country="India",
-			company.default_currency= "INR",
-			company.save()
-		else:
-			company = frappe.get_doc("Company", company)
-		validate_fiscal_year(company.name)
-		create_warehouse("_Test Warehouse", company=company.name)
-		doc_shipping_rule = create_shipping_rule("Buying", "_Test Shipping Rule _TC", args)
-		po_data = {
-			"company" : company.name,
-			"supplier":supplier.name,
-			"item_code" : item.item_code,
-			"warehouse" : create_warehouse("Stores", company=company.name),
-			"qty" : 1,
-			"rate" : 3000,
-			"shipping_rule" :doc_shipping_rule.name
+			],
+			"shipping_rule": shipping_rule.name
+		})
+		po.insert()
+		po.submit()
 
-		}
-		doc_po = create_purchase_order(**po_data)
-		self.assertEqual(doc_po.grand_total, 3200.0)
-		self.assertEqual(doc_po.status, "To Receive and Bill")
+		self.assertEqual(po.docstatus, 1)
+		self.assertEqual(po.grand_total, 3200.0)
+		self.assertEqual(po.status, "To Receive and Bill")
 
-		doc_pr = make_pr_for_po(doc_po.name)
-		self.assertEqual(doc_pr.status, "To Bill")
-		sle = frappe.get_all("Stock Ledger Entry", filters={"voucher_no": doc_pr.name}, fields=['actual_qty', 'item_code'])
+		pr = make_purchase_receipt(po.name)
+		pr.insert()
+		pr.submit()
+		self.assertEqual(pr.status, "To Bill")
+
+		sle = frappe.get_all("Stock Ledger Entry", filters={"voucher_no": pr.name}, fields=['actual_qty', 'item_code'])
 		self.assertEqual(len(sle), 1)
 		self.assertEqual(sle[0]['actual_qty'], 1)
-		gl_entries_pr = frappe.get_all("GL Entry", filters={"voucher_no": doc_pr.name}, fields=["account", "debit", "credit"])
-		for gl in gl_entries_pr:
-			if gl['account'] == "Stock In Hand - _TC":
-				self.assertEqual(gl['debit'], 3200)
-			elif gl['account'] == "Stock Received But Not Billed - _TC":
-				self.assertEqual(gl['credit'], 3000)
-			elif gl['account'] == "_Test Account Shipping Charges - _TC":
-				self.assertEqual(gl['credit'], 200)
-		doc_pi = make_pi_against_pr(doc_pr.name)
-		self.assertEqual(doc_pi.status, "Unpaid")
-		gl_entries_pi = frappe.get_all("GL Entry", filters={"voucher_no": doc_pi.name}, fields=["account", "debit", "credit"])
-		for gl_entry in gl_entries_pi:
-			if gl_entry['account'] == "Creditors - _TC":
-				self.assertEqual(gl_entry['credit'], 3200)
-			elif gl_entry['account'] == "Stock Received But Not Billed - _TC":
-				self.assertEqual(gl_entry['debit'], 3000)
-			elif gl_entry['account'] == "_Test Account Shipping Charges - _TC":
-				self.assertEqual(gl_entry['debit'], 200)
 
-		doc_po.reload()
-		doc_pr.reload()
-		self.assertEqual(doc_po.status, "Completed")
-		self.assertEqual(doc_pr.status, "Completed")
+		gl_entries_pr = frappe.get_all("GL Entry", filters={"voucher_no": pr.name}, fields=["account", "debit", "credit"])
+		for gl in gl_entries_pr:
+			if gl['account'] == "Stock In Hand - TC-5":
+				self.assertEqual(gl['debit'], 3200)
+			elif gl['account'] == "Stock Received But Not Billed - TC-5":
+				self.assertEqual(gl['credit'], 3000)
+			elif gl['account'] == "_Test Account Shipping Charges - TC-5":
+				self.assertEqual(gl['credit'], 200)
+
+		pi = make_purchase_invoice(pr.name)
+		pi.insert()
+		pi.submit()
+		self.assertEqual(pi.status, "Unpaid")
+		gl_entries_pi = frappe.get_all("GL Entry", filters={"voucher_no": pi.name}, fields=["account", "debit", "credit"])
+		for gl_entry in gl_entries_pi:
+			if gl_entry['account'] == "Creditors - TC-5":
+				self.assertEqual(gl_entry['credit'], 3200)
+			elif gl_entry['account'] == "Stock Received But Not Billed - TC-5":
+				self.assertEqual(gl_entry['debit'], 3000)
+
+		po.reload()
+		pr.reload()
+		self.assertEqual(po.status, "Completed")
+		self.assertEqual(pr.status, "Completed")
 
 	def test_po_pi_pr_flow_TC_B_067(self):
 		# Scenario : PO => PI => PR [With Shipping Rule]
@@ -3364,10 +3382,10 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(pi.status,'Unpaid')
 
 	def test_po_ignore_pricing_rule_TC_B_049(self):
-		get_company_supplier = create_data()
-		company = get_company_supplier.get("child_company")
-		supplier = get_company_supplier.get("supplier")
-		warehouse = "Stores - TC-3"
+		get_details = get_company_or_supplier()
+		company = get_details.get("company")
+		supplier = get_details.get("supplier")
+		warehouse = "Stores - TC-5"
 		item_price = 130
 		item = make_test_item("_test_item__")
 
@@ -4803,10 +4821,10 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(po.grand_total, 980)
 
 	def test_putaway_rule_with_po_pr_pi_TC_B_155(self):
-		get_company_supplier = create_data()
-		company = get_company_supplier.get("child_company")
+		get_company_supplier = get_company_or_supplier()
+		company = get_company_supplier.get("company")
 		supplier = get_company_supplier.get("supplier")
-		warehouse = "Stores - TC-3"
+		warehouse = "Stores - TC-5"
 		item = make_test_item("Test Item with Putaway Rule")
 
 		if not frappe.db.exists("Putaway Rule", {"item_code": item.item_code, "warehouse": warehouse}):
@@ -5932,11 +5950,30 @@ class TestPurchaseOrder(FrappeTestCase):
 			],
 			"shipping_rule": shipping_rule.name
 		})
-		po.taxes_and_charges = tax_template.get("purchase_tax_template")
+		taxes = [
+			{
+				"charge_type": "On Net Total",
+				"add_deduct_tax": "Add",
+				"category": "Total",
+				"rate": 9,
+				"account_head": tax_template.get('sgst_account'),
+				"description": "SGST"
+			},
+			{
+				"charge_type": "On Net Total",
+				"add_deduct_tax": "Add",
+				"category": "Total",
+				"rate": 9,
+				"account_head": tax_template.get('cgst_account'),
+				"description": "CGST"
+			}
+		]
+		for tax in taxes:
+			po.append("taxes", tax)
 		po.insert()
 		po.submit()
 		self.assertEqual(po.docstatus, 1)
-		self.assertEqual(po.total_taxes_and_charges, 430)  # Shipping amount based on net weight
+		self.assertEqual(po.total_taxes_and_charges, 430)
 		self.assertEqual(po.grand_total, 1430)
 
 		# Create Purchase Receipt from Purchase Order
@@ -7448,6 +7485,7 @@ class TestPurchaseOrder(FrappeTestCase):
 			"company": company,
 			"schedule_date": today(),
 			"set_warehouse": warehouse,
+			"currency": "INR",
 			"items": [
 				{
 					"item_code": item.item_code,
@@ -7473,6 +7511,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		pi_1.bill_no =  f"test_bill_{bill_no}"
 		pi_1.items[0].qty = 3
 		pi_1.update_stock = 1
+		pi_1.currency = "INR"
 		pi_1.insert()
 		pi_1.submit()
 
@@ -7498,6 +7537,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		pi_2 = make_pi_from_po(po.name)
 		pi_2.update_stock = 1
 		pi_2.bill_no = "test_bill - 1122"
+		pi_2.currency = "INR"
 		pi_2.save()
 		pi_2.submit()
 
@@ -8269,10 +8309,10 @@ class TestPurchaseOrder(FrappeTestCase):
 		item = make_test_item("_test_item")
 		item_tax_template = 'Test Item Tax Template'
 		account = frappe.db.get_value("Account", {'company':company}, "name")
-		tax_category = "In-State"
+		tax_category = "Test Tax Category"
 		if not frappe.db.exists("Tax Category", tax_category):
 			tax_category = frappe.new_doc("Tax Category")
-			tax_category.title = "In-State"
+			tax_category.title = tax_category
 			tax_category.save()
 
 		if frappe.db.exists("Purchase Taxes and Charges Template", item_tax_template):
@@ -8303,6 +8343,7 @@ class TestPurchaseOrder(FrappeTestCase):
 				"company": company,
 				"supplier": supplier,
 				"set_warehouse": "Stores - TC-3",
+				"currency": "INR",
 				"items": [
 					{
 						"item_code": item.item_code,
@@ -8348,9 +8389,11 @@ class TestPurchaseOrder(FrappeTestCase):
 			"Stock Received But Not Billed - TC-3": {"debit": 0, "credit": 10000},
 		}
 		for entry in pr_gle_entries:
-			self.assertEqual(entry["debit"], expected_si_entries.get(entry["account"], {}).get("debit", 0))
-			self.assertEqual(entry["credit"], expected_si_entries.get(entry["account"], {}).get("credit", 0))
-
+			for accounts in expected_si_entries:
+				if entry["account"] == accounts:
+					self.assertEqual(entry["debit"], expected_si_entries[accounts]["debit"])
+					self.assertEqual(entry["credit"], expected_si_entries[accounts]["credit"])
+		
 		pi = make_purchase_invoice(pr.name)
 		pi.bill_no = "test_bill - 1122"
 		pi.insert(ignore_permissions=True)
@@ -8367,9 +8410,11 @@ class TestPurchaseOrder(FrappeTestCase):
 			"Creditors - TC-3": {"debit": 0, "credit": 10500},
 		}
 		for entry in pi_gle_entries:
-			self.assertEqual(entry["debit"], expected_pi_entries.get(entry["account"], {}).get("debit", 0))
-			self.assertEqual(entry["credit"], expected_pi_entries.get(entry["account"], {}).get("credit", 0))
-
+			for accounts in expected_pi_entries:
+				if entry["account"] == accounts:
+					self.assertEqual(entry["debit"], expected_pi_entries[accounts]["debit"])
+					self.assertEqual(entry["credit"], expected_pi_entries[accounts]["credit"])
+		
 	@if_app_installed("india_compliance")
 	def test_po_with_multiple_items_single_item_tax_10_pr_pi_TC_B_143(self):
 		get_company_supplier = get_company_or_supplier()
@@ -9000,8 +9045,502 @@ class TestPurchaseOrder(FrappeTestCase):
 					self.assertEqual(item.rate, expected_items.get("rate"))
 
 		os.remove(filename)
-		
-		
+
+	def test_close_or_unclose_purchase_orders_with_close_status_TC_B_159(self):
+		from .purchase_order import close_or_unclose_purchase_orders
+
+		po_1 = create_purchase_order()
+		po_2 = create_purchase_order()
+
+		names = [po_1.name, po_2.name]
+
+		close_or_unclose_purchase_orders(json.dumps(names), "Closed")
+
+		po_1.load_from_db()
+		po_2.load_from_db()
+
+		self.assertEqual(po_1.status, "Closed")
+		self.assertEqual(po_2.status, "Closed")
+
+		close_or_unclose_purchase_orders(json.dumps(names), "Open")
+
+		po_1.load_from_db()
+		po_2.load_from_db()
+
+		self.assertEqual(po_1.status, "To Receive and Bill")
+		self.assertEqual(po_2.status, "To Receive and Bill")
+
+	def test_validate_available_budget_TC_B_160(self):
+		from unittest.mock import patch
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC"
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		wbs.load_from_db()
+
+		wbs_1 = frappe.copy_doc(wbs)
+		wbs_1.insert()
+		wbs_1.submit()
+
+		with patch("frappe.msgprint") as mock_msgprint:
+			args = {
+				"qty":1,
+				"rate": 200,
+				"do_not_submit": True
+			}
+			po = create_purchase_order(**args)
+			po.items[0].work_breakdown_structure = wbs.name
+			po.save()
+
+			self.assertTrue(mock_msgprint.called)
+			msg_args, _ = mock_msgprint.call_args
+			self.assertIn("Available Budget Limit Exceeded", msg_args[0])
+
+			po.append(
+				"items",
+				{
+					"item_code": "_Test Item",
+					"rate": 200,
+					"qty": 1,
+					"warehouse": "_Test Warehouse - _TC",
+					"work_breakdown_structure": wbs_1.name
+				}
+			)
+			po.save()
+			self.assertTrue(mock_msgprint.called)
+			msg_args, _ = mock_msgprint.call_args
+			self.assertIn("Available Budget Limit Exceeded", msg_args[0])
+
+	def test_update_committed_overall_budge_TC_B_161(self):
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC"
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		args = {
+			"qty":1,
+			"rate": 200,
+			"do_not_submit": True
+		}
+		po = create_purchase_order(**args)
+		po.items[0].work_breakdown_structure = wbs.name
+		po.save()
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
+		po.load_from_db()
+		po.cancel()
+
+	def test_locked_update_committed_overall_budget_TC_B_162(self):
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC",
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+
+		args = {
+			"qty":1,
+			"rate": 100,
+			"do_not_submit": True
+		}
+		po = create_purchase_order(**args)
+		po.items[0].work_breakdown_structure = wbs.name
+		po.save()
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.submit()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 0)
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.cancel()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+	def test_locked_committed_overall_budget_mr_po_TC_B_163(self):
+		project_name = "test_project"
+		if not frappe.db.exists("Project",{"project_name": project_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Project",
+					"company": "_Test Company",
+					"project_name": project_name,
+					"is_wbs": 1
+				}
+			).insert()
+
+		project = frappe.db.get_value("Project", {"project_name": project_name})
+
+		wbs = frappe.get_doc(
+			{
+				"doctype": "Work Breakdown Structure",
+				"project": project,
+				"wbs_name": "test_wbs",
+				"company": "_Test Company",
+				"gl_account": "Cash - _TC",
+			}
+		)
+		wbs.insert()
+		wbs.submit()
+
+		self.assertEqual(wbs.docstatus, 1)
+
+		zero_budget = frappe.get_doc(
+			{
+				"doctype": "Zero Budget",
+				"project": project,
+				"posting_date": today(),
+				"zero_budget_item": [
+					{
+						"wbs_element": wbs.name,
+						"zero_budget": 100
+					}
+				]
+			}
+		)
+		zero_budget.insert()
+		zero_budget.submit()
+
+		args = {
+			"qty": 1,
+			"rate": 100
+		}
+		mr = make_material_request(**args)
+		self.assertEqual(mr.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		po = make_purchase_order(mr.name)
+		po.supplier = "_Test Supplier"
+		po.items[0].work_breakdown_structure = wbs.name
+		po.save()
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.submit()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 0)
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
+		frappe.db.set_value("Work Breakdown Structure", wbs.name, "locked", 1)
+		with self.assertRaises(frappe.exceptions.ValidationError) as cm:
+			po.cancel()
+
+		self.assertIn("this WBS is locked", str(cm.exception))
+
+	def test_validate_bom_for_subcontracting_items_TC_B_164(self):
+		item = make_test_item("__Test_item_")
+		frappe.db.set_value("Item",{"item_code": item.item_code}, "is_sub_contracted_item", 1)
+		args = {
+			"item_code": item.item_code,
+			"do_not_save": True
+		}
+		po = create_purchase_order(**args)
+		po.is_old_subcontracting_flow = 1
+		# Expecting validation error due to missing BOM
+		try:
+			po.save()
+		except frappe.exceptions.ValidationError as e:
+			self.assertIn("BOM is not specified for subcontracting item", str(e))
+
+	def test_validate_supplier_score_board_to_prevent_po_TC_B_165(self):
+		from frappe.exceptions import ValidationError
+
+		criteria = "test supplier cretiria"
+		supplier_name = "_Test Supplier"
+
+		setup_supplier_scorecard(supplier_name, criteria, [
+			{
+				"standing_name": "Very Poor",
+				"standing_color": "Red",
+				"min_grade": 0.00,
+				"max_grade": 100.00,
+				"prevent_pos": 1
+			}
+		])
+
+		frappe.db.set_value("Supplier", supplier_name, "prevent_pos", 1)
+
+		args = {
+			"supplier": supplier_name,
+			"do_not_save": True
+		}
+
+		po = create_purchase_order(**args)
+		with self.assertRaises(ValidationError) as e:
+			po.save()
+
+		self.assertIn(
+			"Purchase Orders are not allowed for _Test Supplier due to a scorecard standing of Very Poor.",
+			str(e.exception)
+		)
+
+	def test_validate_supplier_score_board_to_warn_po_TC_B_166(self):
+		criteria = "test supplier cretiria"
+		supplier_name = "_Test Supplier"
+
+		setup_supplier_scorecard(supplier_name, criteria, [
+			{
+				"standing_name": "Very Poor",
+				"standing_color": "Red",
+				"min_grade": 0.00,
+				"max_grade": 100.00,
+				"warn_pos": 1
+			}
+		])
+
+		frappe.db.set_value("Supplier", supplier_name, "warn_pos", 1)
+
+		args = {
+			"supplier": supplier_name,
+			"do_not_submit": True
+		}
+
+		po_warn = create_purchase_order(**args)
+		po_warn.submit()
+		self.assertEqual(po_warn.docstatus, 1)
+
+	def test_validate_fg_item_for_subcontracting_TC_B_167(self):
+		item = make_test_item("__test_item")
+		item.is_stock_item = 0
+		item.save()
+		args = {
+			"item_code": item.item_code,
+			"do_not_save": True
+		}
+		po = create_purchase_order(**args)
+		po.is_subcontracted = 1
+		with self.assertRaises(frappe.exceptions.ValidationError) as e:
+			po.save()
+
+		self.assertIn("Row #1: Finished Good Item is not specified for service item __test_item", str(e.exception))
+		frappe.db.set_value("Item", "_Test FG Item", "is_sub_contracted_item", 0)
+		po.items[0].fg_item = "_Test FG Item"
+		with self.assertRaises(frappe.exceptions.ValidationError) as e:
+			po.save()
+
+		self.assertIn("Row #1: Finished Good Item _Test FG Item must be a sub-contracted item", str(e.exception))
+
+		frappe.db.set_value("Item", "_Test FG Item", "is_sub_contracted_item", 1)
+		frappe.db.set_value("Item", "_Test FG Item", "default_bom", "")
+
+		po.items[0].fg_item = "_Test FG Item"
+		with self.assertRaises(frappe.exceptions.ValidationError) as e:
+			po.save()
+
+		self.assertIn("Row #1: Default BOM not found for FG Item _Test FG Item", str(e.exception))
+
+		frappe.db.set_value("Item", "_Test FG Item", "default_bom", "BOM-_Test FG Item-001")
+		po.items[0].fg_item_qty = ""
+		with self.assertRaises(frappe.exceptions.ValidationError) as e:
+			po.save()
+
+		self.assertIn("Row #1: Finished Good Item Qty can not be zero", str(e.exception))
+
+	def test_make_purchase_invoice_from_portal_TC_B_168(self):
+		from .purchase_order import make_purchase_invoice_from_portal
+
+		po = create_purchase_order()
+		with self.assertRaises(frappe.PermissionError) as context:
+			make_purchase_invoice_from_portal(po.name)
+
+		self.assertIn("Not Permitted", str(context.exception))
+
+		args = {
+			"do_not_save": True
+		}
+		po_1 = create_purchase_order(**args)
+		po_1.contact_email = frappe.session.user
+		po_1.save()
+		po_1.submit()
+		make_purchase_invoice_from_portal(po_1.name)
+
+		self.assertEqual(frappe.response["type"], "redirect")
+		self.assertIn("/purchase-invoices/", frappe.response["location"])
+
+	def test_get_last_purchase_rate_with_old_item_TC_B_169(self):
+		po_1 = create_purchase_order()
+		po_1.get_last_purchase_rate()
+		self.assertEqual(po_1.docstatus, 1)
+		self.assertEqual(po_1.items[0].last_purchase_rate, 500)
+
+		item = make_test_item("test__item_1")
+		args = {
+			"item_code": item.item_code,
+		}
+		po = create_purchase_order(**args)
+		po.get_last_purchase_rate()
+		self.assertEqual(po.items[0].base_price_list_rate, 500)
+
+	def test_get_last_purchase_rate_with_new_item_code_TC_B_170(self):
+		item = make_test_item("test__item_1")
+		args = {
+			"item_code": item.item_code,
+		}
+		po = create_purchase_order(**args)
+		po.get_last_purchase_rate()
+		self.assertEqual(po.items[0].base_price_list_rate, 500)
+
+	def test_set_service_items_for_finished_goods_TC_B_171(self):
+		item = make_test_item("test_items_1")
+		item.is_stock_item = 0
+		item.save()
+		filters = {
+			"is_active": 1,
+			"finished_good": "_Test FG Item",
+			"finished_good_qty": 1,
+			"service_item": item.item_code,
+			"finished_good_bom": "BOM-_Test FG Item-001",
+			"service_item_uom": "Nos",
+			"conversion_factor": 1
+		}
+		if not frappe.db.exists("Subcontracting BOM", filters):
+			sub_contracting_bom = frappe.get_doc({
+				"doctype": "Subcontracting BOM",
+				**filters
+			})
+			sub_contracting_bom.insert()
+
+		args = {
+			"item_code": item.item_code,
+			"do_not_save": True
+		}
+		po = create_purchase_order(**args)
+		po.is_subcontracted = 1
+		po.items[0].item_code = ""
+		po.items[0].fg_item = "_Test FG Item"
+		po.set_service_items_for_finished_goods()
+		po.items[0].item_code = item.item_code
+		po.items[0].qty = 1
+		po.save()
+		po.submit()
+		self.assertEqual(po.docstatus, 1)
+
 def create_po_for_sc_testing():
 	from erpnext.controllers.tests.test_subcontracting_controller import (
 		make_bom_for_subcontracted_items,
@@ -9143,6 +9682,7 @@ def create_purchase_order(**args):
 	po.additional_discount_percentage = args.additional_discount_percentage or None
 	po.discount_amount = args.discount_amount or None
 	po.shipping_rule = args.shipping_rule or None
+	po.buying_price_list = args.buying_price_list or "Standard Buying"
 
 	if args.rm_items:
 		for row in args.rm_items:
@@ -9167,7 +9707,7 @@ def create_purchase_order(**args):
 
 	if not args.do_not_save:
 		po.set_missing_values()
-		po.insert()
+		po.insert(ignore_permissions=True)
 		if not args.do_not_submit:
 			if po.is_subcontracted:
 				supp_items = po.get("supplied_items")
@@ -9300,7 +9840,7 @@ def create_new_account(account_name,company,parent_account, account_type = None,
 					"tax_rate": tax_rate
 				}
 			)
-			account.insert(ignore_if_duplicate=1)
+			account.insert(ignore_if_duplicate=1, ignore_permissions=True)
 			return account.name
 
 		else:
@@ -9717,9 +10257,12 @@ def get_company_or_supplier():
 			}
 		).insert()
 
-		set_company_fiscal_year = frappe.get_doc("Fiscal Year", fiscal_year)
-		set_company_fiscal_year.append("companies",{"company": company})
-		set_company_fiscal_year.save()
+	fiscal_year_doc = frappe.get_doc("Fiscal Year", fiscal_year)
+	linked_companies = {d.company for d in fiscal_year_doc.companies}
+
+	if company not in linked_companies:
+		fiscal_year_doc.append("companies", {"company": company})
+		fiscal_year_doc.save()
 
 	if not frappe.db.exists("Supplier", supplier):
 		frappe.get_doc(

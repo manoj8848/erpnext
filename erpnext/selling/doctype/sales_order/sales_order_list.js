@@ -20,13 +20,21 @@ frappe.listview_settings["Sales Order"] = {
 			return [__("On Hold"), "orange", "status,=,On Hold"];
 		} else if (doc.status === "Completed") {
 			return [__("Completed"), "green", "status,=,Completed"];
-		} else if (!doc.skip_delivery_note && flt(doc.per_delivered, 2) < 100) {
+		} else if (!doc.skip_delivery_note && flt(doc.per_delivered) < 100) {
 			if (frappe.datetime.get_diff(doc.delivery_date) < 0) {
 				// not delivered & overdue
-				return [__("Overdue"), "red", "per_delivered,<,100|delivery_date,<,Today|status,!=,Closed"];
+				return [
+					__("Overdue"),
+					"red",
+					"per_delivered,<,100|delivery_date,<,Today|status,!=,Closed|docstatus,=,1",
+				];
 			} else if (flt(doc.grand_total) === 0) {
 				// not delivered (zeroount order)
-				return [__("To Deliver"), "orange", "per_delivered,<,100|grand_total,=,0|status,!=,Closed"];
+				return [
+					__("To Deliver"),
+					"orange",
+					"per_delivered,<,100|grand_total,=,0|status,!=,Closed|docstatus,=,1",
+				];
 			} else if (flt(doc.per_billed) < 100) {
 				// not delivered & not billed
 				return [
@@ -71,6 +79,7 @@ frappe.listview_settings["Sales Order"] = {
 				erpnext.bulk_transaction_processing.create(listview, "Sales Order", "Delivery Note");
 			});
 		}
+
 		if (frappe.model.can_create("Payment Entry")) {
 			listview.page.add_action_item(__("Advance Payment"), () => {
 				erpnext.bulk_transaction_processing.create(listview, "Sales Order", "Payment Entry");
