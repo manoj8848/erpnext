@@ -8,7 +8,7 @@ import frappe
 import frappe.permissions
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.tests.utils import FrappeTestCase, change_settings, if_app_installed
-from frappe.utils import add_days, flt, getdate, nowdate, today
+from frappe.utils import add_days, add_to_date, flt, getdate, nowdate, today, add_months
 from erpnext.stock.get_item_details import get_bin_details
 from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
 from erpnext.controllers.accounts_controller import update_child_qty_rate
@@ -6302,6 +6302,176 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		self.assertEqual(qty_change, -5)
 		self.assertEqual(frappe.db.get_value("Stock Reservation Entry", {"voucher_no": so.name}, "status"), "Delivered")
 
+	def test_validate_sales_mntc_quotation_coverage_TC_S_162(self):
+		make_item("_Test Item")
+		create_exchange_rate(date=today())
+
+		# creating quotation
+		qtn = frappe.get_doc(
+			{
+				"doctype": "Quotation",
+				"quotation_to": "Customer",
+				"party_name": "_Test Customer",
+				"order_type": "Sales",
+				"transaction_date": nowdate(),
+				"valid_till": add_months(nowdate(), 1),
+			}
+		)
+		qtn.append("items", {"qty": "2", "item_code": "_Test Item"})
+		qtn.submit()
+
+		so = frappe.new_doc("Sales Order")
+		so.customer = "_Test Customer"
+		so.order_type = "Maintenance" 
+		so.append("items", {
+			"item_code": "_Test Item",
+			"qty": 1,
+			"rate": 100,
+			"prevdoc_docname": qtn.name
+		})
+
+		with self.assertRaises(frappe.ValidationError) as context:
+			so.validate_sales_mntc_quotation()
+
+		self.assertIn(f"Quotation {qtn.name} not of type Maintenance", str(context.exception))
+
+	def test_validate_drop_ship_coverage_TC_S_163(self):
+		so = frappe.new_doc("Sales Order")
+		so.customer = "_Test Customer"
+		so.order_type = "Sales"
+
+		so.append("items", {
+			"item_code": "_Test Item",
+			"qty": 1,
+			"rate": 100,
+			"delivered_by_supplier": 1, 
+			"supplier": None 
+		})
+
+		with self.assertRaises(frappe.ValidationError) as context:
+			so.validate_drop_ship()
+
+		self.assertIn("Set Supplier for item", str(context.exception))
+
+	def test_check_modified_date_coverage_TC_S_164(self):
+		make_item("_Test Item")
+
+		so = make_sales_order(do_not_save=True)
+		so.modified = add_to_date(today(), hours=-1)
+		so.save()
+
+		frappe.db.set_value("Sales Order", so.name, "modified", today())
+
+		with self.assertRaises(frappe.ValidationError) as e:
+			so.update_status("Draft")
+		
+		self.assertIn("has been modified", str(e.exception))
+
+	def test_update_status_coverage_TC_S_165(self):
+		make_item("_Test Item")
+
+		so = make_sales_order()
+		so.reload()
+
+		so.check_credit_limit = lambda: None
+		so.update_reserved_qty = lambda: None
+		so.notify_update = lambda: None
+
+		try:
+			so.update_status("Draft")
+		except Exception:
+			self.fail("update_status() raised Exception unexpectedly!")
+
+	def test_validate_delivery_date_coverage_TC_S_166(self):
+		make_item("_Test Item")
+
+		so = make_sales_order(do_not_save=1)
+		so.delivery_date = add_days(so.transaction_date, -1)
+		so.items[0].delivery_date = add_days(so.transaction_date, -1)
+
+		with self.assertRaises(frappe.ValidationError) as e:
+			so.validate_delivery_date()
+
+		self.assertIn("Expected Delivery Date should be after Sales Order Date", str(e.exception))
+
+	def test_update_enquiry_status_coverage_TC_S_167(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+		create_exchange_rate(date=today())
+
+		if not frappe.db.exists("Opportunity Type", "Sales"):
+			opp_type = frappe.new_doc("Opportunity Type")
+			opp_type.name = "Sales"
+			opp_type.save()
+
+		if not frappe.db.exists("Sales Stage", "Prospecting"):
+			sal_stage = frappe.new_doc("Sales Stage")
+			sal_stage.stage_name = "Prospecting"
+			sal_stage.save()
+
+		opp_doc = frappe.get_doc(
+			{
+				"doctype": "Opportunity",
+				"company": "_Test Company",
+				"opportunity_from": "Customer",
+				"opportunity_type": "Sales",
+				"conversion_rate": 1.0,
+				"transaction_date": today(),
+				"party_name": "_Test Customer"
+			}
+		)
+		opp_doc.insert()
+
+		quotation = frappe.get_doc({
+			"doctype": "Quotation",
+			"quotation_to": "Customer",
+			"company": "_Test Company",
+			"party_name": "_Test Customer",
+			"order_type": "Sales",
+			"items": [{
+				"item_code": "_Test Item",
+				"qty": 1,
+				"rate": 100,
+				"prevdoc_doctype": "Opportunity",
+				"prevdoc_docname": opp_doc.name
+			}]
+		}).insert()
+
+		so = make_sales_order(do_not_save=1)
+		so.update_enquiry_status(quotation.name, "Converted")
+
+		opp_doc.reload()
+		self.assertEqual(opp_doc.status, "Converted")
+
+	def test_make_project_coverage_TC_S_168(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+
+		so = make_sales_order()
+
+		from erpnext.selling.doctype.sales_order.sales_order import make_project
+		project = make_project(so.name)
+
+		self.assertEqual(project.status, "Open")
+		self.assertEqual(project.sales_order, so.name)
+
+	def test_make_maintenance_schedule_coverage_TC_S_169(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+
+		so = make_sales_order()
+
+		maintenance_schedule = make_maintenance_schedule(so.name)
+
+		self.assertEqual(maintenance_schedule.status, "Draft")
+
+
 @if_app_installed("india_compliance")
 def create_test_tax_data():
 		if not frappe.db.exists("Tax Category", "In-State"):
@@ -6719,3 +6889,22 @@ def create_registered_customer():
 			}]
 		})
 		address.insert()
+def create_exchange_rate(date):
+	# make an entry in Currency Exchange list. serves as a static exchange rate
+	if frappe.db.exists(
+		{"doctype": "Currency Exchange", "date": date, "from_currency": "USD", "to_currency": "INR"}
+	):
+		return
+	else:
+		doc = frappe.get_doc(
+			{
+				"doctype": "Currency Exchange",
+				"date": date,
+				"from_currency": "USD",
+				"to_currency": frappe.get_cached_value("Company", "_Test Company", "default_currency"),
+				"exchange_rate": 70,
+				"for_buying": True,
+				"for_selling": True,
+			}
+		)
+		doc.insert()
