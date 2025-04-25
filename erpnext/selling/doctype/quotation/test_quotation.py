@@ -6,7 +6,7 @@ from frappe.tests.utils import FrappeTestCase, if_app_installed
 from frappe.utils import add_days, add_months, flt, getdate, nowdate
 
 
-from erpnext.selling.doctype.quotation.quotation import make_sales_order
+from erpnext.selling.doctype.quotation.quotation import  create_customer_from_lead, make_sales_order
 from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
 from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
@@ -1414,7 +1414,7 @@ class TestQuotation(FrappeTestCase):
 		return payment_entry
 	
 
-	def test_set_indicator_on_quotation(self):
+	def test_set_indicator_on_quotation_TC_S_170(self):
 		doc = frappe.copy_doc(test_records[0])
 		doc.save()
 
@@ -1430,21 +1430,51 @@ class TestQuotation(FrappeTestCase):
 		self.assertEqual(doc.indicator_title, "Expired")
 
 	@if_app_installed("erpnext_crm")
-	def test_lead_to_quotation(self):
+	def test_lead_to_quotation_TC_S_171(self):
 		from erpnext_crm.erpnext_crm.doctype.lead.test_lead import make_lead
 		from erpnext_crm.erpnext_crm.doctype.lead.lead import make_opportunity
 		from erpnext_crm.erpnext_crm.doctype.opportunity.opportunity import make_quotation
 
+		if not frappe.db.exists("Quotation Lost Reason", {"order_lost_reason": "_Test Quotation Lost Reason"}):
+			frappe.get_doc({
+				"doctype": "Quotation Lost Reason",
+				"order_lost_reason": "_Test Quotation Lost Reason"
+			}).insert()
+
+		if not frappe.db.exists("Competitor", {"competitor_name": "_Test Competitors"}):
+			frappe.get_doc({
+				"doctype": "Competitor",
+				"competitor_name": "_Test Competitors"
+			}).insert()
+		if not frappe.db.exists("Tax Category", "In-State"):
+			frappe.get_doc({"doctype": "Tax Category", "title": "In-State"}).insert()
+
+		if not frappe.db.exists("Sales Taxes and Charges Template", "Output GST In-state - _TC"):
+			frappe.get_doc({
+				"doctype": "Sales Taxes and Charges Template",
+				"title": "Output GST In-state",
+				"company":"_Test Company",
+				"taxes": [
+					{"charge_type": "On Net Total", "account_head": "Output Tax SGST - _TC", "rate": 9,"description":"SGST - _TC"},
+			 		{"charge_type": "On Net Total", "account_head": "Output Tax CGST - _TC", "rate": 9,"description":"CGST - _TC"}
+					]
+			}).insert()
+
 		lead = make_lead()
+		lead.company = "_Test Company"
+		lead.save()
 
 		opportunity = make_opportunity(lead.name)
 		opportunity.opportunity_type = ""
 		opportunity.sales_stage = ""
+		opportunity.company = "_Test Company"
 		opportunity.save()
+
 		quotation = make_quotation(opportunity.name)
+		quotation.company = "_Test Company"
 		quotation.append("items", {"item_code": "_Test Item", "qty": 1, "prevdoc_doctype":"Opportunity","prevdoc_docname":opportunity.name})
 		quotation.tax_category = "In-State"
-		quotation.taxes_and_charges = "Output GST In-state - _TIRC"
+		quotation.taxes_and_charges = "Output GST In-state - _TC"
 		quotation.print_other_charges(quotation.name)
 		quotation.run_method("set_missing_values")
 		quotation.run_method("calculate_taxes_and_totals")
@@ -1469,6 +1499,32 @@ class TestQuotation(FrappeTestCase):
 		self.assertEqual(lead.status, "Opportunity")
 		self.assertEqual(opportunity.status, "Open")
 		self.assertEqual(quotation.status, "Cancelled")
+	
+	@if_app_installed("sales_commission")
+	def test_quotation_with_referral_sales_partner_TC_S_172(self):
+		if not frappe.db.exists("Sales Partner", "_Test Sales Partner"):
+			frappe.get_doc({
+				"doctype": "Sales Partner",
+				"partner_name": "_Test Sales Partner",
+				"commission_rate": 10
+			}).insert()
+		quotation = make_quotation(do_not_save=1)
+		quotation.referral_sales_partner = "_Test Sales Partner"
+		quotation.run_method("set_missing_values")
+		quotation.run_method("calculate_taxes_and_totals")
+		quotation.save()
+		quotation.submit()
+  
+		self.assertEqual(quotation.status, "Open")
+		self.assertEqual(quotation.referral_sales_partner, "_Test Sales Partner")
+  
+		sales_order = make_sales_order(quotation.name)
+		sales_order.delivery_date = nowdate()
+		sales_order.run_method("set_missing_values")
+		sales_order.save()
+		sales_order.submit()
+		self.assertEqual(sales_order.status, "To Deliver and Bill")
+		self.assertEqual(sales_order.sales_partner, "_Test Sales Partner")
 
 test_records = frappe.get_test_records("Quotation")
 
