@@ -21,7 +21,7 @@ class SupplierScorecardVariable(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		description: DF.SmallText | None
@@ -62,7 +62,7 @@ def get_item_workdays(scorecard):
 	total_item_days = frappe.db.sql(
 		"""
 			SELECT
-				SUM(DATEDIFF( %(end_date)s, po_item.schedule_date) * (po_item.qty))
+				COALESCE(SUM(EXTRACT(DAY FROM %(end_date)s::timestamp - po_item.schedule_date::timestamp) * po_item.qty), 0)
 			FROM
 				`tabPurchase Order Item` po_item,
 				`tabPurchase Order` po
@@ -151,7 +151,7 @@ def get_total_days_late(scorecard):
 	total_delivered_late_days = frappe.db.sql(
 		"""
 			SELECT
-				SUM(DATEDIFF(pr.posting_date,po_item.schedule_date)* pr_item.qty)
+				SUM((pr.posting_date - po_item.schedule_date) * pr_item.qty)
 			FROM
 				`tabPurchase Order Item` po_item,
 				`tabPurchase Receipt Item` pr_item,
@@ -174,7 +174,7 @@ def get_total_days_late(scorecard):
 	total_missed_late_days = frappe.db.sql(
 		"""
 			SELECT
-				SUM(DATEDIFF( %(end_date)s, po_item.schedule_date) * (po_item.qty - po_item.received_qty))
+				SUM((%(end_date)s::date - po_item.schedule_date) * (po_item.qty - po_item.received_qty))
 			FROM
 				`tabPurchase Order Item` po_item,
 				`tabPurchase Order` po
@@ -582,7 +582,7 @@ def get_rfq_response_days(scorecard):
 	total_sq_days = frappe.db.sql(
 		"""
 			SELECT
-				SUM(DATEDIFF(sq.transaction_date, rfq.transaction_date))
+				SUM((sq.transaction_date::date - rfq.transaction_date::date))
 			FROM
 				`tabRequest for Quotation Item` rfq_item,
 				`tabSupplier Quotation Item` sq_item,
