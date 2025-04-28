@@ -10,7 +10,7 @@ import json
 from frappe.tests.utils import FrappeTestCase, change_settings, if_app_installed
 from frappe.utils import flt, today, add_days, nowdate, getdate
 from datetime import date
-from erpnext.stock.doctype.material_request.material_request import make_purchase_order_based_on_supplier
+from erpnext.stock.doctype.material_request.material_request import make_purchase_order_based_on_supplier,get_material_requests_based_on_supplier
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.material_request.material_request import (
 	make_in_transit_stock_entry,
@@ -7456,7 +7456,7 @@ class TestMaterialRequest(FrappeTestCase):
 			self.assertEqual(cogs_gle[0], cogs_gle[1])
 			self.assertEqual(current_bin_qty, bin_qty)
 	
-	def test_check_modified_date_con_fail(self):
+	def test_check_modified_date_con_fail_tc_pk_001(self):
 		mr = frappe.copy_doc(test_records[0]).insert()
 		mr = frappe.get_doc("Material Request", mr.name)
 		mr.submit()
@@ -7466,6 +7466,73 @@ class TestMaterialRequest(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError) as ctx:
 			mr.check_modified_date()
 		self.assertIn("has been modified. Please refresh.", str(ctx.exception))
+	
+	def test_get_material_requests_based_on_supplier_tc_pk_002(self):
+		frappe.set_user("Administrator")
+
+		# Create supplier and item
+		supplier = create_supplier(supplier_name="_Test Supplier")
+		item = create_item(item_code="_Test Item", stock_uom="Nos")
+		stock_uom="Nos",
+		warehouse="_Test Warehouse - _TC",
+		company="_Test Company",
+		item.item_defaults = []
+		item.append(
+			"item_defaults",
+			{
+				"default_warehouse": warehouse,
+				"company": company,
+				"default_supplier": "_Test Supplier"
+			},
+		)
+		item.save()
+		item = frappe.get_doc("Item", item.name)
+		
+		#Create MR
+		mr = make_material_request(
+			company="_Test Company",
+			purpose="Purchase",
+			item_code=item.item_code,
+			warehouse=create_warehouse("Stores - _Test", company="_Test Company"),
+			qty=1,
+			rate=100,
+			schedule_date=add_days(nowdate(), 5)
+		)
+		mr.submit()
+
+		#(should throw)
+		with self.assertRaises(frappe.ValidationError) as e:
+			get_material_requests_based_on_supplier(
+				doctype="Material Request",
+				txt="",
+				searchfield="name",
+				start=0,
+				page_len=20,
+				filters={
+					"supplier": "Dummy Supplier Not Linked",
+					"company": "_Test Company"
+				}
+			)
+		self.assertIn("is not the default supplier for any items", str(e.exception))
+
+		results = get_material_requests_based_on_supplier(
+			doctype="Material Request",
+			txt=mr.name,
+			searchfield="name",
+			start=0,
+			page_len=10,
+			filters={
+				"supplier": supplier.name,
+				"company": "_Test Company",
+			}
+		)
+		if not results:
+			frappe.throw("No results found")
+
+		self.assertTrue(results)
+		self.assertEqual(results[0]["name"], mr.name)
+		self.assertEqual(results[0]["company"], "_Test Company")
+		self.assertEqual(results[0]["item_code"], item.item_code)
 
 def get_in_transit_warehouse(company):
 	if not frappe.db.exists("Warehouse Type", "Transit"):
