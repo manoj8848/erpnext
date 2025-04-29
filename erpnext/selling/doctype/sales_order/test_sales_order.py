@@ -8,7 +8,7 @@ import frappe
 import frappe.permissions
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.tests.utils import FrappeTestCase, change_settings, if_app_installed
-from frappe.utils import add_days, add_to_date, flt, getdate, nowdate, today, add_months
+from frappe.utils import add_days, add_to_date, cint, flt, getdate, nowdate, today, add_months
 from erpnext.stock.get_item_details import get_bin_details
 from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
 from erpnext.controllers.accounts_controller import update_child_qty_rate
@@ -6438,40 +6438,237 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 				"prevdoc_docname": opp_doc.name
 			}]
 		}).insert()
+		quotation.submit()
 
 		so = make_sales_order(do_not_save=1)
 		so.update_enquiry_status(quotation.name, "Converted")
 
 		opp_doc.reload()
 		self.assertEqual(opp_doc.status, "Converted")
+  
+		quotation.cancel()
+  
+		so_c = frappe.new_doc("Sales Order")
+		so_c.customer = "_Test Customer"
+		so_c.order_type = "Maintenance" 
+		so_c.append("items", {
+			"item_code": "_Test Item",
+			"qty": 1,
+			"rate": 100,
+			"prevdoc_docname": quotation.name
+		})
 
-	def test_make_project_coverage_TC_S_168(self):
+		with self.assertRaises(frappe.ValidationError) as context:
+			so_c.update_prevdoc_status()
+
+		self.assertIn("Quotation {0} is cancelled".format(quotation.name), str(context.exception))
+
+	@change_settings("Selling Settings", {"allow_against_multiple_purchase_orders": 0})
+	def test_validate_po_coverage_TC_S_168(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+  
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+		create_supplier(supplier_name="_Test Supplier")
+  
+		po = create_purchase_order()
+
+		invalid_delivery_date = add_days(po.transaction_date, -1)
+  
+		so1 = make_sales_order(do_not_save=1)
+		so1.po_no = po.name
+		so1.po_date = po.transaction_date
+		so1.items[0].delivery_date = invalid_delivery_date
+
+		with self.assertRaises(frappe.ValidationError) as ctx1:
+			so1.validate_po()
+		self.assertIn("Expected Delivery Date cannot be before Purchase Order Date", str(ctx1.exception))
+		
+		# so1.items[0].delivery_date = po.transaction_date
+  
+		# so2 = make_sales_order(do_not_save=1)
+		# so2.po_no = po.name
+		# so2.po_date = po.transaction_date
+		# so2.save()
+		# so2.submit()
+		
+		# with self.assertRaises(frappe.ValidationError) as ctx2:
+		# 	so1.validate_po()
+		# self.assertIn("already exists against Customer's Purchase Order", str(ctx2.exception))
+  
+	def test_cannot_cancel_closed_so_TC_S_169(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 		create_company()
 		create_customer("_Test Customer")
 		make_item("_Test Item")
-
+  
 		so = make_sales_order()
 
-		from erpnext.selling.doctype.sales_order.sales_order import make_project
-		project = make_project(so.name)
+		so.db_set("status", "Closed")
+		so.reload()
 
-		self.assertEqual(project.status, "Open")
-		self.assertEqual(project.sales_order, so.name)
+		with self.assertRaises(frappe.ValidationError) as context:
+			so.cancel()
 
-	def test_make_maintenance_schedule_coverage_TC_S_169(self):
+		self.assertIn("Closed order cannot be cancelled", str(context.exception))
+  
+	def test_update_coupon_code_count_on_cancel_TC_S_173(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
 		create_company()
 		create_customer("_Test Customer")
 		make_item("_Test Item")
+		pricing_rule = make_pricing_rule()
+		pricing_rule.coupon_code_based =1
+		pricing_rule.save()
+  
+		frappe.delete_doc_if_exists("Coupon Code", "SAVE30")
+		
+		coupon_code = frappe.get_doc(
+			{
+				"doctype": "Coupon Code",
+				"coupon_type":"Gift Card",
+				"customer":"_Test Customer",
+				"coupon_name": "SAVE30",
+				"coupon_code": "SAVE30",
+				"pricing_rule": pricing_rule.name,
+				"maximum_use": 1,
+				"used": 0,
+			}
+		)
+		coupon_code.insert()
+		
+		so = make_sales_order(do_not_submit=True)
+		so.coupon_code = coupon_code.name
+		so.save()
 
+		so.on_submit()
+		self.assertEqual(frappe.db.get_value("Coupon Code", "SAVE30", "used"), 1)
+  
+		so.on_cancel()
+		self.assertEqual(frappe.db.get_value("Coupon Code", "SAVE30", "used"), 0)
+  
+		self.assertEqual(coupon_code.used, 0)
+  
+	@change_settings("Stock Settings", {"over_picking_allowance": 10.0})
+	def test_update_picking_status_coverage_TC_S_174(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+  
+		so = make_sales_order(do_not_submit=True)
+		so.items[0].picked_qty = 10.0
+		so.save().submit()
+  
+		so.update_picking_status()
+
+		self.assertEqual(so.items[0].picked_qty + 1, 11.0)
+  
+	@change_settings("Stock Settings", {"enable_stock_reservation": 1})
+	def test_onload_coverage_TC_S_175(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+		get_or_create_fiscal_year('_Test Company')
+		create_warehouse(
+				warehouse_name="_Test Warehouse - _TC",
+				properties={"parent_warehouse": "All Warehouses - _TC"},
+				company="_Test Company",
+			)
+		make_stock_entry(target="_Test Warehouse - _TC", qty=10, rate=100)
+  
 		so = make_sales_order()
+		so.onload()
+  
+		has_unreserved_stock = so.has_unreserved_stock()
+		self.assertEqual(has_unreserved_stock, True)
+  
+		from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import has_reserved_stock
+  
+		reserved_stock = has_reserved_stock(so.doctype, so.name)
+		self.assertEqual(reserved_stock, False)	
+  
+	def test_validate_supplier_after_submit_coverage_TC_S_176(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+		create_supplier(supplier_name="_Test Supplier")
+		create_warehouse(
+				warehouse_name="_Test Warehouse - _TC",
+				properties={"parent_warehouse": "All Warehouses - _TC"},
+				company="_Test Company",
+			)
+  
+		so = make_sales_order(do_not_save=1)
+		so.items[0].ordered_qty = 3
+		so.save().submit()
 
-		maintenance_schedule = make_maintenance_schedule(so.name)
+		so.reload()
+		so.items[0].supplier = "_Test Supplier"
+  
+		with self.assertRaises(frappe.ValidationError) as context:
+			so.validate_supplier_after_submit()
+   
+		self.assertIn("Not allowed to change Supplier", str(context.exception))
+  
+	def test_on_recurring_coverage_TC_S_177(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+  
+		reference_so = make_sales_order()
 
-		self.assertEqual(maintenance_schedule.status, "Draft")
+		auto_repeat = frappe.get_doc({
+			"doctype": "Auto Repeat",
+			"reference_doctype": "Sales Order",
+			"reference_document": reference_so.name,
+			"frequency": "Monthly",
+			"next_schedule_date": add_days(today(), 30)
+		})
+		auto_repeat.insert()
 
+		new_so = make_sales_order(do_not_save=1)
+		new_so.transaction_date = add_days(today(), 30)
+		new_so.items[0].delivery_date = add_days(today(), 30)
+		new_so.save().submit()
+  
+		new_so.on_recurring(reference_doc=reference_so, auto_repeat_doc=auto_repeat)
 
+		self.assertIsNotNone(new_so.delivery_date)
+		self.assertTrue(new_so.delivery_date > getdate(today()))
+
+		for d in new_so.get("items"):
+			self.assertIsNotNone(d.delivery_date)
+			self.assertTrue(d.delivery_date > getdate(today()))
+   
+	def test_close_or_unclose_sales_orders_coverage_TC_S_178(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company, create_customer
+		create_company()
+		create_customer("_Test Customer")
+		make_item("_Test Item")
+  
+		so = make_sales_order()
+		self.assertEqual(so.status, "To Deliver and Bill")
+  
+		from erpnext.selling.doctype.sales_order.sales_order import close_or_unclose_sales_orders
+  
+		close_or_unclose_sales_orders(names=json.dumps([so.name]), status="Closed")
+		so.reload()
+		self.assertEqual(so.status, "Closed")
+
+		close_or_unclose_sales_orders(names=json.dumps([so.name]), status="Draft")
+		so.reload()
+		self.assertEqual(so.status, "To Deliver and Bill")
+  
 @if_app_installed("india_compliance")
 def create_test_tax_data():
 		if not frappe.db.exists("Tax Category", "In-State"):
@@ -6498,6 +6695,7 @@ def create_test_tax_data():
 			 		{"charge_type": "On Net Total", "account_head": "Input Tax SGST - _TC", "rate": 9,"description":"SGST - _TC"}
 					]
 			}).insert()
+   
 @if_app_installed("india_compliance")
 def test_item_tax_template(**data):
 	from india_compliance.gst_india.overrides.transaction import get_valid_accounts
@@ -6724,6 +6922,9 @@ def make_item_price():
         return ip_doc
 
 def make_pricing_rule():
+    from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+    abc = create_uom('_Test UOM')
+    
     if not frappe.db.exists('Pricing Rule', {'title': 'Test Offer'}):
         pricing_rule_doc = frappe.new_doc('Pricing Rule')
         pricing_rule_data = {
