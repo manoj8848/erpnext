@@ -7551,6 +7551,65 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(results[0]["company"], "_Test Company")
 		self.assertEqual(results[0]["item_code"], item.item_code)
 
+	def test_validate_qty_against_so_tc_pk_003 (self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+		# Create a test customer
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+		item = create_item("CUST-0987", is_customer_provided_item=1, customer="_Test Customer", is_purchase_item=0)
+		missing_item = create_item("CUST-0988", is_customer_provided_item=1, customer="_Test Customer", is_purchase_item=0)
+
+		so = frappe.get_doc({
+			"doctype": "Sales Order",
+			"customer": "_Test Customer",
+			"transaction_date": nowdate(),
+			"delivery_date": add_days(nowdate(), 10),
+			"company": "_Test Company",
+			"items": [{
+				"item_code": item.item_code,
+				"qty": 10,
+				"rate": 100,
+				'warehouse': create_warehouse(
+							warehouse_name="_Test Source Warehouse",
+							properties={"parent_warehouse": "All Warehouses - _TC"},
+							company="_Test Company",
+						)
+					}]}).insert()
+		so.submit()
+
+		mr = frappe.get_doc({
+			"doctype": "Material Request",
+			"material_request_type": "Purchase",
+			"schedule_date": add_days(nowdate(), 5),
+			"company": "_Test Company",
+			"items": [{
+				"item_code": item.item_code, # same item
+				"qty": 5,
+				"schedule_date": add_days(nowdate(), 5),
+				"sales_order": so.name,
+				"warehouse": create_warehouse("Stores - Test", company="_Test Company")
+			},
+			{
+			"item_code": missing_item.item_code,  
+			"qty": 3,
+			"schedule_date": add_days(nowdate(), 5),
+			"sales_order": so.name,
+			"warehouse": create_warehouse("Stores - Test", company="_Test Company")
+		},
+			{
+			"item_code": item.item_code,  # same item
+			"qty": 10,
+			"schedule_date": add_days(nowdate(), 5),
+			"sales_order": so.name,
+			"warehouse": create_warehouse("Stores - Test", company="_Test Company")
+		}]}).insert()
+		mr.submit()
+
+		with self.assertRaises(frappe.ValidationError) as context:
+			mr.validate_qty_against_so()
+
+		self.assertIn("Material Request of maximum", str(context.exception))
+
 def get_in_transit_warehouse(company):
 	if not frappe.db.exists("Warehouse Type", "Transit"):
 		frappe.get_doc(
