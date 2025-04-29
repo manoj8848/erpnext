@@ -57,7 +57,7 @@ class TestSupplierScorecardVariable(FrappeTestCase):
 		for d in test_bad_variables:
 			self.assertRaises(VariablePathNotFound, frappe.get_doc(d).insert)
 
-	def test_validate_path_exists_code_coverage(self):
+	def test_validate_path_exists_TC_B_172(self):
 		create_ssv = frappe.get_doc(
 			{
 				"doctype": "Supplier Scorecard Variable",
@@ -77,7 +77,7 @@ class TestSupplierScorecardVariable(FrappeTestCase):
 		create_ssv.path = "get_total_accepted_items_"
 		self.assertRaises(VariablePathNotFound, create_ssv.save)
 
-	def test_get_total_workdays_codecoverage(self):
+	def test_get_total_workdays_TC_B_173(self):
 		get_sscp = score_card()
 		get_sscp.submit()
 		self.assertEqual(get_sscp.docstatus, 1)
@@ -85,86 +85,73 @@ class TestSupplierScorecardVariable(FrappeTestCase):
 		get_total = get_total_workdays(get_sscp)
 		self.assertEqual(get_total, 7)
 
-	def test_get_item_workdays_code_coverage(self):
+	def test_get_item_workdays_TC_B_174(self):
 		get_sscp = score_card()
 		get_sscp.submit()
+		self.assertEqual(get_sscp.docstatus, 1)
+
 		get_total = get_item_workdays(get_sscp)
-		self.assertEqual(get_sscp.docstatus, 1)
+		self.assertEqual(get_total, 0)
 
-	def test_get_total_cost_of_shipments_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
 		get_total_cost = get_total_cost_of_shipments(get_sscp)
-		self.assertEqual(get_sscp.docstatus, 1)
+		self.assertEqual(get_total_cost, 0)
 
-	def test_get_cost_of_delayed_shipments_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
-		get_cost = get_cost_of_delayed_shipments(get_sscp)
+		get_cost_delayed = get_cost_of_delayed_shipments(get_sscp)
+		self.assertEqual(get_cost_delayed, 0)
 
-	def test_get_cost_of_on_time_shipments_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		cost_of_on_time = get_cost_of_on_time_shipments(get_sscp)
+		self.assertEqual(cost_of_on_time, 0)
 
-	def test_get_total_days_late_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		total_days_late = get_total_days_late(get_sscp)
+		self.assertEqual(total_days_late, 0)
 
-	def test_get_on_time_shipments_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		time_shipments = get_on_time_shipments(get_sscp)
+		self.assertEqual(time_shipments, 0)
 
-	def test_get_late_shipments_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		late_shipments = get_late_shipments(get_sscp)
+		self.assertEqual(late_shipments, 0)
 
-	def test_get_total_received_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		total_received = get_total_received(get_sscp)
+		self.assertEqual(total_received, 0)
 
-	def test_get_total_received_amount_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		total_received_amount = get_total_received_amount(get_sscp)
+		self.assertEqual(total_received_amount, 0)
 
-	def test_get_total_received_items_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
-		total_received = get_total_received_items(get_sscp)
+		total_received_items = get_total_received_items(get_sscp)
+		self.assertEqual(total_received_items, 0)
 
-	def test_get_total_rejected_amount_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		total_rejected = get_total_rejected_amount(get_sscp)
+		self.assertEqual(total_rejected, 0)
 
-	def test_get_total_rejected_items_code_coverage(self):
-		get_sscp = score_card()
-		get_sscp.submit()
-		self.assertEqual(get_sscp.docstatus, 1)
 		get_total_rejected = get_total_rejected_items(get_sscp)
-		get_total_accepted_amount(get_sscp)
-		get_total_accepted_items(get_sscp)
-		get_total_shipments(get_sscp)
-		get_ordered_qty(get_sscp)
-		get_rfq_total_number(get_sscp)
-		get_rfq_total_items(get_sscp)
-		get_sq_total_number(get_sscp)
-		get_sq_total_items(get_sscp)
-		get_rfq_response_days(get_sscp)
+		self.assertEqual(get_total_rejected, 0)
+
+		total_accepted_amount = get_total_accepted_amount(get_sscp)
+		self.assertEqual(total_accepted_amount, 0)
+
+		total_accepted_items = get_total_accepted_items(get_sscp)
+		self.assertEqual(total_accepted_items, 0)
+
+		total_shipments = get_total_shipments(get_sscp)
+		self.assertEqual(total_shipments, 0)
+
+		ordered_qty = get_ordered_qty(get_sscp)
+		self.assertEqual(ordered_qty, 0)
+
+		rfq_totals = get_rfq_total_number(get_sscp)
+		self.assertEqual(rfq_totals, 0)
+
+		rfq_total_items = get_rfq_total_items(get_sscp)
+		self.assertEqual(rfq_total_items, 0)
+
+		sg_total_num = get_sq_total_number(get_sscp)
+		self.assertEqual(sg_total_num, 0)
+
+		sg_totla_items = get_sq_total_items(get_sscp)
+		self.assertEqual(sg_totla_items, 0)
+
+		rfq_response = get_rfq_response_days(get_sscp)
+		self.assertEqual(rfq_response, 0)
 
 def score_card():
 	supplier = create_supplier(supplier_name="__test_supplier" + frappe.generate_hash(length=5))
