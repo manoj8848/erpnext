@@ -7683,6 +7683,149 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertIsNotNone(updated_plan_item, "Material Request Plan Item not found inside Production Plan")
 		self.assertEqual(updated_plan_item.planned_qty, 10)
 
+	def test_get_default_supplier_query_tc_pk_005(self):
+		from erpnext.stock.doctype.material_request.material_request import get_default_supplier_query
+		frappe.set_user("Administrator")
+		supplier = create_supplier(supplier_name="_Test Supplier DQ")
+		item = create_item("_Test Item DQ")
+		item.item_defaults = []
+		item.append(
+			"item_defaults",
+			{
+				"default_warehouse": "_Test Warehouse - _TC",
+				"company": "_Test Company",
+				"default_supplier": supplier.name
+			},
+		)
+		item.save()
+		mr = make_material_request(
+			company="_Test Company",
+			purpose="Purchase",
+			item_code=item.item_code,
+			warehouse=create_warehouse("Stores - DQ", company="_Test Company"),
+			qty=1,
+			rate=100,
+			schedule_date=add_days(nowdate(), 5)
+		)
+		mr.submit()
+		original_get_meta = frappe.get_meta
+		def fake_get_meta(doctype):
+			meta = original_get_meta(doctype)
+			if doctype == "Supplier":
+				meta.show_title_field_in_link = 1 
+				meta.title_field = "supplier_name"
+			return meta
+
+		frappe.get_meta = fake_get_meta
+		try:
+			results = get_default_supplier_query(
+				doctype="Supplier",
+				txt=supplier.name, 
+				searchfield="name",
+				start=0,
+				page_len=10,
+				filters={"doc": mr.name}
+			)
+
+			self.assertTrue(results)
+			self.assertEqual(len(results[0]), 2)  
+			self.assertEqual(results[0][0], supplier.name)
+
+		finally:
+			frappe.get_meta = original_get_meta
+
+	def test_update_original_budget_tc_pk_06(self):
+		from erpnext.stock.doctype.material_request.material_request import update_original_budget
+		frappe.set_user("Administrator")
+		if not frappe.db.exists("Project", "_Test Project Budget"):
+			self.project = frappe.get_doc({
+				"doctype": "Project",
+				"project_name": "_Test Project Budget",
+				"status": "Open",
+				"company": "_Test Company"
+			}).insert()
+		else:
+			self.project = frappe.get_doc("Project", "_Test Project Budget")
+
+		# Create WBS
+		self.wbs = frappe.get_doc({
+			"doctype": "Work Breakdown Structure",
+			"project": self.project.name,
+			"wbs_name": "Test WBS Node",
+			"wbs_level": "Level 1",
+			"overall_budget": 100000.0,
+			"committed_overall_budget": 0.0,
+			"assigned_overall_budget": 0.0,
+			"available_budget": 100000.0
+		}).insert()
+
+		# Create Item
+		self.item = create_item("_Test Item WBS")
+
+		# Create Material Request
+		self.mr = frappe.get_doc({
+			"doctype": "Material Request",
+			"material_request_type": "Purchase",
+			"transaction_date": nowdate(),
+			"schedule_date": add_days(nowdate(), 10),
+			"company": "_Test Company",
+			"items": [
+				{
+					"item_code": self.item.item_code,
+					"qty": 5,
+					"rate": 100,
+					"amount": 500,
+					"schedule_date": add_days(nowdate(), 5),
+					"project": self.project.name,
+					"work_breakdown_structure": self.wbs.name,
+					"warehouse": create_warehouse("Stores - WBS", company="_Test Company")
+				},
+				{
+					"item_code": self.item.item_code,
+					"qty": 3,
+					"rate": 150,
+					"amount": 450,
+					"schedule_date": add_days(nowdate(), 5),
+					"project": self.project.name,
+					"work_breakdown_structure": self.wbs.name,
+					"warehouse": create_warehouse("Stores - WBS", company="_Test Company")
+				}
+			]
+		}).insert()
+
+		# Call on Submit
+		update_original_budget(self.mr, event="Submit")
+
+		# Reload WBS
+		wbs_doc = frappe.get_doc("Work Breakdown Structure", self.wbs.name)
+		self.assertEqual(wbs_doc.committed_overall_budget, 950)  # 500+450
+		self.assertEqual(wbs_doc.assigned_overall_budget, 950)
+		self.assertEqual(wbs_doc.available_budget, 100000 - 950)
+
+		#Check Budget Entry (credit)
+		bgt_entry = frappe.get_all("Budget Entry", filters={"voucher_no": self.mr.name, "docstatus": 1})
+		self.assertTrue(bgt_entry)
+		entry_doc = frappe.get_doc("Budget Entry", bgt_entry[0].name)
+		self.assertEqual(entry_doc.committed_overall_credit, 950)
+
+		#Call on Cancel
+		update_original_budget(self.mr, event="Cancel")
+
+		#Reload WBS again
+		wbs_doc = frappe.get_doc("Work Breakdown Structure", self.wbs.name)
+		self.assertEqual(wbs_doc.committed_overall_budget, 0)
+		self.assertEqual(wbs_doc.assigned_overall_budget, wbs_doc.actual_overall_budget)
+		self.assertEqual(wbs_doc.available_budget, 100000 - wbs_doc.actual_overall_budget)
+
+		#Check Budget Entry (debit)
+		bgt_entry = frappe.get_all("Budget Entry", filters={"voucher_no": self.mr.name, "docstatus": 1})
+		self.assertTrue(bgt_entry)
+
+		# Clean created docs
+		frappe.db.delete("Budget Entry", {"voucher_no": self.mr.name})
+		frappe.delete_doc("Work Breakdown Structure", self.wbs.name, force=True)
+		frappe.delete_doc("Material Request", self.mr.name, force=True)
+	
 def get_in_transit_warehouse(company):
 	if not frappe.db.exists("Warehouse Type", "Transit"):
 		frappe.get_doc(
