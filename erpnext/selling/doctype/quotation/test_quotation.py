@@ -1526,6 +1526,56 @@ class TestQuotation(FrappeTestCase):
 		self.assertEqual(sales_order.status, "To Deliver and Bill")
 		self.assertEqual(sales_order.sales_partner, "_Test Sales Partner")
 
+	def test_sales_invoice_flow_TC_S_179(self):
+		from erpnext_crm.erpnext_crm.doctype.lead.test_lead import make_lead
+		from erpnext_crm.erpnext_crm.doctype.lead.lead import make_opportunity
+		from erpnext_crm.erpnext_crm.doctype.opportunity.opportunity import make_quotation
+		from erpnext.selling.doctype.quotation.quotation import make_sales_invoice
+		from erpnext.selling.doctype.sales_order.test_sales_order import _make_blanket_order
+
+
+		blanket_order = _make_blanket_order(blanket_order_type="Selling", quantity=10, rate=10)
+
+		if not frappe.db.exists("Tax Category", "In-State"):
+			frappe.get_doc({"doctype": "Tax Category", "title": "In-State"}).insert()
+
+		if not frappe.db.exists("Sales Taxes and Charges Template", "Output GST In-state - _TC"):
+			frappe.get_doc({
+				"doctype": "Sales Taxes and Charges Template",
+				"title": "Output GST In-state",
+				"company":"_Test Company",
+				"taxes": [
+					{"charge_type": "On Net Total", "account_head": "Output Tax SGST - _TC", "rate": 9,"description":"SGST - _TC"},
+			 		{"charge_type": "On Net Total", "account_head": "Output Tax CGST - _TC", "rate": 9,"description":"CGST - _TC"}
+					]
+			}).insert()
+
+		lead = make_lead()
+		lead.email_id = ""
+		lead.company = "_Test Company"
+		lead.save()
+
+		opportunity = make_opportunity(lead.name)
+		opportunity.opportunity_type = ""
+		opportunity.sales_stage = ""
+		opportunity.company = "_Test Company"
+		opportunity.save()
+
+		quotation = make_quotation(opportunity.name)
+		quotation.company = "_Test Company"
+		quotation.append("items", {"item_code": "_Test Item", "qty": 5, "prevdoc_doctype":"Opportunity","prevdoc_docname":opportunity.name,				"against_blanket_order": 1,"blanket_order": blanket_order.name,"blanket_order_rate": 95})
+		quotation.tax_category = "In-State"
+		quotation.taxes_and_charges = "Output GST In-state - _TC"
+		quotation.save()
+		quotation.submit()
+
+		charges = quotation.print_other_charges(quotation.name)
+		self.assertEqual(len(charges), 2)
+
+		invoice = make_sales_invoice(quotation.name)
+		self.assertEqual(invoice.items[0].stock_qty, 5.0)
+
+
 test_records = frappe.get_test_records("Quotation")
 
 
