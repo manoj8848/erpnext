@@ -1482,7 +1482,8 @@ class TestQuotation(FrappeTestCase):
 
 		quotation.declare_enquiry_lost(
 			[{"lost_reason": "_Test Quotation Lost Reason"}],
-			[{"competitor": "_Test Competitors"}]
+			[{"competitor": "_Test Competitors"}],
+			"Test quotation Lost"
 		)
 		quotation.submit()
 		opportunity.reload()
@@ -1508,13 +1509,36 @@ class TestQuotation(FrappeTestCase):
 				"partner_name": "_Test Sales Partner",
 				"commission_rate": 10
 			}).insert()
-		quotation = make_quotation(do_not_save=1)
+
+		if not frappe.db.exists("Sales Person", "_Test Sales Person"):
+			frappe.get_doc({
+				"doctype": "Sales Person",
+				"sales_person_name": "_Test Sales Person"
+			}).insert()
+
+		if not frappe.db.exists("Customer", "_Test Customer With Sales Team"):
+			customer = frappe.get_doc({
+					"doctype": "Customer",
+					"customer_name": "_Test Customer With Sales Team",
+					"customer_type": "Company",
+					"sales_team": [
+						{
+							"sales_person": "_Test Sales Person",
+							"allocated_percentage": 100,
+							"commission_rate": 10,
+						}
+					]
+				}).insert()
+		else:
+			customer = frappe.get_doc("Customer", "_Test Customer With Sales Team")
+
+		quotation = make_quotation(customer=customer.name, do_not_save=1)
 		quotation.referral_sales_partner = "_Test Sales Partner"
 		quotation.run_method("set_missing_values")
 		quotation.run_method("calculate_taxes_and_totals")
 		quotation.save()
 		quotation.submit()
-  
+
 		self.assertEqual(quotation.status, "Open")
 		self.assertEqual(quotation.referral_sales_partner, "_Test Sales Partner")
   
@@ -1526,15 +1550,12 @@ class TestQuotation(FrappeTestCase):
 		self.assertEqual(sales_order.status, "To Deliver and Bill")
 		self.assertEqual(sales_order.sales_partner, "_Test Sales Partner")
 
+	@if_app_installed("sales_commission")
 	def test_sales_invoice_flow_TC_S_179(self):
 		from erpnext_crm.erpnext_crm.doctype.lead.test_lead import make_lead
 		from erpnext_crm.erpnext_crm.doctype.lead.lead import make_opportunity
 		from erpnext_crm.erpnext_crm.doctype.opportunity.opportunity import make_quotation
 		from erpnext.selling.doctype.quotation.quotation import make_sales_invoice
-		from erpnext.selling.doctype.sales_order.test_sales_order import _make_blanket_order
-
-
-		blanket_order = _make_blanket_order(blanket_order_type="Selling", quantity=10, rate=10)
 
 		if not frappe.db.exists("Tax Category", "In-State"):
 			frappe.get_doc({"doctype": "Tax Category", "title": "In-State"}).insert()
@@ -1563,7 +1584,7 @@ class TestQuotation(FrappeTestCase):
 
 		quotation = make_quotation(opportunity.name)
 		quotation.company = "_Test Company"
-		quotation.append("items", {"item_code": "_Test Item", "qty": 5, "prevdoc_doctype":"Opportunity","prevdoc_docname":opportunity.name,				"against_blanket_order": 1,"blanket_order": blanket_order.name,"blanket_order_rate": 95})
+		quotation.append("items", {"item_code": "_Test Item", "qty": 5, "prevdoc_doctype":"Opportunity","prevdoc_docname":opportunity.name})
 		quotation.tax_category = "In-State"
 		quotation.taxes_and_charges = "Output GST In-state - _TC"
 		quotation.save()
@@ -1574,7 +1595,69 @@ class TestQuotation(FrappeTestCase):
 
 		invoice = make_sales_invoice(quotation.name)
 		self.assertEqual(invoice.items[0].stock_qty, 5.0)
+		
+	@if_app_installed("sales_commission")
+	def test_customer_from_prospect_TC_S_180(self):
+		from erpnext_crm.erpnext_crm.doctype.lead.test_lead import make_lead
+		from erpnext_crm.erpnext_crm.doctype.lead.lead import make_opportunity
+		from erpnext_crm.erpnext_crm.doctype.opportunity.opportunity import make_quotation
+		from erpnext_crm.erpnext_crm.doctype.prospect.test_prospect import add_lead_to_prospect
+		from erpnext_crm.erpnext_crm.doctype.prospect.test_prospect import make_prospect
 
+		lead = make_lead()
+		lead.email_id = ""
+		lead.company = "_Test Company"
+		lead.save()
+
+		prospect_doc = make_prospect()
+		add_lead_to_prospect(lead.name, prospect_doc.name)
+		prospect_doc.reload()
+		contact = frappe.get_doc({
+			"doctype": "Contact",
+			"first_name": "Test Prospect Contact",
+			"links": [{
+				"link_doctype": "Prospect",
+				"link_name": prospect_doc.name
+			},
+			{
+				"link_doctype": "Lead",
+				"link_name": lead.name
+			}]
+		})
+		contact.insert()
+
+
+		opportunity = make_opportunity(lead.name)
+		opportunity.opportunity_from = "Prospect"
+		opportunity.party_name =  prospect_doc.name
+		opportunity.opportunity_type = ""
+		opportunity.sales_stage = ""
+		opportunity.company = "_Test Company"
+		opportunity.save()
+
+		quotation = make_quotation(opportunity.name)
+		quotation.company = "_Test Company"
+		quotation.append("items", {"item_code": "_Test Item", "qty": 1, "prevdoc_doctype":"Opportunity","prevdoc_docname":opportunity.name,	"against_blanket_order": 1})
+		quotation.save()
+		quotation.submit()
+
+		self.assertEqual(quotation.quotation_to, "Prospect")
+		self.assertEqual(quotation.party_name, prospect_doc.name)
+
+
+		
+		sales_order = make_sales_order(quotation.name)
+		sales_order.delivery_date = nowdate()
+		customer_name = frappe.db.get_value("Customer", {"name":opportunity.party_name})
+		contact.append("links", {
+			"link_doctype": "Customer",
+			"link_name": customer_name
+		})
+		contact.save()
+
+		sales_order.save()
+		sales_order.submit()
+		self.assertEqual(sales_order.status, "To Deliver and Bill")
 
 test_records = frappe.get_test_records("Quotation")
 
