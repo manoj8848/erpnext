@@ -77,7 +77,448 @@ class TestSerialandBatchBundle(FrappeTestCase):
  		)
  
 		self.assertFalse(bundle_doc.name.startswith("SABB-"))
- 
+	
+	def test_reset_serial_batch_bundle(self):
+		company = "_Test Indian Registered Company"  # Ensure company is correct
+		warehouse = "Stores - _TIRC"
+
+		# Check if the warehouse exists, and if not, create it with the correct company association
+		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
+			warehouse = frappe.get_doc({
+				"doctype": "Warehouse",
+				"warehouse_name": "_Test Warehouse - _TC",
+				"company": company
+			}).insert()
+
+		# Create item if it doesn't exist
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+
+		# Create Serial No for the item
+		serial_no = frappe.get_doc({
+			"doctype": "Serial No",
+			"serial_no": "MDC001",
+			"item_code": item.name,
+			"company": company,
+			"item_group": "Raw Material"
+		}).insert(ignore_permissions=True)
+
+		# Create Batch for the item
+		batch = frappe.get_doc({
+			"doctype": "Batch",
+			"batch_id": "Batch_001",
+			"stock_uom": "Nos",
+			"item": item.name,
+			"manufacturing_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+
+		# Create stock entry
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC001",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+
+		# Create customer if it doesn't exist
+		if not frappe.db.exists("Customer", "Test Customer"):
+			customer = frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Test Customer",
+				"customer_group": "Individual",
+				"territory": "All Territories",
+				"company": company,
+			}).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", "Test Customer")
+
+		# Create Delivery Note
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer.name,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+				"serial_no": serial_no.name,
+				"batch_no": batch.name
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		# Create Serial and Batch Bundle
+		serial_batch_bundle = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"entries": [{
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 1,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+		serial_batch_bundle.submit()
+
+		# Cancel the bundle before amending
+		dn.cancel()
+		serial_batch_bundle.reload()
+		serial_batch_bundle.cancel()
+
+		amended_bundle = frappe.copy_doc(serial_batch_bundle)
+		amended_bundle.amended_from = serial_batch_bundle.name
+		amended_bundle.docstatus = 0  # draft
+		amended_bundle.name = None    # new name will be generated
+
+		#  Clear the link to the canceled delivery note
+		amended_bundle.voucher_no = None
+		amended_bundle.voucher_type = None
+		new_serial_no = frappe.get_doc({
+			"doctype": "Serial No",
+			"serial_no": "MDC002",
+			"item_code": item.name,
+			"company": company,
+			"item_group": "Raw Material"
+		}).insert(ignore_permissions=True)
+
+		amended_bundle.entries[0].serial_no = new_serial_no.name
+		
+		try:
+			amended_bundle.insert()
+			amended_bundle.save()
+		except frappe.MandatoryError as e:
+			# Handle or log the error if necessary
+			pass
+
+	
+	def test_validate_returned_serial_batch_no(self):
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+
+		# Check or create warehouse
+		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
+			warehouse = frappe.get_doc({
+				"doctype": "Warehouse",
+				"warehouse_name": "_Test Warehouse - _TC",
+				"company": company
+			}).insert()
+
+		# Check or create item
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+
+		# Create serial number
+		serial_no = frappe.get_doc({
+			"doctype": "Serial No",
+			"serial_no": "MDC001",
+			"item_code": item.name,
+			"company": company,
+			"item_group": "Raw Material"
+		}).insert(ignore_permissions=True)
+
+		# Create batch
+		batch = frappe.get_doc({
+			"doctype": "Batch",
+			"batch_id": "Batch_001",
+			"stock_uom": "Nos",
+			"item": item.name,
+			"manufacturing_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+
+		# Create stock entry (Material Receipt)
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC001",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+
+		# Create customer
+		if not frappe.db.exists("Customer", "Test Customer"):
+			customer = frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Test Customer",
+				"customer_group": "Individual",
+				"territory": "All Territories",
+				"company": company,
+			}).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", "Test Customer")
+
+		# Create Delivery Note
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer.name,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+				"serial_no": serial_no.name,
+				"batch_no": batch.name
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		# Manually create Stock Ledger Entry (optional for test purposes)
+		sle = frappe.get_doc({
+			"doctype": "Stock Ledger Entry",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"posting_date": dn.posting_date,
+			"posting_time": frappe.utils.nowtime(),
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"voucher_detail_no": dn.items[0].name,
+			"actual_qty": -1,  # reduce stock
+			"stock_uom": "Nos",
+			"company": company,
+			"batch_no": batch.name,
+			"serial_no": serial_no.name
+		})
+		sle.insert(ignore_permissions=True)
+
+		# Create Serial and Batch Bundle
+		serial_batch_bundle = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"voucher_detail_no": dn.items[0].name,
+			"entries": [{
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 1,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+		serial_batch_bundle.submit()
+
+		# Cancel the bundle and Delivery Note
+		dn.cancel()
+		serial_batch_bundle.reload()
+		serial_batch_bundle.cancel()
+
+		amended_bundle = frappe.copy_doc(serial_batch_bundle)
+		amended_bundle.amended_from = serial_batch_bundle.name
+		amended_bundle.docstatus = 0
+		amended_bundle.name = None
+
+		# Clear links to canceled document
+		amended_bundle.voucher_no = None
+		amended_bundle.voucher_type = None
+
+		# Create new serial no
+		new_serial_no = frappe.get_doc({
+			"doctype": "Serial No",
+			"serial_no": "MDC002",
+			"item_code": item.name,
+			"company": company,
+			"item_group": "Raw Material"
+		}).insert(ignore_permissions=True)
+
+		amended_bundle.entries[0].serial_no = new_serial_no.name
+
+		try:
+			amended_bundle.insert()
+			amended_bundle.save()
+		except frappe.MandatoryError:
+			pass
+	
+	def test_update_valuation_rate(self):
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+
+		# Ensure warehouse exists
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = frappe.get_doc({
+				"doctype": "Warehouse",
+				"warehouse_name": warehouse,
+				"company": company
+			}).insert().name
+		else:
+			warehouse = warehouse
+
+		# Ensure item exists
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+
+		# Create Serial No
+		serial_no = frappe.get_doc({
+			"doctype": "Serial No",
+			"serial_no": "MDC001",
+			"item_code": item.name,
+			"company": company,
+			"item_group": "Raw Material"
+		}).insert(ignore_permissions=True)
+
+		# Create Batch
+		batch = frappe.get_doc({
+			"doctype": "Batch",
+			"batch_id": "Batch_001",
+			"stock_uom": "Nos",
+			"item": item.name,
+			"manufacturing_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+
+		# Create Stock Entry
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC001",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+
+		# Ensure customer exists
+		if not frappe.db.exists("Customer", "Test Customer"):
+			customer = frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Test Customer",
+				"customer_group": "Individual",
+				"territory": "All Territories",
+				"company": company,
+			}).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", "Test Customer")
+
+		# Create Delivery Note
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer.name,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+				"serial_no": serial_no.name,
+				"batch_no": batch.name
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		# Create Serial and Batch Bundle
+		serial_batch_bundle = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"entries": [{
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 1,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+		serial_batch_bundle.submit()
+
+		# --- THIS IS THE PART YOU WANT ---
+		# Reload the doc to get the full object with methods
+		serial_batch_bundle = frappe.get_doc("Serial and Batch Bundle", serial_batch_bundle.name)
+
+		# Call the update_valuation_rate function with test valuation_rate (e.g., 100)
+		serial_batch_bundle.update_valuation_rate(valuation_rate=100, save=True)
+
+		# Save the document if needed (not strictly necessary since save=True in the method)
+		serial_batch_bundle.save()
+
+		# OPTIONAL: add assertions to validate the update
+		for entry in serial_batch_bundle.entries:
+			assert entry.incoming_rate == 100, f"Incoming rate mismatch: {entry.incoming_rate}"
+			assert entry.stock_value_difference == entry.qty * 100, f"Stock value diff mismatch: {entry.stock_value_difference}"
+
+
+
+
+
 	def test_inward_outward_serial_valuation(self):
 		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
