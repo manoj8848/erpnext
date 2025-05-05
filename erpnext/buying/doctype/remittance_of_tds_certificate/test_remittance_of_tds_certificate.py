@@ -18,7 +18,7 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
 			DummyFile("invalid_file.txt")
 		]
 
-		from erpnext.buying.doctype.remittance_of_tds_certificate.remittance_of_tds_certificate import get_pan_list 
+		from erpnext.buying.doctype.remittance_of_tds_certificate.remittance_of_tds_certificate import get_pan_list
 		result = get_pan_list(files)
 
 		expected = [
@@ -48,3 +48,4 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
 		self.assertIn("fcontent", result)
 		self.assertEqual(result["fname"], "test_attachment.txt")
 		self.assertEqual(result["fcontent"], b"Dummy content")
+

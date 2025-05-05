@@ -50,7 +50,7 @@ class SalesOrder(SellingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
 		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
@@ -277,7 +277,7 @@ class SalesOrder(SellingController):
 					(d.prevdoc_docname, self.order_type),
 				)
 				if not res:
-					frappe.msgprint(
+					frappe.throw(
 						_("Quotation {0} not of type {1}").format(d.prevdoc_docname, self.order_type)
 					)
 
@@ -586,6 +586,9 @@ class SalesOrder(SellingController):
 	def on_recurring(self, reference_doc, auto_repeat_doc):
 		def _get_delivery_date(ref_doc_delivery_date, red_doc_transaction_date, transaction_date):
 			delivery_date = auto_repeat_doc.get_next_schedule_date(schedule_date=ref_doc_delivery_date)
+   
+			if type(transaction_date) == str:
+				transaction_date = getdate(transaction_date)
 
 			if delivery_date <= transaction_date:
 				delivery_date_diff = frappe.utils.date_diff(ref_doc_delivery_date, red_doc_transaction_date)
