@@ -1122,7 +1122,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		their child items(from the Packed Items table) on creating a Purchase Order from it.
 		"""
 		from erpnext.selling.doctype.sales_order.sales_order import make_purchase_order
-
+  
 		product_bundle = make_item("_Test Product Bundle", {"is_stock_item": 0})
 		make_item("_Test Bundle Item 1", {"is_stock_item": 1})
 		make_item("_Test Bundle Item 2", {"is_stock_item": 1})
@@ -1140,6 +1140,15 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			}
 		]
 
+		# setting credit limit of customer
+		customer = frappe.get_doc("Customer", "_Test Customer")
+		customer.credit_limits.clear()
+		customer.append(
+					"credit_limits",
+					{"company": "_Test Company", "credit_limit": 100000.00},
+				)
+		customer.save()
+  
 		so = make_sales_order(item_list=so_items)
 
 		purchase_order = make_purchase_order(so.name, selected_items=so_items)
@@ -1170,6 +1179,15 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			}
 		]
 
+		# setting credit limit of customer
+		customer = frappe.get_doc("Customer", "_Test Customer")
+		customer.credit_limits.clear()
+		customer.append(
+					"credit_limits",
+					{"company": "_Test Company", "credit_limit": 100000.00},
+				)
+		customer.save()
+  
 		so = make_sales_order(item_list=so_items)
 
 		purchase_order = make_purchase_order(so.name, selected_items=so_items)

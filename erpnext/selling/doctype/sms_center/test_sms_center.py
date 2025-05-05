@@ -23,7 +23,7 @@ class TestSmsCenter(unittest.TestCase):
                 }]
             }).insert()
             
-    def test_create_receiver_list_coverage_TC_S_187(self):
+    def test_create_receiver_list_coverage_TC_S_188(self):
         send_to_options = [
             "All Customer Contact",
             "All Supplier Contact",
@@ -42,7 +42,7 @@ class TestSmsCenter(unittest.TestCase):
             
             self.assertEqual(doc.send_to, option)
             
-    def test_get_receiver_nos_coverage_TC_188(self):
+    def test_get_receiver_nos_coverage_TC_189(self):
         doc = frappe.get_doc({
                 "doctype": "SMS Center",
                 "receiver_list": "John Doe - 9876543210\nJane Smith - 9123456780"
