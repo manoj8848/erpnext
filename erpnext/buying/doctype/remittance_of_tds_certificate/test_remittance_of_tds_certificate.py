@@ -19,6 +19,7 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
 		]
 
 		from erpnext.buying.doctype.remittance_of_tds_certificate.remittance_of_tds_certificate import get_pan_list 
+
 		result = get_pan_list(files)
 
 		expected = [
@@ -50,7 +51,6 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
             "doctype": "Supplier",
             "supplier_name": "Test Supplier No Email",
             "pan": "XYZ9876543"
-        }).insert()
 
 	def test_create_attachment(self):
 		from erpnext.buying.doctype.remittance_of_tds_certificate.remittance_of_tds_certificate import create_attachment 
@@ -81,3 +81,4 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
 
 		self.assertEqual(len(unrecorded), 1)
 		self.assertEqual(unrecorded[0]['pan'], "XYZ98765431155")
+
