@@ -644,6 +644,7 @@ class TestDeliveryNote(FrappeTestCase):
 			"company": company,
 			"transaction_date": frappe.utils.nowdate(),
 			"delivery_date": frappe.utils.nowdate(),
+			"currency": "INR",
 			"items": [{
 				"item_code": "Book",
 				"qty": 1,
