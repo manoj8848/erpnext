@@ -3605,6 +3605,7 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(warehouse_qty["_Test Warehouse - _TC"], 0)
 	
 	def create_mr_for_puchase_to_po_to_invoice(self):
+		import datetime
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import TestStockEntry as tse
 
 		# Create Material Request for Purchase
@@ -3631,10 +3632,13 @@ class TestMaterialRequest(FrappeTestCase):
 		po.supplier = "_Test Supplier"
 		po.save()
 		po.submit()
-
+		timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+		serial_1 = f"Test-SABBMRP-Sno-{timestamp}"
+		serial_2 = f"Test1-SABBMRP-Sno-{timestamp}"
+		
 		pr = make_purchase_receipt(po.name)
 		pr.items[0].use_serial_batch_fields = 1
-		pr.items[0].serial_no = "Test-SABBMRP-Sno-001\nTest-SABBMRP-Sno-002"
+		pr.items[0].serial_no = f"{serial_1}\n{serial_2}"
 
 		if not frappe.db.exists({"doctype": "Batch", "batch_id":"Test-SABBMRP-Bno-001"}):
 			b_no = frappe.new_doc("Batch")
@@ -3642,7 +3646,7 @@ class TestMaterialRequest(FrappeTestCase):
 			b_no.item = item
 			b_no.save()
 
-		pr.items[0].batch_no = "Test-SABBMRP-Bno-001"
+		pr.items[0].batch_no = 'Test-SABBMRP-Bno-001'
 		pr.save()
 		pr.submit()
 
@@ -3655,8 +3659,8 @@ class TestMaterialRequest(FrappeTestCase):
 
 		sabb = frappe.get_doc("Serial and Batch Bundle", sl_entry[0].serial_and_batch_bundle)
 		self.assertEqual(sl_entry[0].actual_qty, 2)
-		self.assertEqual(sabb.entries[0].serial_no, "Test-SABBMRP-Sno-001")
-		self.assertEqual(sabb.entries[1].serial_no, "Test-SABBMRP-Sno-002")
+		self.assertEqual(sabb.entries[0].serial_no, serial_1)
+		self.assertEqual(sabb.entries[1].serial_no, serial_2)
 		self.assertEqual(sabb.entries[0].batch_no, "Test-SABBMRP-Bno-001")
 
 		return pr
@@ -3686,6 +3690,7 @@ class TestMaterialRequest(FrappeTestCase):
 		self.assertEqual(warehouse_qty["_Test Warehouse - _TC"], 0)
 		
 	def create_mr_for_purchase_to_po_2pr(self):
+		import datetime
 		fields = {
 			"has_batch_no": 1,
 			"has_serial_no": 1,
@@ -3707,6 +3712,12 @@ class TestMaterialRequest(FrappeTestCase):
 			rate=10000,
 			do_not_submit=True
 		)
+		timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+		serial_1 = f"TEST1-SABBMRP-Sno-{timestamp}"
+		serial_2 = f"TEST2-SABBMRP-Sno-{timestamp}"
+		serial_3 = f"TEST3-SABBMRP-Sno-{timestamp}"
+		serial_4 = f"TEST4-SABBMRP-Sno-{timestamp}"
+		serial_5 = f"TEST5-SABBMRP-Sno-{timestamp}"
 		mr.transaction_date = "01-08-2024"
 		mr.schedule_date = "15-08-2024"
 		mr.save()
@@ -3722,7 +3733,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pr1.posting_date = "05-08-2024"
 		pr1.items[0].use_serial_batch_fields = 1
 		pr1.items[0].qty = 3
-		pr1.items[0].serial_no = "Test-SABBMRP-Sno-001\nTest-SABBMRP-Sno-002\nTest-SABBMRP-Sno-003"
+		pr1.items[0].serial_no = f"{serial_1}\n{serial_2}\n{serial_3}"
 
 		if not frappe.db.exists({"doctype": "Batch", "batch_id":"Test-SABBMRP-Bno-001"}):
 			b_no = frappe.new_doc("Batch")
@@ -3743,14 +3754,14 @@ class TestMaterialRequest(FrappeTestCase):
 
 		sabb = frappe.get_doc("Serial and Batch Bundle", sl_entry[0].serial_and_batch_bundle)
 		self.assertEqual(sl_entry[0].actual_qty, 3)
-		self.assertEqual(sabb.entries[0].serial_no, "Test-SABBMRP-Sno-001")
+		self.assertEqual(sabb.entries[0].serial_no, serial_1)
 		self.assertEqual(sabb.entries[0].batch_no, "Test-SABBMRP-Bno-001")
 
 		pr2 = make_purchase_receipt(po.name)
 		pr2.posting_date = "10-08-2024"
 		pr2.items[0].use_serial_batch_fields = 1
 		pr2.items[0].qty = 2
-		pr2.items[0].serial_no = "Test-SABBMRP-Sno-004\nTest-SABBMRP-Sno-005"
+		pr2.items[0].serial_no = f"{serial_4}\n{serial_5}"
 
 		if not frappe.db.exists({"doctype": "Batch", "batch_id":"Test-SABBMRP-Bno-001"}):
 			b_no = frappe.new_doc("Batch")
@@ -3771,7 +3782,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 		sabb = frappe.get_doc("Serial and Batch Bundle", sl_entry[0].serial_and_batch_bundle)
 		self.assertEqual(sl_entry[0].actual_qty, 2)
-		self.assertEqual(sabb.entries[1].serial_no, "Test-SABBMRP-Sno-005")
+		self.assertEqual(sabb.entries[1].serial_no, serial_5)
 		self.assertEqual(sabb.entries[1].batch_no, "Test-SABBMRP-Bno-001")
 
 		return pr1, pr2
@@ -5100,7 +5111,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi.update_stock = 1
 		pi.set_warehouse = warehouse
 		pi.items[0].qty = 1
-		pi.items[0].serial_no = "01 - MR"
+		pi.items[0].serial_no = "TEST01 - MR"
 		pi.currency = "INR"
 		pi.submit()
 
@@ -5108,7 +5119,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi1.update_stock = 1
 		pi1.set_warehouse = warehouse
 		pi1.items[0].qty = 1
-		pi1.items[0].serial_no = "013 - MR"
+		pi1.items[0].serial_no = "TEST013 - MR"
 		pi1.currency = "INR"
 		pi1.submit()
 
@@ -5391,7 +5402,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi.update_stock = 1
 		pi.set_warehouse = warehouse
 		pi.items[0].qty = 1
-		pi.items[0].serial_no = "01 - MR"
+		pi.items[0].serial_no = "TEST01 - MR1"
 		pi.currency = "INR"
 		pi.submit()
 
@@ -5399,7 +5410,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi1.update_stock = 1
 		pi1.set_warehouse = warehouse
 		pi1.items[0].qty = 1
-		pi1.items[0].serial_no = "013 - MR"
+		pi1.items[0].serial_no = "TEST013 - MR1"
 		pi1.currency = "INR"
 		pi1.submit()
 
@@ -5674,7 +5685,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi.update_stock = 1
 		pi.set_warehouse = warehouse
 		pi.items[0].qty = 1
-		pi.items[0].serial_no = "01 - MR"
+		pi.items[0].serial_no = "TEST01 - MR2"
 		pi.currency = "INR"
 		pi.submit()
 
@@ -5682,7 +5693,7 @@ class TestMaterialRequest(FrappeTestCase):
 		pi1.update_stock = 1
 		pi1.set_warehouse = warehouse
 		pi1.items[0].qty = 1
-		pi1.items[0].serial_no = "013 - MR"
+		pi1.items[0].serial_no = "TEST013 - MR2"
 		pi1.currency = "INR"
 		pi1.submit()
 
