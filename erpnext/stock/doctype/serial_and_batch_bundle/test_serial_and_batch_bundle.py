@@ -81,14 +81,6 @@ class TestSerialandBatchBundle(FrappeTestCase):
 	def test_reset_serial_batch_bundle(self):
 		company = "_Test Indian Registered Company"  # Ensure company is correct
 		warehouse = "Stores - _TIRC"
-		if not frappe.db.exists("Fiscal Year", "2025-2026"):
-			frappe.get_doc({
-				"doctype": "Fiscal Year",
-				"year": "2025-2026",
-				"company": company,
-				"year_start_date": "2025-04-01",
-				"year_end_date": "2026-03-31"
-			}).insert()
 		# Check if the warehouse exists, and if not, create it with the correct company association
 		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
 			warehouse = frappe.get_doc({
