@@ -15,6 +15,7 @@ from frappe.utils import (
 	cint,
 	comma_and,
 	flt,
+	get_link_to_form,
 	get_url_to_form,
 	getdate,
 	now_datetime,
@@ -887,8 +888,7 @@ class ProductionPlan(Document):
 
 		if material_request_list:
 			material_request_list = [
-				f"""<a href="{get_url_to_form("Material Request", m.name)}">{m.name}</a>"""
-				for m in material_request_list
+				get_link_to_form("Material Request", m.name) for m in material_request_list
 			]
 			msgprint(_("{0} created").format(comma_and(material_request_list)))
 		else:
