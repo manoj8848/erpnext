@@ -7277,7 +7277,7 @@ def setup_accounts():
 	## Create internal transfer account
 	account = create_account(
 		account_name="Unrealized Profit",
-		parent_account="Current Liabilities - _TCPI",
+		parent_account="Current Liabilities - TCP1",
 		company="_Test Company with perpetual inventory",
 	)
 

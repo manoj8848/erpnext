@@ -162,6 +162,33 @@ class TestRequestforQuotation(FrappeTestCase):
 		supplier_doc.reload()
 		self.assertTrue(supplier_doc.portal_users[0].user)
 
+	def setUp(self):
+		# Create dummy supplier
+		self.supplier = frappe.get_doc({
+			"doctype": "Supplier",
+			"supplier_name": "Test",
+			"supplier_type": "Company"
+		}).insert(ignore_if_duplicate=True)
+
+		item = make_item("Test", {"stock_uom": "Nos"})
+		self.rfq = make_request_for_quotation(item_code=item.name, supplier_data=[
+				{
+					"supplier": self.supplier.name,
+					"supplier_name": self.supplier.supplier_name,
+					"email_id": "123_testrfquser@example.com",
+				}
+			],)
+
+	def test_send_supplier_emails_runs(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import send_supplier_emails
+		send_supplier_emails(self.rfq.name)
+
+		communications = frappe.get_all("Communication", filters={
+			"reference_doctype": "Request for Quotation",
+			"reference_name": self.rfq.name
+		})
+		print('rfq_name', self.rfq.name)
+		self.assertGreaterEqual(len(communications), 1)
 
 def make_request_for_quotation(**args) -> "RequestforQuotation":
 	"""
