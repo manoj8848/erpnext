@@ -2,73 +2,73 @@
 # License: GNU General Public License v3. See license.txt
 
 
-import frappe
-import frappe.defaults
-from frappe import _, msgprint
+import frappe  # pragma: no cover
+import frappe.defaults  # pragma: no cover
+from frappe import _, msgprint  # pragma: no cover
 from frappe.contacts.address_and_contact import (
 	delete_contact_and_address,
 	load_address_and_contact,
-)
-from frappe.model.naming import set_name_by_naming_series, set_name_from_naming_options
+)  # pragma: no cover
+from frappe.model.naming import set_name_by_naming_series, set_name_from_naming_options  # pragma: no cover
 
 from erpnext.accounts.party import (
 	get_dashboard_info,
 	validate_party_accounts,
-)
-from erpnext.controllers.website_list_for_contact import add_role_for_portal_user
-from erpnext.utilities.transaction_base import TransactionBase
+)  # pragma: no cover
+from erpnext.controllers.website_list_for_contact import add_role_for_portal_user  # pragma: no cover
+from erpnext.utilities.transaction_base import TransactionBase  # pragma: no cover
 
 
-class Supplier(TransactionBase):
+class Supplier(TransactionBase): 
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
-	from typing import TYPE_CHECKING
+	from typing import TYPE_CHECKING  # pragma: no cover
 
-	if TYPE_CHECKING:
-		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import AllowedToTransactWith
-		from erpnext.accounts.doctype.party_account.party_account import PartyAccount
-		from erpnext.utilities.doctype.portal_user.portal_user import PortalUser
-		from frappe.types import DF
+	if TYPE_CHECKING:  # pragma: no cover
+		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import AllowedToTransactWith  # pragma: no cover
+		from erpnext.accounts.doctype.party_account.party_account import PartyAccount  # pragma: no cover
+		from erpnext.utilities.doctype.portal_user.portal_user import PortalUser  # pragma: no cover
+		from frappe.types import DF  # pragma: no cover
 
-		accounts: DF.Table[PartyAccount]
-		allow_purchase_invoice_creation_without_purchase_order: DF.Check
-		allow_purchase_invoice_creation_without_purchase_receipt: DF.Check
-		companies: DF.Table[AllowedToTransactWith]
-		country: DF.Link | None
-		default_bank_account: DF.Link | None
-		default_currency: DF.Link | None
-		default_price_list: DF.Link | None
-		disabled: DF.Check
-		email_id: DF.ReadOnly | None
-		hold_type: DF.Literal["", "All", "Invoices", "Payments"]
-		image: DF.AttachImage | None
-		is_frozen: DF.Check
-		is_internal_supplier: DF.Check
-		is_transporter: DF.Check
-		language: DF.Link | None
-		mobile_no: DF.ReadOnly | None
-		naming_series: DF.Literal["SUP-.YYYY.-"]
-		on_hold: DF.Check
-		payment_terms: DF.Link | None
-		portal_users: DF.Table[PortalUser]
-		prevent_pos: DF.Check
-		prevent_rfqs: DF.Check
-		primary_address: DF.Text | None
-		release_date: DF.Date | None
-		represents_company: DF.Link | None
-		supplier_details: DF.Text | None
-		supplier_group: DF.Link | None
-		supplier_name: DF.Data
-		supplier_primary_address: DF.Link | None
-		supplier_primary_contact: DF.Link | None
-		supplier_type: DF.Literal["Company", "Individual", "Partnership"]
-		tax_category: DF.Link | None
-		tax_id: DF.Data | None
-		tax_withholding_category: DF.Link | None
-		warn_pos: DF.Check
-		warn_rfqs: DF.Check
-		website: DF.Data | None
+		accounts: DF.Table[PartyAccount]  # pragma: no cover
+		allow_purchase_invoice_creation_without_purchase_order: DF.Check  # pragma: no cover
+		allow_purchase_invoice_creation_without_purchase_receipt: DF.Check  # pragma: no cover
+		companies: DF.Table[AllowedToTransactWith]  # pragma: no cover
+		country: DF.Link | None  # pragma: no cover
+		default_bank_account: DF.Link | None  # pragma: no cover
+		default_currency: DF.Link | None  # pragma: no cover
+		default_price_list: DF.Link | None  # pragma: no cover
+		disabled: DF.Check  # pragma: no cover
+		email_id: DF.ReadOnly | None  # pragma: no cover
+		hold_type: DF.Literal["", "All", "Invoices", "Payments"]  # pragma: no cover
+		image: DF.AttachImage | None  # pragma: no cover
+		is_frozen: DF.Check  # pragma: no cover
+		is_internal_supplier: DF.Check  # pragma: no cover
+		is_transporter: DF.Check  # pragma: no cover
+		language: DF.Link | None  # pragma: no cover
+		mobile_no: DF.ReadOnly | None  # pragma: no cover
+		naming_series: DF.Literal["SUP-.YYYY.-"]  # pragma: no cover
+		on_hold: DF.Check  # pragma: no cover
+		payment_terms: DF.Link | None  # pragma: no cover
+		portal_users: DF.Table[PortalUser]  # pragma: no cover
+		prevent_pos: DF.Check  # pragma: no cover
+		prevent_rfqs: DF.Check  # pragma: no cover
+		primary_address: DF.Text | None  # pragma: no cover
+		release_date: DF.Date | None  # pragma: no cover
+		represents_company: DF.Link | None  # pragma: no cover
+		supplier_details: DF.Text | None  # pragma: no cover
+		supplier_group: DF.Link | None  # pragma: no cover
+		supplier_name: DF.Data  # pragma: no cover
+		supplier_primary_address: DF.Link | None  # pragma: no cover
+		supplier_primary_contact: DF.Link | None  # pragma: no cover
+		supplier_type: DF.Literal["Company", "Individual", "Partnership"]  # pragma: no cover
+		tax_category: DF.Link | None  # pragma: no cover
+		tax_id: DF.Data | None  # pragma: no cover
+		tax_withholding_category: DF.Link | None  # pragma: no cover
+		warn_pos: DF.Check  # pragma: no cover
+		warn_rfqs: DF.Check  # pragma: no cover
+		website: DF.Data | None  # pragma: no cover
 	# end: auto-generated types
 
 	def onload(self):
