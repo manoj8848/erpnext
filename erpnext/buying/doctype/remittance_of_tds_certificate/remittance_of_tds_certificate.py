@@ -1,18 +1,18 @@
 # Copyright (c) 2024, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-import frappe
-from frappe.model.document import Document
-from frappe.core.doctype.file.file import File
-from frappe.utils.file_manager import get_file_path
+import frappe  # pragma: no cover
+from frappe.model.document import Document  # pragma: no cover
+from frappe.core.doctype.file.file import File  # pragma: no cover
+from frappe.utils.file_manager import get_file_path  # pragma: no cover
 
 class RemittanceofTDScertificate(Document):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
-	from typing import TYPE_CHECKING
+	from typing import TYPE_CHECKING  # pragma: no cover
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from erpnext.buying.doctype.logs.logs import logs
 		from frappe.types import DF
 

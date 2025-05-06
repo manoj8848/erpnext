@@ -85,7 +85,7 @@ class TestSupplierScorecardVariable(FrappeTestCase):
 		get_total = get_total_workdays(get_sscp)
 		self.assertEqual(get_total, 7)
 
-	def test_all_scenarios_TC_B_174(self):
+	def test_get_item_workdays_TC_B_174(self):
 		get_sscp = score_card()
 		get_sscp.submit()
 		self.assertEqual(get_sscp.docstatus, 1)
