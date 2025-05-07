@@ -1139,15 +1139,6 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 				"supplier": "_Test Supplier",
 			}
 		]
-
-		# setting credit limit of customer
-		customer = frappe.get_doc("Customer", "_Test Customer")
-		customer.credit_limits.clear()
-		customer.append(
-					"credit_limits",
-					{"company": "_Test Company", "credit_limit": 100000.00},
-				)
-		customer.save()
   
 		so = make_sales_order(item_list=so_items)
 
@@ -1178,15 +1169,6 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 				"supplier": "_Test Supplier",
 			}
 		]
-
-		# setting credit limit of customer
-		customer = frappe.get_doc("Customer", "_Test Customer")
-		customer.credit_limits.clear()
-		customer.append(
-					"credit_limits",
-					{"company": "_Test Company", "credit_limit": 100000.00},
-				)
-		customer.save()
   
 		so = make_sales_order(item_list=so_items)
 
@@ -1469,15 +1451,6 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 				"item_defaults": [{"default_warehouse": "_Test Warehouse - _TC", "company": "_Test Company"}],
 			},
 		)
-  
-		# setting credit limit of customer
-		customer = frappe.get_doc("Customer", "_Test Customer")
-		customer.credit_limits.clear()
-		customer.append(
-					"credit_limits",
-					{"company": "_Test Company", "credit_limit": 100000.00},
-				)
-		customer.save()
    
 		from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
 
@@ -6695,7 +6668,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			"next_schedule_date": add_days(today(), 30)
 		})
 		auto_repeat.insert()
-
+  
 		new_so = make_sales_order(do_not_save=1)
 		new_so.transaction_date = add_days(today(), 30)
 		new_so.items[0].delivery_date = add_days(today(), 30)
@@ -6847,10 +6820,10 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			},
 		]
   
-		if not frappe.db.exists("Address", "_Test Address-Billing-1"):
+		if not frappe.db.exists("Address", "_Test Address so-Billing-1"):
 			address = frappe.get_doc({
 				"doctype": "Address",
-				"address_title": "_Test Address",
+				"address_title": "_Test Address so",
 				"address_type": "Billing",
 				"address_line1": "123 Test Street",
 				"address_line2": "Suite 101",
@@ -6870,7 +6843,8 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			address.insert(ignore_permissions=True)
 
 		so = make_sales_order(item_list=so_items, do_not_submit=True)
-		so.shipping_address_name = "_Test Address-Billing-1"
+		if address:
+			so.shipping_address_name = address.name
 		so.submit()
 
 		po1 = make_purchase_order_for_default_supplier(so.name)
@@ -7121,6 +7095,8 @@ def make_sales_order(**args):
 		)
 
 	so.delivery_date = add_days(so.transaction_date, 10)
+ 
+	set_credit_limit_for_customer(customer_name=args.customer or "_Test Customer")
 
 	if not args.do_not_save:
 		so.insert()
@@ -7353,3 +7329,12 @@ def create_exchange_rate(date):
 			}
 		)
 		doc.insert()
+
+def set_credit_limit_for_customer(customer_name):
+	customer = frappe.get_doc("Customer", customer_name)
+	customer.credit_limits.clear()
+	customer.append(
+				"credit_limits",
+				{"company": "_Test Company", "credit_limit": 1000000.00},
+			)
+	customer.save()
