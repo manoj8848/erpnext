@@ -11,7 +11,7 @@ class DummyFile:
         self.file_name = file_name
 
 class TestRemittanceofTDScertificate(FrappeTestCase):
-	def test_get_pan_list(self):
+	def test_get_pan_list_TC_B_187(self):
 		files = [
 			DummyFile("ABCDE1234F_pan.pdf"),
 			DummyFile("XYZ9876543_other.pdf"),
@@ -40,7 +40,7 @@ class TestRemittanceofTDScertificate(FrappeTestCase):
 		)
 		self.test_item = {"file_name": self.test_file.file_name}
 
-	def test_create_attachment(self):
+	def test_create_attachment_TC_B_188(self):
 		from erpnext.buying.doctype.remittance_of_tds_certificate.remittance_of_tds_certificate import create_attachment 
 		result = create_attachment(self.test_item)
 

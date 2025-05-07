@@ -218,6 +218,19 @@ class TestRequestforQuotation(FrappeTestCase):
 		tags = get_supplier_tag()
 		self.assertIsInstance(tags, list)
 
+	def test_get_rfq_containing_supplier(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import get_rfq_containing_supplier
+
+		filters = {
+			"company": self.rfq.company,
+			"supplier": self.supplier.name,
+			"transaction_date": self.rfq.transaction_date
+		}
+
+		rfqs = get_rfq_containing_supplier("Request for Quotation", "", "name", 0, 10, filters)
+
+		self.assertTrue(any(r["name"] == self.rfq.name for r in rfqs))
+
 def make_request_for_quotation(**args) -> "RequestforQuotation":
 	"""
 	:param supplier_data: List containing supplier data
