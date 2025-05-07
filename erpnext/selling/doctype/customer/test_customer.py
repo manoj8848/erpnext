@@ -12,8 +12,12 @@ from frappe.utils import flt
 from erpnext.accounts.party import get_due_date
 from erpnext.exceptions import PartyDisabled, PartyFrozen
 from erpnext.selling.doctype.customer.customer import (
+	create_contact,
 	get_credit_limit,
 	get_customer_outstanding,
+	get_customer_primary_contact,
+	make_opportunity,
+	make_quotation,
 	parse_full_name,
 )
 from erpnext.tests.utils import create_test_contact_and_address
@@ -385,7 +389,92 @@ class TestCustomer(FrappeTestCase):
 		self.assertEqual(first, "John")
 		self.assertEqual(middle, "Michael")
 		self.assertEqual(last, "Doe")
+	
+	def test_customer_bank_details_TC_S_183(self):
+		bank_name = "Test SBI"
+		if not frappe.db.exists("Bank", bank_name):
+			frappe.get_doc({
+				"doctype": "Bank",
+				"bank_name": bank_name,
+			}).insert()
 
+		bank_account_name = "Test Bank - Test SBI"
+		if not frappe.db.exists("Bank Account", bank_account_name):
+			frappe.get_doc({
+				"doctype": "Bank Account",
+				"account_name": "Test Bank",
+				"bank": bank_name,
+				"is_company_account": 0
+			}).insert()
+
+		customer_name = "_Test New Customer "
+		if not frappe.db.exists("Customer", customer_name):
+			customer = frappe.get_doc(get_customer_dict(customer_name)).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", customer_name)
+
+		customer.default_bank_account = bank_account_name
+		with self.assertRaises(frappe.ValidationError) as context:
+			customer.save()
+		self.assertIn("is not a company bank account", str(context.exception))
+
+	def test_customer_with_address_contact_TC_S_184(self):
+		customer_name = "_Test New Customer"
+
+		if not frappe.db.exists("Customer", customer_name):
+			customer = frappe.get_doc(get_customer_dict_new(customer_name)).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", customer_name)
+
+		contact = create_contact(customer_name, "Customer", customer.name, "test@example.com")
+		contact_name = contact.name
+		customer.db_set("customer_primary_contact", contact_name)
+		customer.reload()
+
+		self.assertIsNotNone(customer.primary_address)
+		self.assertEqual(customer.customer_primary_contact, contact_name)
+
+		results = get_customer_primary_contact("Customer", "", "name", 0, 20, {"customer": customer.name})
+		result_names = [row[0] for row in results]
+		self.assertIn(contact_name, result_names)
+
+	def test_make_quotation_and_opportunity_TC_S_185(self):
+		customer_name = "_Test Customer New"
+		if not frappe.db.exists("Customer", customer_name):
+			customer = frappe.get_doc(get_customer_dict_new(customer_name)).insert(ignore_permissions=True)
+		else:
+			customer = frappe.get_doc("Customer", customer_name)
+
+		opportunity = make_opportunity(customer.name)
+		opportunity.opportunity_type = ""
+		opportunity.sales_stage = ""
+		opportunity.save()
+		assert opportunity.doctype == "Opportunity"
+		assert opportunity.party_name == customer.name
+
+		quotation = make_quotation(customer.name)
+		quotation.append("items", {
+		"item_code": "_Test Item",
+		"qty": 1,
+		"rate": 100
+	})
+		quotation.save()
+		assert quotation.doctype == "Quotation"
+		assert quotation.quotation_to == "Customer"
+
+def get_customer_dict_new(customer_name):
+    return {
+        "doctype": "Customer",
+        "customer_name": customer_name,
+        "customer_group": "_Test Customer Group",
+        "customer_type": "Individual",
+        "territory": "_Test Territory",
+        "address_line1": "123 Sample St",
+        "city": "Test City",
+		"state": "Tamil Nadu",
+        "country": "India",
+		"email_id": "test@gmail.com"
+    }
 
 def get_customer_dict(customer_name):
 	return {
