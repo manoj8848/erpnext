@@ -7,6 +7,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import flt, nowtime, today
 from erpnext.stock.doctype.item.test_item import make_item
+from erpnext.setup.doctype.company.test_company import create_child_company
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
 	add_serial_batch_ledgers,
 	make_batch_nos,
@@ -76,41 +78,52 @@ class TestSerialandBatchBundle(FrappeTestCase):
  		)
  
 		self.assertFalse(bundle_doc.name.startswith("SABB-"))
-	
+
+	# codecov
 	def test_reset_serial_batch_bundle(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
 		company = "_Test Indian Registered Company"  # Ensure company is correct
 		warehouse = "Stores - _TIRC"
+		item_code = "Test Item"
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+			assert frappe.db.exists("Warehouse", warehouse)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+			assert frappe.db.exists("Customer", "_Test Customer")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+			assert frappe.db.exists("Company", company)
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 		# Check if company is already in child table
 		if not any(c.company == company for c in fiscal_year.companies):
 			fiscal_year.append("companies", {"company": company})
 			fiscal_year.save()
-
-		# Check if the warehouse exists, and if not, create it with the correct company association
-		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
-			warehouse = frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": "_Test Warehouse - _TC",
-				"company": company
-			}).insert()
+			fiscal_year.reload()
+			assert any(c.company == company for c in fiscal_year.companies)
 
 		# Create item if it doesn't exist
 		if not frappe.db.exists("Item", "Test Item"):
-			item = frappe.get_doc({
-				"doctype": "Item",
-				"item_code": "Test Item",
-				"item_name": "Test Item",
-				"item_group": "Products",
-				"gst_hsn_code": "01011010",
-				"has_serial_no": 1,
-				"has_batch_no": 1,
-				"is_stock_item": 1,
-				"stock_uom": "Nos"
-			}).insert()
+			item = make_test_item(item_code)
+			item.item_group = "Products"
+			item.has_serial_no = 1
+			item.has_batch_no = 1
+			item.is_stock_item = 1
+			item.is_fixed_asset = 0
+			item.auto_create_assets = 0
+			item.asset_naming_series = "ACC-ASS-.YYYY.-"
+			item.save()
+			assert frappe.db.exists("Item", "Test Item")
 		else:
 			item = frappe.get_doc("Item", "Test Item")
 
-		# Create Serial No for the item
 		serial_no = frappe.get_doc({
 			"doctype": "Serial No",
 			"serial_no": "MDC001",
@@ -118,6 +131,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"company": company,
 			"item_group": "Raw Material"
 		}).insert(ignore_permissions=True)
+		assert serial_no.name == "MDC001"
 
 		# Create Batch for the item
 		batch = frappe.get_doc({
@@ -127,6 +141,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"item": item.name,
 			"manufacturing_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
+		assert batch.batch_id == "Batch_001"
 
 		# Create stock entry
 		stock_entry = frappe.get_doc({
@@ -142,23 +157,12 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		})
 		stock_entry.submit()
-
-		# Create customer if it doesn't exist
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
+		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -172,6 +176,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		}).insert(ignore_permissions=True)
 		dn.submit()
+		assert dn.docstatus == 1
 
 		# Create Serial and Batch Bundle
 		serial_batch_bundle = frappe.get_doc({
@@ -194,11 +199,14 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"posting_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
 		serial_batch_bundle.submit()
+		assert serial_batch_bundle.docstatus == 1
 
 		# Cancel the bundle before amending
 		dn.cancel()
+		assert dn.docstatus == 2
 		serial_batch_bundle.reload()
 		serial_batch_bundle.cancel()
+		assert serial_batch_bundle.docstatus == 2
 
 		amended_bundle = frappe.copy_doc(serial_batch_bundle)
 		amended_bundle.amended_from = serial_batch_bundle.name
@@ -215,32 +223,41 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"company": company,
 			"item_group": "Raw Material"
 		}).insert(ignore_permissions=True)
+		assert new_serial_no.name == "MDC002"
 
 		amended_bundle.entries[0].serial_no = new_serial_no.name
-		
+
 		try:
 			amended_bundle.insert()
 			amended_bundle.save()
+			assert frappe.db.exists("Serial and Batch Bundle", amended_bundle.name)
 		except frappe.MandatoryError as e:
 			# Handle or log the error if necessary
 			pass
 
-	
+
+	# codecov
 	def test_validate_returned_serial_batch_no(self):
 		company = "_Test Indian Registered Company"
 		warehouse = "Stores - _TIRC"
+		
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
-		# Check if company is already in child table
 		if not any(c.company == company for c in fiscal_year.companies):
 			fiscal_year.append("companies", {"company": company})
 			fiscal_year.save()
-		# Check or create warehouse
-		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
-			warehouse = frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": "_Test Warehouse - _TC",
-				"company": company
-			}).insert()
 
 		# Check or create item
 		if not frappe.db.exists("Item", "Test Item"):
@@ -257,6 +274,9 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+		assert item.name == "Test Item"
+		assert item.has_serial_no == 1
+		assert item.has_batch_no == 1
 
 		# Create serial number
 		serial_no = frappe.get_doc({
@@ -266,6 +286,8 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"company": company,
 			"item_group": "Raw Material"
 		}).insert(ignore_permissions=True)
+		assert serial_no.serial_no == "MDC001"
+		assert serial_no.item_code == item.name
 
 		# Create batch
 		batch = frappe.get_doc({
@@ -275,6 +297,8 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"item": item.name,
 			"manufacturing_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
+		assert batch.batch_id == "Batch_001"
+		assert batch.item == item.name
 
 		# Create stock entry (Material Receipt)
 		stock_entry = frappe.get_doc({
@@ -290,23 +314,12 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		})
 		stock_entry.submit()
-
-		# Create customer
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
+		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -320,6 +333,8 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		}).insert(ignore_permissions=True)
 		dn.submit()
+		assert dn.docstatus == 1
+		assert dn.items[0].serial_no == serial_no.name
 
 		# Manually create Stock Ledger Entry (optional for test purposes)
 		sle = frappe.get_doc({
@@ -331,13 +346,15 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"voucher_type": "Delivery Note",
 			"voucher_no": dn.name,
 			"voucher_detail_no": dn.items[0].name,
-			"actual_qty": -1,  # reduce stock
+			"actual_qty": -1,
 			"stock_uom": "Nos",
 			"company": company,
 			"batch_no": batch.name,
 			"serial_no": serial_no.name
 		})
 		sle.insert(ignore_permissions=True)
+		assert sle.voucher_no == dn.name
+		assert sle.actual_qty == -1
 
 		# Create Serial and Batch Bundle
 		serial_batch_bundle = frappe.get_doc({
@@ -361,11 +378,14 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"posting_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
 		serial_batch_bundle.submit()
+		assert serial_batch_bundle.docstatus == 1
 
 		# Cancel the bundle and Delivery Note
 		dn.cancel()
 		serial_batch_bundle.reload()
 		serial_batch_bundle.cancel()
+		assert dn.docstatus == 2
+		assert serial_batch_bundle.docstatus == 2
 
 		amended_bundle = frappe.copy_doc(serial_batch_bundle)
 		amended_bundle.amended_from = serial_batch_bundle.name
@@ -384,6 +404,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"company": company,
 			"item_group": "Raw Material"
 		}).insert(ignore_permissions=True)
+		assert new_serial_no.serial_no == "MDC002"
 
 		amended_bundle.entries[0].serial_no = new_serial_no.name
 
@@ -392,10 +413,25 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			amended_bundle.save()
 		except frappe.MandatoryError:
 			pass
-	
+
+	# codecov
 	def test_autoname_for_naming_series(self):
 		company = "_Test Indian Registered Company"
 		warehouse = "Stores - _TIRC"
+
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 		
 		if not any(c.company == company for c in fiscal_year.companies):
@@ -454,20 +490,10 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		})
 		stock_entry.submit()
 
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
 
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -533,6 +559,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			serial_batch_bundle.autoname()
 
+	# codecov
 	def test_autoname_for_naming_series_logic(self):
 		# Make sure the Stock Settings flag is ON
 		frappe.db.set_value("Stock Settings", None, "set_serial_and_batch_bundle_naming_based_on_naming_series", 1)
@@ -588,6 +615,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		# Assert that name was generated
 		self.assertTrue(serial_batch_bundle_with_hash.name.startswith("TESTSERIES"))
 
+	# codecov
 	def test_autoname_for_duplicate_entry(self):
 		# Turn OFF the Stock Settings flag
 		frappe.db.set_value("Stock Settings", None, "set_serial_and_batch_bundle_naming_based_on_naming_series", 0)
@@ -620,26 +648,38 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			# Restore original generate_hash function
 			frappe.generate_hash = original_generate_hash
 
+		# Assert that name was not set because autoname failed
+		self.assertIsNone(serial_batch_bundle.get("name"))
+
+		# Assert that naming_series is still what was set
+		self.assertEqual(serial_batch_bundle.naming_series, "TESTSERIES")
+
+		# Confirm that item_code is still intact
+		self.assertEqual(serial_batch_bundle.item_code, "Test Item")
 
 
+	# codecov
 	def test_update_valuation_rate(self):
 		company = "_Test Indian Registered Company"
 		warehouse = "Stores - _TIRC"
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 		# Check if company is already in child table
 		if not any(c.company == company for c in fiscal_year.companies):
 			fiscal_year.append("companies", {"company": company})
 			fiscal_year.save()
-
-		# Ensure warehouse exists
-		if not frappe.db.exists("Warehouse", warehouse):
-			warehouse = frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": warehouse,
-				"company": company
-			}).insert().name
-		else:
-			warehouse = warehouse
 
 		# Ensure item exists
 		if not frappe.db.exists("Item", "Test Item"):
@@ -690,22 +730,10 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		})
 		stock_entry.submit()
 
-		# Ensure customer exists
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
-
 		# Create Delivery Note
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -755,25 +783,37 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		# OPTIONAL: add assertions to validate the update
 		for entry in serial_batch_bundle.entries:
 			assert entry.incoming_rate == 100, f"Incoming rate mismatch: {entry.incoming_rate}"
-			assert entry.stock_value_difference == entry.qty * 100, f"Stock value diff mismatch: {entry.stock_value_difference}"
+			assert entry.stock_value_difference == 100 * entry.qty, f"Stock value difference mismatch: {entry.stock_value_difference}"
 
+	# codecov
 	def test_validate_serial_and_batch_no_for_returned_vouchertype(self):
 		company = "_Test Indian Registered Company"  # Ensure company is correct
 		warehouse = "Stores - _TIRC"
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
+		# Check if company is already in child table
+		if not any(c.company == company for c in fiscal_year.companies):
+			fiscal_year.append("companies", {"company": company})
+			fiscal_year.save()
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 
 		# Check if company is already in child table
 		if not any(c.company == company for c in fiscal_year.companies):
 			fiscal_year.append("companies", {"company": company})
 			fiscal_year.save()
-
-		# Check if the warehouse exists, and if not, create it
-		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
-			warehouse = frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": "_Test Warehouse - _TC",
-				"company": company
-			}).insert()
 
 		# Create item if it doesn't exist
 		if not frappe.db.exists("Item", "Test Item"):
@@ -824,22 +864,10 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		})
 		stock_entry.submit()
 
-		# Create customer if it doesn't exist
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
-
 		# Create Delivery Note
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -891,24 +919,43 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"posting_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
 		serial_batch_bundle.submit()
-	
+
+		# --- ADD ASSERTS BELOW ---
+		assert serial_batch_bundle.is_return == 1, f"Expected is_return=1, got {serial_batch_bundle.is_return}"
+		assert serial_batch_bundle.returned_against == "Test", f"Expected returned_against='Test', got {serial_batch_bundle.returned_against}"
+		for entry in serial_batch_bundle.entries:
+			assert entry.serial_no == serial_no.name, f"Expected serial_no={serial_no.name}, got {entry.serial_no}"
+			assert entry.batch_no == batch.name, f"Expected batch_no={batch.name}, got {entry.batch_no}"
+			assert entry.qty == 1, f"Expected qty=1, got {entry.qty}"
+
+	# codecov
 	def test_validate_serial_and_batch_no_for_returned(self):
 		company = "_Test Indian Registered Company"  # Ensure company is correct
 		warehouse = "Stores - _TIRC"
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+		assert frappe.db.exists("Warehouse", warehouse)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+		assert frappe.db.exists("Customer", "_Test Customer")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+		assert frappe.db.exists("Company", company)
+
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 
 		# Check if company is already in child table
 		if not any(c.company == company for c in fiscal_year.companies):
 			fiscal_year.append("companies", {"company": company})
 			fiscal_year.save()
-
-		# Check if the warehouse exists, and if not, create it
-		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
-			warehouse = frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": "_Test Warehouse - _TC",
-				"company": company
-			}).insert()
+		fiscal_year.reload()
+		assert any(c.company == company for c in fiscal_year.companies)
 
 		# Create item if it doesn't exist
 		if not frappe.db.exists("Item", "Test Item"):
@@ -925,6 +972,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+		assert frappe.db.exists("Item", "Test Item")
 
 		# Create Serial No for the item
 		serial_no = frappe.get_doc({
@@ -934,6 +982,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"company": company,
 			"item_group": "Raw Material"
 		}).insert(ignore_permissions=True)
+		assert frappe.db.exists("Serial No", "MDC001")
 
 		# Create Batch for the item
 		batch = frappe.get_doc({
@@ -943,6 +992,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"item": item.name,
 			"manufacturing_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
+		assert frappe.db.exists("Batch", batch.name)
 
 		# Create stock entry
 		stock_entry = frappe.get_doc({
@@ -958,23 +1008,13 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		})
 		stock_entry.submit()
-
-		# Create customer if it doesn't exist
-		if not frappe.db.exists("Customer", "Test Customer"):
-			customer = frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Test Customer",
-				"customer_group": "Individual",
-				"territory": "All Territories",
-				"company": company,
-			}).insert(ignore_permissions=True)
-		else:
-			customer = frappe.get_doc("Customer", "Test Customer")
+		assert frappe.db.exists("Stock Entry", stock_entry.name)
+		assert stock_entry.docstatus == 1  # submitted
 
 		# Create Delivery Note
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
-			"customer": customer.name,
+			"customer": customer,
 			"company": company,
 			"posting_date": frappe.utils.nowdate(),
 			"currency": "INR",
@@ -988,6 +1028,8 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			}]
 		}).insert(ignore_permissions=True)
 		dn.submit()
+		assert frappe.db.exists("Delivery Note", dn.name)
+		assert dn.docstatus == 1  # submitted
 
 		serial_batch_bundle = frappe.get_doc({
 			"doctype": "Serial and Batch Bundle",
@@ -999,7 +1041,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"has_serial_no": 1,
 			"has_batch_no": 1,
 			'is_return': 1,
-			"returned_against":"Test",
+			"returned_against": "Test",
 			"entries": [{
 				"serial_no": serial_no.name,
 				"batch_no": batch.name,
@@ -1011,14 +1053,10 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			"posting_date": frappe.utils.now(),
 		}).insert(ignore_permissions=True)
 		serial_batch_bundle.submit()
+		assert frappe.db.exists("Serial and Batch Bundle", serial_batch_bundle.name)
+		assert serial_batch_bundle.docstatus == 1  # submitted
 
-
-		
-
-
-
-
-
+	# codecov
 	def test_make_serial_no(self):
 		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import make_serial_no
 
@@ -1043,6 +1081,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		# Check if the serial number was created
 		self.assertTrue(frappe.db.exists("Serial No", serial_no), "Serial No was not created successfully")
 
+	# codecov
 	def test_make_batch_no(self):
 		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import make_batch_no
 
@@ -1071,15 +1110,6 @@ class TestSerialandBatchBundle(FrappeTestCase):
 
 		# Check if the batch was created
 		self.assertTrue(frappe.db.exists("Batch", {"batch_id": batch_no}), "Batch was not created successfully")
-
-
-
-
-
-
-
-
-
 
 
 	def test_inward_outward_serial_valuation(self):
