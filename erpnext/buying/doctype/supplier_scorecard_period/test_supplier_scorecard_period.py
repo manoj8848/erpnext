@@ -134,7 +134,7 @@ class TestSupplierScorecardPeriod(unittest.TestCase):
         "to_date": "2024-12-31"
 		})
 
-		doc.get_eval_statement = lambda fn: "min(80, 100)"
+		doc.get_eval_statement = lambda fn: "min(80, 100)" 
 
 		result = doc.calculate_weighted_score(doc.get_eval_statement)
 		self.assertEqual(result, 80)
@@ -153,3 +153,49 @@ class TestSupplierScorecardPeriod(unittest.TestCase):
 
 		result = doc.get_eval_statement(formula)
 		self.assertEqual(result, expected)
+
+	def test_make_supplier_scorecard(self):
+		from erpnext.buying.doctype.supplier_scorecard_period.supplier_scorecard_period import make_supplier_scorecard
+		
+		criteria = frappe.get_doc(
+			{
+				"doctype": "Supplier Scorecard Criteria",
+				"max_score": "100",
+				"formula": "max(0,10)*100",
+				"criteria_name": "_Test Criteria"
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+		frappe.get_doc(
+			{
+				"doctype": "Supplier Scorecard Variable",
+				"variable_label": "Test",
+				"param_name": "Test",
+				"path": "get_ordered_qty"
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+		supplier_doc = frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": "Test Supplier for RFQ",
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+		scorecard = frappe.get_doc(
+			{
+				"doctype": "Supplier Scorecard",
+				"supplier": supplier_doc.name,
+				"period": "Per Month",
+				"criteria": [{'criteria_name': criteria.name, "weight": 100}],
+				"standings": [
+					{"min_grade": 0, "max_grade": 49, "standing": "Poor"},
+					{"min_grade": 49, "max_grade": 74, "standing": "Average"},
+					{"min_grade": 74, "max_grade": 100, "standing": "Excellent"},
+				]
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
+
+		result = make_supplier_scorecard(scorecard.name)
+		self.assertEqual(result.doctype, "Supplier Scorecard Period")
+		self.assertIsNotNone(result.variables)
