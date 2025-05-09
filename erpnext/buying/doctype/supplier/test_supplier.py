@@ -167,7 +167,7 @@ class TestSupplier(FrappeTestCase):
             }]
         }).insert(ignore_permissions=True)
 
-	def test_get_supplier_primary_contact(self):
+	def test_get_supplier_primary_contact_TC_B_181(self):
 		from erpnext.buying.doctype.supplier.supplier import get_supplier_primary_contact
 		results = get_supplier_primary_contact(
 		doctype="Contact",
@@ -181,7 +181,7 @@ class TestSupplier(FrappeTestCase):
 		self.assertTrue(results)
 		self.assertIn(self.contact.name, results[0])
 
-	def test_create_primary_contact(self):
+	def test_create_primary_contact_TC_B_182(self):
 		supplier = frappe.get_doc({
             "doctype": "Supplier",
             "supplier_name": "Test Supplier",
@@ -199,7 +199,7 @@ class TestSupplier(FrappeTestCase):
 		self.assertEqual(supplier.mobile_no, "1234567890")
 		self.assertEqual(supplier.email_id, "test@example.com")
 
-	def test_create_primary_address(self):
+	def test_create_primary_address_TC_B_183(self):
 			supplier = frappe.get_doc({
 				"doctype": "Supplier",
 				"supplier_name": "Test Supplier",
@@ -220,7 +220,7 @@ class TestSupplier(FrappeTestCase):
 			self.assertIsNotNone(supplier.primary_address)
 			self.assertIn("Testt", supplier.primary_address)
 
-	def test_after_rename(self):
+	def test_after_rename_TC_B_184(self):
 		supplier = frappe.get_doc({
 			"doctype": "Supplier",
 			"supplier_name": "Original Name",
@@ -237,7 +237,7 @@ class TestSupplier(FrappeTestCase):
 		self.assertEqual(renamed.name, new_name)
 		self.assertEqual(renamed.supplier_name, new_name)
 
-	def test_on_trash(self):
+	def test_on_trash_TC_B_185(self):
 		supplier = frappe.get_doc({
 			"doctype": "Supplier",
 			"supplier_name": "Test Trash Supplier",
@@ -256,7 +256,7 @@ class TestSupplier(FrappeTestCase):
 
 		self.assertFalse(frappe.db.exists("Supplier", supplier.name))
 
-	def test__add_supplier_role(self):
+	def test__add_supplier_role_TC_B_186(self):
 		from frappe.utils import random_string
 
 		user_email = f"test_supplier_{random_string(5)}@example.com"

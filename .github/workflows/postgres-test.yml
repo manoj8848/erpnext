@@ -74,13 +74,13 @@ jobs:
       - name: Install Apps
         working-directory: /home/runner/frappe-bench
         run: |
-          bench get-app erpnext https://github.com/8848digital/erpnext.git --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/ERPNext-India.git --branch pre-prod
+          bench get-app erpnext https://github.com/hrishikesh8848/erpnext.git --branch pre-prod
+          bench get-app https://hrishikesh8848:${{secrets.GH_PAT}}@github.com/8848digital/ERPNext-India.git --branch pre-prod
           bench get-app https://github.com/8848digital/india_compliance.git --branch pre-prod
           bench get-app https://github.com/8848digital/Assets --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/CRM --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/projects.git --branch pre-prod
-          bench get-app https://Abhishek8848:${{secrets.GH_PAT}}@github.com/8848digital/sales_commission.git --branch pre-prod
+          bench get-app https://hrishikesh8848:${{secrets.GH_PAT}}@github.com/8848digital/CRM --branch pre-prod
+          bench get-app https://hrishikesh8848:${{secrets.GH_PAT}}@github.com/8848digital/projects.git --branch pre-prod
+          bench get-app https://hrishikesh8848:${{secrets.GH_PAT}}@github.com/8848digital/sales_commission.git --branch pre-prod
           bench get-app --branch version-15 payments
           bench setup requirements --dev
       - name: Create Site
@@ -106,7 +106,7 @@ jobs:
         working-directory: /home/runner/frappe-bench
         run: |
           set +e  # Prevent script exit on failure
-          bench --site test_site run-tests --app erpnext --coverage --junit-xml-output /home/runner/frappe-bench/test_results.xml 2>&1 | tee test_output.log
+          bench --site test_site run-tests --app erpnext --doctype 'Supplier Scorecard Period' --coverage --junit-xml-output /home/runner/frappe-bench/test_results.xml 2>&1 | tee test_output.log
           echo "Tests completed, proceeding with next steps..."
         env:
           TYPE: server

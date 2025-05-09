@@ -2,7 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 
-import frappe
+import frappe 
 import frappe.defaults
 from frappe import _, msgprint
 from frappe.contacts.address_and_contact import (
@@ -14,22 +14,22 @@ from frappe.model.naming import set_name_by_naming_series, set_name_from_naming_
 from erpnext.accounts.party import (
 	get_dashboard_info,
 	validate_party_accounts,
-)
+) 
 from erpnext.controllers.website_list_for_contact import add_role_for_portal_user
 from erpnext.utilities.transaction_base import TransactionBase
 
 
-class Supplier(TransactionBase):
+class Supplier(TransactionBase): 
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import AllowedToTransactWith
 		from erpnext.accounts.doctype.party_account.party_account import PartyAccount
 		from erpnext.utilities.doctype.portal_user.portal_user import PortalUser
-		from frappe.types import DF
+		from frappe.types import DF 
 
 		accounts: DF.Table[PartyAccount]
 		allow_purchase_invoice_creation_without_purchase_order: DF.Check
@@ -38,12 +38,12 @@ class Supplier(TransactionBase):
 		country: DF.Link | None
 		default_bank_account: DF.Link | None
 		default_currency: DF.Link | None
-		default_price_list: DF.Link | None
+		default_price_list: DF.Link | None 
 		disabled: DF.Check
 		email_id: DF.ReadOnly | None
 		hold_type: DF.Literal["", "All", "Invoices", "Payments"]
 		image: DF.AttachImage | None
-		is_frozen: DF.Check
+		is_frozen: DF.Check 
 		is_internal_supplier: DF.Check
 		is_transporter: DF.Check
 		language: DF.Link | None

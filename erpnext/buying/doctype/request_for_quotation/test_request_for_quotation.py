@@ -162,6 +162,118 @@ class TestRequestforQuotation(FrappeTestCase):
 		supplier_doc.reload()
 		self.assertTrue(supplier_doc.portal_users[0].user)
 
+	def setUp(self):
+		# Create dummy supplier
+		self.supplier = frappe.get_doc({
+			"doctype": "Supplier",
+			"supplier_name": "Test",
+			"supplier_type": "Company"
+		}).insert(ignore_if_duplicate=True)
+
+		item = make_item("Test", {"stock_uom": "Nos"})
+		self.rfq = make_request_for_quotation(item_code=item.name, supplier_data=[
+				{
+					"supplier": self.supplier.name,
+					"supplier_name": self.supplier.supplier_name,
+					"email_id": "123_testrfquser@example.com",
+				}
+			],)
+
+	def test_send_supplier_emails_runs(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import send_supplier_emails
+		send_supplier_emails(self.rfq.name)
+
+		communications = frappe.get_all("Communication", filters={
+			"reference_doctype": "Request for Quotation",
+			"reference_name": self.rfq.name
+		})
+		print('rfq_name', self.rfq.name)
+		self.assertGreaterEqual(len(communications), 1)
+
+	def test_get_supplier_email_preview(self):
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item = make_item(item_code, {"stock_uom": "Nos"})
+		supplier_doc = frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": "Test Supplier for RFQ",
+				"supplier_group": "_Test Supplier Group",
+			}
+		).insert()
+		rfq = make_request_for_quotation(item_code = item_code, supplier_data=[
+				{
+					"supplier": supplier_doc.name,
+					"supplier_name": supplier_doc.supplier_name,
+					"email_id": "testrfquser@example.com",
+				}
+			])
+		preview = rfq.get_supplier_email_preview(supplier_doc.name)
+        
+		self.assertIn("Dear", preview)
+		self.assertIn("testrfquser@example.com", preview)
+
+	def test_get_supplier_tag(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import get_supplier_tag
+		tags = get_supplier_tag()
+		self.assertIsInstance(tags, list)
+
+	def test_get_rfq_containing_supplier(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import get_rfq_containing_supplier
+
+		filters = {
+			"company": self.rfq.company,
+			"supplier": self.supplier.name,
+			"transaction_date": self.rfq.transaction_date
+		}
+
+		rfqs = get_rfq_containing_supplier("Request for Quotation", "", "name", 0, 10, filters)
+
+		self.assertTrue(any(r["name"] == self.rfq.name for r in rfqs))
+
+	def test_get_list_context_coverage(self):
+		from erpnext.buying.doctype.request_for_quotation.request_for_quotation import get_list_context
+
+		context = get_list_context()
+		self.assertEqual(context["title"], "Request for Quotation")
+		self.assertTrue(context["show_sidebar"])
+		self.assertTrue(context["no_breadcrumbs"])
+
+	def test_supplier_rfq_mail(self):
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item = make_item(item_code, {"stock_uom": "Nos"})
+		supplier_doc = frappe.get_doc(
+			{
+				"doctype": "Supplier",
+				"supplier_name": "Test Supplier1",
+			}
+		).insert()
+		rfq = make_request_for_quotation(item_code = item_code, supplier_data=[
+				{
+					"supplier": supplier_doc.name,
+					"supplier_name": supplier_doc.supplier_name,
+					"email_id": "testrfquser@example.com",
+				}
+			], do_not_submit=True)
+		rfq.email_template = "Dispatch Notification"
+
+		data = {
+			"supplier": "Test Supplier",
+			"supplier_name": "Test Supplier1",
+			"contact": None
+		}
+
+		update_password_link = "http://example.com/set-password"
+		rfq_link = "http://example.com/submit-quotation"
+
+		preview = rfq.supplier_rfq_mail(data, update_password_link, rfq_link, preview=True)
+		print('preview', rfq.name, rfq.email_template)
+
+		self.assertIn("Test Supplier1", preview["message"])
+		self.assertIn("Set Password", preview["message"])
+		self.assertIn("Test Supplier Name", preview["subject"])
+		
 
 def make_request_for_quotation(**args) -> "RequestforQuotation":
 	"""
