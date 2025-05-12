@@ -7,6 +7,8 @@ from frappe.utils import add_days, now
 from frappe.tests.utils import FrappeTestCase
 
 from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+from erpnext.buying.doctype.supplier_scorecard_variable.test_supplier_scorecard_variable import score_card
+from erpnext.buying.doctype.supplier_scorecard.supplier_scorecard import get_timeline_data, refresh_scorecards
 
 class TestSupplierScorecard(FrappeTestCase):
 	def tearDown(self):
@@ -35,9 +37,7 @@ class TestSupplierScorecard(FrappeTestCase):
 		my_doc.standings = ""
 		self.assertRaises(frappe.ValidationError, my_doc.save)
 
-	def test_timeline_data(self):
-		from ..supplier_scorecard_variable.test_supplier_scorecard_variable import score_card
-		from .supplier_scorecard import get_timeline_data, refresh_scorecards
+	def test_timeline_data_TC_B_192(self):
 		sscp = score_card()
 		sscp.submit()
 		get_data = get_timeline_data("Supplier Scorecard", sscp.scorecard)
