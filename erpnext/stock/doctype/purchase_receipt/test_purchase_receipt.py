@@ -5331,11 +5331,13 @@ class TestPurchaseReceipt(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 		# === Setup ===
-		company = frappe.get_doc("Company", "_Test Company")
-		company.enable_perpetual_inventory = 1
-		company.enable_provisional_accounting_for_non_stock_items = 1
-		company.default_provisional_account = "Cost of Goods Sold - _TC"
-		company.save()
+		company = setup_test_company_defaults()
+
+		# company = frappe.get_doc("Company", "_Test Company")
+		# company.enable_perpetual_inventory = 1
+		# company.enable_provisional_accounting_for_non_stock_items = 1
+		# company.default_provisional_account = "Cost of Goods Sold - _TC"
+		# company.save()
 
 		self.gl_entries = []
 		item = frappe.get_doc("Item", "_Test Item")
@@ -5345,7 +5347,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		pi = frappe.get_doc({
 			"doctype": "Purchase Invoice",
 			"supplier": "_Test Supplier",
-			"company": "_Test Company",
+			"company": company.name,
 			"posting_date": nowdate(),
 			"due_date": add_days(nowdate(), 10),
 			"items": [{
@@ -5408,7 +5410,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		new_warehouse = frappe.get_doc({
 			"doctype": "Warehouse",
 			"warehouse_name": "No Account Warehouse",
-			"company": "_Test Company",
+			"company": company.name,
 		}).insert()
 
 		pr3 = make_purchase_receipt(
@@ -5487,6 +5489,82 @@ class TestPurchaseReceipt(FrappeTestCase):
 		item_valuation = frappe.db.get_value("Purchase Receipt Item", pr.items[0].name, "valuation_rate")
 		self.assertEqual(flt(item_valuation), 120)
 		self.assertEqual(pr.doctype, "Purchase Receipt")
+
+def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"):
+	from frappe.defaults import set_default
+
+	# Create Company if it doesn't exist
+	if not frappe.db.exists("Company", company_name):
+		frappe.get_doc({
+			"doctype": "Company",
+			"company_name": company_name,
+			"abbr": abbreviation,
+			"default_currency": "INR",
+			"country": "India",
+			"chart_of_accounts": "Standard"
+		}).insert()
+
+	company = frappe.get_doc("Company", company_name)
+
+	# Create root account group if needed
+	if not frappe.db.exists("Account", f"Application of Funds - {abbreviation}"):
+		account = frappe.get_doc({
+		"doctype": "Account",
+		"account_name": "Application of Funds",
+		"company": company_name,
+		"root_type": "Asset",
+		"is_group": 1
+		})
+		account.insert(ignore_mandatory=True)
+
+	# Account helper
+	def ensure_account(name, root_type="Asset"):
+		full_name = f"{name} - {abbreviation}"
+		if not frappe.db.exists("Account", full_name):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": name,
+				"company": company_name,
+				"root_type": root_type,
+				"parent_account": f"Application of Funds - {abbreviation}",
+				"is_group": 0
+			}).insert()
+		return full_name
+
+	# Required Accounts
+	accounts = {
+		"default_receivable_account": ensure_account("Debtors", "Asset"),
+		"default_payable_account": ensure_account("Creditors", "Liability"),
+		"default_income_account": ensure_account("Sales", "Income"),
+		"default_expense_account": ensure_account("Cost of Goods Sold", "Expense"),
+		"stock_received_but_not_billed": ensure_account("Stock Received But Not Billed", "Liability"),
+		"default_cash_account": ensure_account("Cash", "Asset"),
+		"default_bank_account": ensure_account("Bank", "Asset"),
+		"default_inventory_account": ensure_account("Stock Asset", "Asset"),
+		"default_provisional_account": ensure_account("Cost of Goods Sold", "Expense"),
+	}
+
+	# Default Cost Center
+	if not frappe.db.exists("Cost Center", f"Main - {abbreviation}"):
+		frappe.get_doc({
+			"doctype": "Cost Center",
+			"cost_center_name": "Main",
+			"is_group": 0,
+			"company": company_name
+		}).insert()
+
+	accounts["default_cost_center"] = f"Main - {abbreviation}"
+
+	for field, value in accounts.items():
+		company.set(field, value)
+
+	company.enable_perpetual_inventory = 1
+	company.enable_provisional_accounting_for_non_stock_items = 1
+	company.save()
+
+	set_default("company", company_name, "__default")
+
+	return company
 
 def prepare_data_for_internal_transfer():
 	from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_internal_supplier
