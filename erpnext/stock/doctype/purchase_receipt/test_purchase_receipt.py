@@ -5345,8 +5345,14 @@ class TestPurchaseReceipt(FrappeTestCase):
 				warehouse=warehouse,
 				company=company.name,
 				supplier="_Test Supplier",
-				do_not_submit=False
+				do_not_submit=True
 			)
+		pi.posting_date=today()
+		pi.due_date = today()
+		pi.set_missing_values()
+		pi.flags.ignore_validate = True
+		pi.save()
+		pi.submit()
 
 		pr1 = make_purchase_receipt(
 			item_code=item.name,
@@ -5440,11 +5446,16 @@ class TestPurchaseReceipt(FrappeTestCase):
 		qty=3,
 		rate=100,
 		warehouse=pr_item.warehouse,
-		do_not_submit=True
+		do_not_submit=True,
+		company=pr_doc.company,
+		supplier=pr_doc.supplier,
+		currency="INR",
+		conversion_rate=1
 		)
 		# Link invoice item to Purchase Receipt
 		pi.items[0].purchase_receipt = pr_doc.name
 		pi.items[0].pr_detail = pr_item.name
+		pi.set_missing_values()
 		pi.save()
 		pi.submit()
 
