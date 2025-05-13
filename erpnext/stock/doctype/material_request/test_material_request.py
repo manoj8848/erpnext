@@ -7662,7 +7662,7 @@ class TestMaterialRequest(FrappeTestCase):
 				"item_code": item,
 				"qty": 10,
 				"schedule_date": frappe.utils.add_days(frappe.utils.nowdate(), 5),
-				"warehouse": frappe.get_all("Warehouse",{'company':'_Test Indian Registered Company'}, limit=1)[0].name,
+				"warehouse": frappe.get_all("Warehouse",{'company':frappe.defaults.get_user_default("Company")}, limit=1)[0].name,
 				"production_plan": production_plan.name,
 				"material_request_plan_item": material_request_plan_item_name
 			}]
