@@ -5538,6 +5538,136 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(flt(item_valuation), 120)
 		self.assertEqual(pr.doctype, "Purchase Receipt")
 
+	def test_update_billed_amount_based_on_po_07(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import update_billed_amount_based_on_po
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+
+		frappe.set_user("Administrator")
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		fiscal_year, expense_account, cost_center = setup_fy_gls_cost_center()
+
+		# Create PO for 10 qty
+		po = create_purchase_order(item_code=item_code, qty=10, rate=100, company=company.name,
+								supplier=supplier.name, warehouse=warehouse, do_not_submit=False)
+		po_item = po.items[0]
+
+		# Create 2 PRs: one for 6, one for 4
+		pr1 = make_purchase_receipt(purchase_order=po.name, item_code=item_code, qty=6, rate=100,
+								uom="Nos", stock_uom='Nos', company=company.name, warehouse=warehouse,
+								supplier=supplier.name, do_not_submit=False)
+		pr2 = make_purchase_receipt(purchase_order=po.name, item_code=item_code, qty=4, rate=100,
+								uom="Nos", stock_uom='Nos', company=company.name, warehouse=warehouse,
+								supplier=supplier.name, do_not_submit=False)
+
+		# Explicitly set purchase_order_item in PR items
+		for pr in [pr1, pr2]:
+			for item in pr.items:
+				frappe.db.set_value("Purchase Receipt Item", item.name, "purchase_order_item", po_item.name)
+
+		pi1 = make_purchase_invoice(
+        purchase_order=po.name,
+        purchase_receipt=pr1.name,
+        pr_detail=pr1.items[0].name,
+        item_code=item_code,
+        qty=3,
+        rate=100,
+        uom="Nos",
+        stock_uom='Nos',
+        company=company.name,
+        warehouse=warehouse,
+        supplier=supplier.name,
+        expense_account=expense_account,
+        cost_center=cost_center,
+        do_not_submit=True,
+		)
+		for item in pi1.items:
+			item.po_detail = po_item.name
+		pi1.save()
+		pi1.submit()
+		pi1.submit() 
+		pi2 = make_purchase_invoice(
+			purchase_order=po.name,
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			uom="Nos",
+			stock_uom='Nos',
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			expense_account=expense_account,
+			cost_center=cost_center,
+			do_not_submit=True,
+		)
+		for item in pi2.items:
+			item.po_detail = po_item.name
+		pi2.save()
+		pi2.submit()
+
+		po.reload()
+		pr1.reload()
+		pr2.reload()
+
+		# Verify initial billed amounts
+		self.assertEqual(po.items[0].billed_amt, 800.0)  # (3 + 5) * 100
+
+		# Force update PO billed amount
+		frappe.db.set_value("Purchase Order Item", po_item.name, "billed_amt", 800)
+
+		# Debug: Check PR items linked to PO
+		pr_items = frappe.get_all("Purchase Receipt Item",
+								filters={"purchase_order_item": po_item.name},
+								fields=["name", "parent", "purchase_order_item"])
+		print("PR Items linked to PO:", pr_items)
+
+		# Trigger update logic
+		po_details = [po_item.name]
+		update_billed_amount_based_on_po(po_details, update_modified=True)
+
+		# Reload PRs to get updated billed amounts
+		pr1.reload()
+		pr2.reload()
+
+		# Verify billed amounts
+		# PR1: 3 qty billed against PR + portion of 5 qty direct billed (proportional to PR qty)
+		# Total billed against PO: 800 (3*100 + 5*100)
+		# PR1 should have: 300 (direct) + (5*100 * 6/10) = 300 + 300 = 600
+		# PR2 should have: 0 (direct) + (5*100 * 4/10) = 200
+		self.assertEqual(pr1.items[0].billed_amt, 600.0)
+		self.assertEqual(pr2.items[0].billed_amt, 200.0)
+
+		# Reset billed amounts for second test
+		frappe.db.set_value("Purchase Receipt Item", pr1.items[0].name, "billed_amt", 0)
+		frappe.db.set_value("Purchase Receipt Item", pr2.items[0].name, "billed_amt", 0)
+
+		# Test 2: Update with pr_doc
+		# test pr1 only
+		pr1_doc = frappe.get_doc("Purchase Receipt", pr1.name)
+		updated = update_billed_amount_based_on_po(po_details, update_modified=True, pr_doc=pr1_doc)
+		
+		# Verify only pr1 was updated (since we passed pr_doc)
+		self.assertIn(pr1.name, updated)
+
+		# Verify billed amounts
+		pr1.reload()
+		pr2.reload()
+		self.assertEqual(pr1.items[0].billed_amt, 600.0)
+
+		# Finally update pr2 separately
+		pr2_doc = frappe.get_doc("Purchase Receipt", pr2.name)
+		update_billed_amount_based_on_po(po_details, update_modified=True, pr_doc=pr2_doc)
+		pr2.reload()
+		self.assertEqual(pr2.items[0].billed_amt, 200.0)
 def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"):
 	from frappe.defaults import set_default
 
