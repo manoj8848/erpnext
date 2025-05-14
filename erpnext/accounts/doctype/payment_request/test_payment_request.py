@@ -14,7 +14,10 @@ from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_orde
 from erpnext.setup.utils import get_exchange_rate
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 from erpnext.buying.doctype.supplier.test_supplier import create_supplier
-from erpnext.stock.doctype.item.test_item import make_item
+from erpnext.stock.doctype.item.test_item import create_item
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+from erpnext.accounts.doctype.account.test_account import create_account
 
 test_dependencies = ["Currency Exchange", "Journal Entry", "Contact", "Address"]
 payment_gateway = {"doctype": "Payment Gateway", "gateway": "_Test Gateway"}
@@ -551,25 +554,40 @@ class TestPaymentRequest(FrappeTestCase):
 		pr_2 = make_payment_request(dt="Purchase Invoice", dn=pi.name, mute_email=1)
 		pi.load_from_db()
 		self.assertEqual(pr_2.grand_total, pi.outstanding_amount)
-
+	
 	def test_validate_payment_request_amount(self):
-		supplier = create_supplier(supplier_name="_Test Supplier", default_currency="INR")
-		item = make_item("_Test Item").name
+		create_company()
+		item_code = "_Test Item"
+		company = "_Test Company"
+		supplier = "_Test Supplier"
+		create_warehouse(
+			warehouse_name="_Test Warehouse - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC", "account": "Cost of Goods Sold - _TC"},
+			company="_Test Company",
+		)
+		create_supplier(supplier_name=supplier, default_currency="INR")
+		item = create_item(item_code = item_code,valuation_rate=100)
 		pi = frappe.new_doc("Purchase Invoice")
-		pi.supplier = supplier.name
-		pi.currency = "INR"
+		pi.supplier = supplier
+		pi.company=company
+		pi.currency="INR"
 		pi.append("items", {
-			"item_code": item,
+			"item_code": item.item_code,
 			"qty": 2,
 			"rate": 50
 		})
 		pi.save()
 		pi.submit()
-		pr_1 = make_payment_request(
+		self.assertEqual(pi.supplier, supplier)
+		self.assertEqual(pi.company, company)
+		self.assertEqual(pi.items[0].item_code, item.item_code)
+		self.assertEqual(pi.grand_total, 100)
+
+		pr = make_payment_request(
 			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
 		)
-		pr_1.grand_total = 0
-		pr_1.save()
+		pr.grand_total = 0
+		pr.save()
 
 	def test_validate_reference_document(self):
 		pr = frappe.new_doc("Payment Request")
@@ -577,7 +595,137 @@ class TestPaymentRequest(FrappeTestCase):
 		pr.reference_doctype = ""
 		pr.reference_name = ""
 		pr.grand_total = 500
+		self.assertEqual(pr.reference_doctype, "")
+		self.assertEqual(pr.reference_name, "")
 		pr.save()
+
+	def test_validate_payment_entry_already_created(self):
+		create_company()
+		item_code = "_Test Item"
+		company = "_Test Company"
+		supplier = "_Test Supplier"
+		create_warehouse(
+			warehouse_name="_Test Warehouse - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC", "account": "Cost of Goods Sold - _TC"},
+			company="_Test Company",
+		)
+		create_supplier(supplier_name=supplier, default_currency="INR")
+		item = create_item(item_code = item_code,valuation_rate=100)
+		pi = frappe.new_doc("Purchase Invoice")
+		pi.supplier = supplier
+		pi.company=company
+		pi.currency="INR"
+		pi.append("items", {
+			"item_code": item.item_code,
+			"qty": 2,
+			"rate": 50
+		})
+		pi.save()
+		pi.submit()
+		self.assertEqual(pi.supplier, supplier)
+		self.assertEqual(pi.company, company)
+		self.assertEqual(pi.items[0].item_code, item.item_code)
+		self.assertEqual(pi.grand_total, 100)
+		pr = make_payment_request(
+			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
+		)
+		pr.grand_total = 100
+		pr.save()
+		pr.submit()
+		self.assertEqual(pr.grand_total, 100)
+		self.assertEqual(pr.reference_name, pi.name)
+		create_account(
+		account_name="_Test Bank",  
+		parent_account="Bank Accounts - _TC", 
+		company=company,
+		account_type="Bank",
+		account_currency="INR",
+		is_group=0
+		)
+		pr.create_payment_entry(submit=False)
+		pe = get_payment_entry(dt="Purchase Invoice", dn=pi.name)
+		pe.paid_amount = 100
+		pe.append(
+			"references",
+			{
+				"reference_doctype": pi.doctype,
+				"reference_name": pi.name,
+				"grand_total": pi.grand_total,
+				"outstanding_amount": pi.outstanding_amount,
+				"allocated_amount": 100,
+			},
+		)
+		self.assertEqual(pe.paid_amount, 100)
+		self.assertEqual(pe.references[0].reference_name, pi.name)
+		pr = make_payment_request(
+			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
+		)
+		pr.save()
+
+	def test_validate_exisiting_payment_request_amount(self):
+		create_company()
+		item_code = "_Test Item"
+		company = "_Test Company"
+		supplier = "_Test Supplier"
+		create_warehouse(
+			warehouse_name="_Test Warehouse - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC", "account": "Cost of Goods Sold - _TC"},
+			company="_Test Company",
+		)
+		create_supplier(supplier_name=supplier, default_currency="INR")
+		item = create_item(item_code = item_code,valuation_rate=100)
+		pi = frappe.new_doc("Purchase Invoice")
+		pi.supplier = supplier
+		pi.company=company
+		pi.currency="INR"
+		pi.append("items", {
+			"item_code": item.item_code,
+			"qty": 2,
+			"rate": 100
+		})
+		pi.save()
+		pi.submit()
+		self.assertEqual(pi.supplier, supplier)
+		self.assertEqual(pi.company, company)
+		self.assertEqual(pi.items[0].item_code, item.item_code)
+		self.assertEqual(pi.grand_total, 200)
+		pr = make_payment_request(
+			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
+		)
+		pr.grand_total = 100
+		pr.save()
+		pr.submit()
+		self.assertEqual(pr.grand_total, 100)
+		self.assertEqual(pr.reference_name, pi.name)
+		create_account(
+		account_name="_Test Bank",  
+		parent_account="Bank Accounts - _TC", 
+		company=company,
+		account_type="Bank",
+		account_currency="INR",
+		is_group=0
+		)
+		pr.create_payment_entry(submit=False)
+		pe = get_payment_entry(dt="Purchase Invoice", dn=pi.name)
+		pe.paid_amount = 100
+		pe.append(
+			"references",
+			{
+				"reference_doctype": pi.doctype,
+				"reference_name": pi.name,
+				"grand_total": pi.grand_total,
+				"outstanding_amount": pi.outstanding_amount,
+				"allocated_amount": 100,
+			},
+		)
+		self.assertEqual(pe.paid_amount, 100)
+		self.assertEqual(pe.references[0].reference_name, pi.name)
+		pr = make_payment_request(
+			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
+		)
+		pr.grand_total = 200
+		pr.save()
+
 
 	def test_consider_journal_entry_and_return_invoice(self):
 		from erpnext.accounts.doctype.journal_entry.test_journal_entry import make_journal_entry
