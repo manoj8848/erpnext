@@ -552,21 +552,37 @@ class SellingController(StockController):
 					self.doctype, self.name, d.item_code, self.return_against, item_row=d
 				)
 
-	def update_stock_ledger(self, allow_negative_stock=False):
+	def update_stock_ledger(self):
+		self.update_reserved_qty()
+
 		sl_entries = []
-		finished_item_row = self.get_finished_item_row()
+		# Loop over items and packed items table
+		for d in self.get_item_list():
+			if frappe.get_cached_value("Item", d.item_code, "is_stock_item") == 1 and flt(d.qty):
+				if flt(d.conversion_factor) == 0.0:
+					d.conversion_factor = (
+						get_conversion_factor(d.item_code, d.uom).get("conversion_factor") or 1.0
+					)
 
-		# make sl entries for source warehouse first
-		self.get_sle_for_source_warehouse(sl_entries, finished_item_row)
+				# On cancellation or return entry submission, make stock ledger entry for
+				# target warehouse first, to update serial no values properly
 
-		# SLE for target warehouse
-		self.get_sle_for_target_warehouse(sl_entries, finished_item_row)
+				if d.warehouse and (
+					(not cint(self.is_return) and self.docstatus == 1)
+					or (cint(self.is_return) and self.docstatus == 2)
+				):
+					sl_entries.append(self.get_sle_for_source_warehouse(d))
 
-		# reverse sl entries if cancel
-		if self.docstatus == 2:
-			sl_entries.reverse()
+				if d.target_warehouse:
+					sl_entries.append(self.get_sle_for_target_warehouse(d))
 
-		self.make_sl_entries(sl_entries, allow_negative_stock=allow_negative_stock)
+				if d.warehouse and (
+					(not cint(self.is_return) and self.docstatus == 2)
+					or (cint(self.is_return) and self.docstatus == 1)
+				):
+					sl_entries.append(self.get_sle_for_source_warehouse(d))
+
+		self.make_sl_entries(sl_entries)
 
 	def get_sle_for_source_warehouse(self, item_row):
 		serial_and_batch_bundle = (

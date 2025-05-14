@@ -284,7 +284,6 @@ class TestSupplier(FrappeTestCase):
 		roles = [r.role for r in user.roles]
 		self.assertIn("Supplier", roles)
 
-
 def create_supplier(**args):
 	args = frappe._dict(args)
 

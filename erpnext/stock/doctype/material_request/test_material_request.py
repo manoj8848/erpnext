@@ -32,6 +32,7 @@ from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_r
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_invoice
 from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_invoice as create_purchase_invoice
 from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 
 class TestMaterialRequest(FrappeTestCase):
 	def test_make_purchase_order(self):
@@ -1332,6 +1333,7 @@ class TestMaterialRequest(FrappeTestCase):
 		
 	def test_mr_pi_TC_B_009(self):
 		# MR =>  PO => PR => 2PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1356,6 +1358,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_010(self):
 		# MR =>  PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1380,6 +1383,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_011(self):
 		# MR =>  2PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1403,6 +1407,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_013(self):
 		# 2MR =>  2PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1441,6 +1446,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_012(self):
 		# 2MR =>  1PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1481,6 +1487,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_014(self):
 		# 2MR =>  2PO => 2PR => 1PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -1519,6 +1526,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_pi_TC_B_015(self):
 		# MR => RFQ => SQ => PO => 1PR => 2PI
+		item = make_test_item("Testing-31")
 
 		mr_dict_list = [{
 				"company" : "_Test Company",
@@ -1569,6 +1577,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_016(self):
 		# MR => RFQ => SQ => PO => PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1600,6 +1609,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pr_TC_B_017(self):
 		# MR => RFQ => SQ => PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1630,6 +1640,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pr_TC_B_018(self):
 		# MR => RFQ => 2SQ => 2PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1661,6 +1672,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pr_TC_B_019(self):
 		# MR => 2RFQ => 2SQ => 2PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1692,6 +1704,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_020(self):
 		# MR => 2RFQ => 1SQ => 2PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1716,6 +1729,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"item_code" : "Testing-31",
 			"qty" : 20,
 			"rate" : 200,
+			"warehouse" : "Stores - _TC",
 			"request_for_quotation" : rfq_name_list[1]
 		}
 		doc_sq= make_test_sq(rfq_name_list[0], 100, item_dict = item_dict_sq)
@@ -1733,6 +1747,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_021(self):
 		# MR => 2RFQ => 2SQ => 1PO => 2PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1759,6 +1774,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"item_code" : "Testing-31",
 			"qty" : 10,
 			"rate" : 100,
+			"warehouse" : "Stores - _TC",
 			"supplier_quotation" : sq_name_list[1],
 			"material_request": doc_mr.name
 		}
@@ -1772,6 +1788,7 @@ class TestMaterialRequest(FrappeTestCase):
 				"item_code" : "Testing-31",
 				"qty" : pr_received_qty[index],
 				"rate" : 100,
+				"warehouse" : "Stores - _TC",
 				"purchase_order" : doc_po.name,
 				"material_request": doc_mr.name
 			}
@@ -1787,6 +1804,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_022(self):
 		# MR => 2RFQ => 2SQ => 2PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1814,6 +1832,7 @@ class TestMaterialRequest(FrappeTestCase):
 			"item_code" : "Testing-31",
 			"qty" : 10,
 			"rate" : 100,
+			"warehouse" : "Stores - _TC",
 			"purchase_order" : po_name_list[1],
 			"material_request": doc_mr.name,
 		}
@@ -1825,6 +1844,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_026(self):
 		# 2MR => 2RFQ => 2SQ => 1PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -2276,6 +2296,7 @@ class TestMaterialRequest(FrappeTestCase):
 	
 	def test_mr_to_partial_pi_TC_B_027(self):
 		# 2MR => 2RFQ => 2SQ => 2PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -2323,6 +2344,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_028(self):
 		# 2MR => 2RFQ => 2SQ => 2PO => 2PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -2371,6 +2393,7 @@ class TestMaterialRequest(FrappeTestCase):
 	
 	def test_mr_to_partial_pi_TC_B_029(self):
 		# 1MR => 1RFQ => 1SQ => 1PO => 1PR => 2PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -2613,6 +2636,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_024(self):
 		# 2MR => 1RFQ => 1SQ => 1PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [
 			{
@@ -2661,6 +2685,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_to_partial_pi_TC_B_025(self):
 		# 2MR => 2RFQ => 1SQ => 1PO => 1PR => 1PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [
 			{
@@ -3167,6 +3192,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_pi_TC_SCK_082(self):
 		# MR =>  PO => PI
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -3327,6 +3353,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_pi_cancel_TC_SCK_086(self):
 		# MR =>  PO => PI => PI Cancel
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -3372,6 +3399,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_2pi_cancel_TC_SCK_087(self):
 		# MR =>  PO => 2PI => 2PI cancel
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -3838,6 +3866,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_pi_return_TC_SCK_090(self):
 		# MR =>  PO => PI => Return
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -3885,6 +3914,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_2pi_return_TC_SCK_101(self):
 		# MR =>  PO => 2PI => 2PI return
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -4075,6 +4105,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_pi_partial_return_TC_SCK_104(self):
 		# MR =>  PO => PI => Return
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -4123,6 +4154,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_2pi_partial_return_TC_SCK_105(self):
 		# MR =>  PO => 2PI => 2PI return
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -4284,6 +4316,7 @@ class TestMaterialRequest(FrappeTestCase):
 
 	def test_mr_po_2pr_partial_return_TC_SCK_041(self):
 		# MR =>  PO => 2PR => PR return
+		item = make_test_item("Testing-31")
 		mr_dict_list = [{
 				"company" : "_Test Company",
 				"item_code" : "Testing-31",
@@ -7662,7 +7695,7 @@ class TestMaterialRequest(FrappeTestCase):
 				"item_code": item,
 				"qty": 10,
 				"schedule_date": frappe.utils.add_days(frappe.utils.nowdate(), 5),
-				"warehouse": frappe.get_all("Warehouse", limit=1)[0].name,
+				"warehouse": frappe.get_all("Warehouse",{'company':frappe.defaults.get_user_default("Company")}, limit=1)[0].name,
 				"production_plan": production_plan.name,
 				"material_request_plan_item": material_request_plan_item_name
 			}]

@@ -1296,6 +1296,7 @@ class TestPurchaseOrder(FrappeTestCase):
 
 	def test_mr_pi_TC_B_003(self):
 		# MR => RFQ => SQ => PO => PR => PI
+		item = make_test_item("Testing-31")
 		args = frappe._dict()
 		args['mr'] = [{
 				"company" : "_Test Company",
@@ -1856,6 +1857,7 @@ class TestPurchaseOrder(FrappeTestCase):
 		self.assertEqual(doc_pr.reference_name, doc_po.name)
 		self.assertEqual(doc_pr.grand_total, doc_po.grand_total)
 	def test_po_to_partial_pr_TC_B_031(self):
+		item = make_test_item("Testing-31")
 		po = frappe.get_doc({
 			"doctype": "Purchase Order",
 			"supplier": "_Test Supplier 1",

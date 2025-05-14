@@ -137,14 +137,20 @@ class TestDeliveryNote(FrappeTestCase):
 			item_create.is_stock_item = 0
 			item_create.is_fixed_asset = 0
 			item_create.save()
-
-		frappe.get_doc({
-			"doctype": "Bin",
-			"name": "TEST-BIN-001",
-			"item_code": item_code,
-			"warehouse": "Stores - _TC",
-			"actual_qty": 25
-		}).insert(ignore_if_duplicate=True, ignore_permissions=True)
+		
+		existing_bin = frappe.db.exists("Bin", {"item_code": item_code, "warehouse": "Stores - _TC"})
+		if existing_bin:
+			bin_doc = frappe.get_doc("Bin", existing_bin)
+			bin_doc.actual_qty = 25
+			bin_doc.save(ignore_permissions=True)
+		else:
+			frappe.get_doc({
+				"doctype": "Bin",
+				"name": "TEST-BIN-001",
+				"item_code": item_code,
+				"warehouse": "Stores - _TC",
+				"actual_qty": 25
+			}).insert(ignore_permissions=True)
 
 		so = make_sales_order(po_no="12345")
 		dn  = make_delivery_note(so.name)
