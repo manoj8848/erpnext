@@ -124,13 +124,17 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		else:
 			item = frappe.get_doc("Item", "Test Item")
 
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
+
 		assert serial_no.name == "MDC001"
 
 		# Create Batch for the item
@@ -279,13 +283,19 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		assert item.has_batch_no == 1
 
 		# Create serial number
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
+
+		assert serial_no.name == "MDC001"
+
 		assert serial_no.serial_no == "MDC001"
 		assert serial_no.item_code == item.name
 
@@ -460,13 +470,16 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		else:
 			item = frappe.get_doc("Item", "Test Item")
 
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
 
 		batch = frappe.get_doc({
 			"doctype": "Batch",
@@ -698,13 +711,16 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			item = frappe.get_doc("Item", "Test Item")
 
 		# Create Serial No
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
 
 		# Create Batch
 		batch = frappe.get_doc({
@@ -832,13 +848,16 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			item = frappe.get_doc("Item", "Test Item")
 
 		# Create Serial No for the item
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
 
 		# Create Batch for the item
 		batch = frappe.get_doc({
@@ -975,13 +994,16 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		assert frappe.db.exists("Item", "Test Item")
 
 		# Create Serial No for the item
-		serial_no = frappe.get_doc({
-			"doctype": "Serial No",
-			"serial_no": "MDC001",
-			"item_code": item.name,
-			"company": company,
-			"item_group": "Raw Material"
-		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
 		assert frappe.db.exists("Serial No", "MDC001")
 
 		# Create Batch for the item
@@ -1110,6 +1132,101 @@ class TestSerialandBatchBundle(FrappeTestCase):
 
 		# Check if the batch was created
 		self.assertTrue(frappe.db.exists("Batch", {"batch_id": batch_no}), "Batch was not created successfully")
+
+	# codecov
+	def test_is_serial_batch_no_exists_for_serial_no(self):
+		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import is_serial_batch_no_exists
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+		
+		type_of_transaction = "Maintenance"
+		serial_no = "MDC003"
+		# is_serial_batch_no_exists(item.name,type_of_transaction=type_of_transaction,serial_no=serial_no)
+		with self.assertRaises(frappe.ValidationError) as context:
+			is_serial_batch_no_exists(item_code=item.name,type_of_transaction=type_of_transaction,serial_no=serial_no)
+	
+	# codecov
+	def test_is_serial_batch_no_exists_for_batch_no(self):
+		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import is_serial_batch_no_exists
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+		
+		type_of_transaction = "Maintenance"
+		batch_no = "TEST-BATCH-003"
+		# is_serial_batch_no_exists(item.name,type_of_transaction=type_of_transaction,serial_no=serial_no)
+		with self.assertRaises(frappe.ValidationError) as context:
+			is_serial_batch_no_exists(item_code=item.name,type_of_transaction=type_of_transaction,batch_no=batch_no)
+
+	# codecov
+	def test_is_serial_batch_no_exists_for_serial_no_inward(self):
+		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import is_serial_batch_no_exists
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+		
+		type_of_transaction = "Inward"
+		serial_no = "MDC003"
+		# # is_serial_batch_no_exists(item.name,type_of_transaction=type_of_transaction,serial_no=serial_no)
+		# with self.assertRaises(frappe.ValidationError) as context:
+		is_serial_batch_no_exists(item_code=item.name,type_of_transaction=type_of_transaction,serial_no=serial_no)
+
+	# codecov
+	def test_is_serial_batch_no_exists_for_batch_no_inward(self):
+		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import is_serial_batch_no_exists
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+		
+		type_of_transaction = "Inward"
+		batch_no = "TEST-BATCH-003"
+		
+		is_serial_batch_no_exists(item_code=item.name,type_of_transaction=type_of_transaction,batch_no=batch_no)
 
 
 	def test_inward_outward_serial_valuation(self):

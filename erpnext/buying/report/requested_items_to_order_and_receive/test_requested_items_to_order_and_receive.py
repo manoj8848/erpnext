@@ -46,11 +46,6 @@ class TestRequestedItemsToOrderAndReceive(FrappeTestCase):
 		self.assertEqual(data[1].ordered_qty, 57.0)
 
 	def test_requested_items_TC_B_214(self):
-		self.filters.update(
-			{
-				"group_by_mr": 1
-			}
-		)
 		data = execute(self.filters)
 
 		self.assertEqual(len(data[1]), 2)
@@ -66,6 +61,23 @@ class TestRequestedItemsToOrderAndReceive(FrappeTestCase):
 		self.assertEqual(values_dict.get("Received Qty"), 0)
 		self.assertEqual(values_dict.get("Qty to Receive"), 114)
 
+		self.filters.update({"group_by_mr": 1})
+		data_1 = execute(self.filters)
+
+	def test_validate_filters_codecov(self):
+		self.filters.update({"from_date": ""})
+
+		with self.assertRaises(frappe.ValidationError):
+			execute(self.filters)
+
+		self.filters.update({"from_date": today(),"to_date": add_days(today(), -1)})
+
+		with self.assertRaises(frappe.ValidationError):
+			execute(self.filters)
+
+		self.filters = {}
+		data = execute(self.filters)
+		self.assertEqual(len(data[1]), 0)
 
 	def setup_material_request(self, order=False, receive=False, days=0):
 		po = None

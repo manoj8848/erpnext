@@ -4,6 +4,10 @@
 import unittest
 import re
 import frappe
+from frappe.utils import (
+	add_days,
+	today
+)
 from frappe.tests.utils import FrappeTestCase, change_settings
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_payment_terms_template
 from erpnext.accounts.doctype.payment_request.payment_request import make_payment_request
@@ -18,6 +22,7 @@ from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
 from erpnext.accounts.doctype.account.test_account import create_account
+from erpnext.support.doctype.service_level_agreement.test_service_level_agreement import create_customer
 
 test_dependencies = ["Currency Exchange", "Journal Entry", "Contact", "Address"]
 payment_gateway = {"doctype": "Payment Gateway", "gateway": "_Test Gateway"}
@@ -642,7 +647,7 @@ class TestPaymentRequest(FrappeTestCase):
 		account_currency="INR",
 		is_group=0
 		)
-		pr.create_payment_entry(submit=False)
+		pr.create_payment_entry()
 		pe = get_payment_entry(dt="Purchase Invoice", dn=pi.name)
 		pe.paid_amount = 100
 		pe.append(
@@ -655,12 +660,88 @@ class TestPaymentRequest(FrappeTestCase):
 				"allocated_amount": 100,
 			},
 		)
-		self.assertEqual(pe.paid_amount, 100)
-		self.assertEqual(pe.references[0].reference_name, pi.name)
-		pr_1 = make_payment_request(
-			dt="Purchase Invoice", dn=pi.name, mute_email=1, submit_doc=0, return_doc=1
+		pi.load_from_db()
+		pr.load_from_db()
+		self.assertEqual(pr.status, "Paid")
+		self.assertEqual(pr.outstanding_amount, 0)
+		self.assertEqual(pr.grand_total, 100)
+		self.assertEqual(pi.status, "Paid")
+		self.assertRaisesRegex(
+			frappe.exceptions.ValidationError,
+			re.compile(r"Payment Entry is already created"),
+			make_payment_request,
+			dt="Purchase Invoice",
+			dn=pi.name,
+			mute_email=1,
+			submit_doc=1,
+			return_doc=1,
 		)
-		self.assertRaises(frappe.ValidationError, pr_1.save)
+
+	def test_validate_subscription_details(self):
+		create_company()
+		item_code = "_Test Item"
+		company = "_Test Company"
+		customer = create_customer()
+		create_warehouse(
+			warehouse_name="_Test Warehouse - _TC",
+			properties={"parent_warehouse": "All Warehouses - _TC", "account": "Cost of Goods Sold - _TC"},
+			company="_Test Company",
+		)
+		item = create_item(item_code=item_code, valuation_rate=100)
+		so = frappe.get_doc(dict(
+			doctype="Sales Order",
+			customer=customer,
+			set_warehouse="_Test Warehouse - _TC",
+			company=company,
+			currency="INR",
+			delivery_date=add_days(today(), 2)
+		))
+
+		so.append("items", {
+			"item_code": item.item_code,
+			"qty": 3,
+			"rate": 50
+		})
+		so.save()
+		so.submit()
+		self.assertEqual(so.customer, customer)
+		self.assertEqual(so.grand_total, 150)
+		pg = create_payment_gateway_account("GooglePay")
+		sp_name = "_TestGooglePay"
+		sp = create_subscription_plan(
+					sp_name,
+					subscription_based_on="Fixed Rate",
+					cost=100,
+					item_code=item.item_code,
+					payment_gateway=pg.name,
+					payment_channel="Email"
+			)
+		pr = make_payment_request(
+			dt="Sales Order",
+			dn=so.name,
+			mute_email=1,
+			submit_doc=0,
+			return_doc=1
+		)
+		pr.grand_total = 150
+		pr.is_a_subscription = 1
+		pr.append("subscription_plans", {
+			"plan": sp.name,
+			"qty": 3
+		})
+		self.assertRaises(frappe.ValidationError, pr.save)
+		pr.reload()
+		pr.grand_total = 150
+		pr.is_a_subscription = 1
+		pr.append("subscription_plans", {
+			"plan": sp.name,
+			"qty": 3
+		})
+		pr.payment_gateway_account = pg.name
+		pr.save()
+		self.assertEqual(pr.payment_gateway_account, pg.name)
+		self.assertEqual(pr.grand_total, 150)
+		self.assertEqual(pr.subscription_plans[0].plan, sp.name)
 
 	def test_validate_exisiting_payment_request_amount(self):
 		create_company()
@@ -777,3 +858,35 @@ def test_partial_paid_invoice_with_submitted_payment_entry(self):
 	pi.load_from_db()
 	pr = make_payment_request(dt="Purchase Invoice", dn=pi.name, mute_email=1)
 	self.assertEqual(pr.grand_total, pi.outstanding_amount)
+
+def create_payment_gateway_account(pg_name):
+	if not frappe.db.exists("Payment Gateway", pg_name):
+		frappe.get_doc(dict(
+			doctype="Payment Gateway",
+			gateway=pg_name
+		)).insert()
+	if not frappe.db.exists("Payment Gateway Account", pg_name):
+		pg = frappe.get_doc(dict(
+				doctype = "Payment Gateway Account",
+				payment_gateway=pg_name,
+				payment_account="Cash - _TC"
+			)).insert()
+	else:
+		pg = frappe.get_doc("Payment Gateway Account", pg_name)
+	return pg
+
+def create_subscription_plan(sp_name, **kwargs):
+	if not frappe.db.exists("Subscription Plan", sp_name):
+		sp = frappe.get_doc(dict(
+			doctype= "Subscription Plan",
+			plan_name=kwargs.get("plan_name") or "_TestGooglePay",
+			currency=kwargs.get("currency") or "INR",
+			item=kwargs.get("item_code"),
+			price_determination=kwargs.get("subscription_based_on"),
+			cost=kwargs.get("cost"),
+			payment_gateway=kwargs.get("payment_gateway"),
+			payment_channel=kwargs.get("payment_channel")
+		)).insert()
+	else:
+		sp = frappe.get_doc("Subscription Plan", sp_name)	
+	return sp
