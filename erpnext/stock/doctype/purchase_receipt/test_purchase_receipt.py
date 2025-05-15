@@ -5191,7 +5191,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		for i in date:
 			self.assertTrue(from_date <= i <= to_date)
 	
-	def test_po_required_01(self):
+	def test_po_required_TC_SCK_260(self):
 		from frappe.exceptions import ValidationError
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 
@@ -5218,7 +5218,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		# Restore original setting
 		frappe.db.set_value("Buying Settings", None, "po_required", original_setting)
 
-	def test_validate_items_quality_inspection_02(self):
+	def test_validate_items_quality_inspection_TC_SCK_261(self):
 		from frappe.exceptions import ValidationError
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 		company = setup_test_company_defaults()
@@ -5283,7 +5283,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		qi.save()
 		pr.validate_items_quality_inspection()
 
-	def test_get_po_qty_and_warehouse_03(self):
+	def test_get_po_qty_and_warehouse_TC_SCK_262(self):
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 		company = setup_test_company_defaults()
@@ -5331,7 +5331,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(qty, expected_qty)
 		self.assertEqual(warehouse, expected_warehouse)
 
-	def test_make_item_gl_entries_04(self):
+	def test_make_item_gl_entries_TC_SCK_263(self):
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import PurchaseReceipt
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
@@ -5458,7 +5458,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 			if pr.docstatus == 1:
 				pr.cancel()
 
-	def test_get_billed_qty_against_purchase_receipt_05(self):
+	def test_get_billed_qty_against_purchase_receipt_TC_SCK_264(self):
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import get_billed_qty_against_purchase_receipt
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
@@ -5511,7 +5511,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertIn(pr_item.name, billed_qty_map)
 		self.assertEqual(billed_qty_map[pr_item.name], 3)
 
-	def test_adjust_incoming_rate_for_pr_06(self):
+	def test_adjust_incoming_rate_for_pr_TC_SCK_265(self):
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import adjust_incoming_rate_for_pr
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 		from frappe.utils import flt
@@ -5538,7 +5538,7 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(flt(item_valuation), 120)
 		self.assertEqual(pr.doctype, "Purchase Receipt")
 
-	def test_update_billed_amount_based_on_po_07(self):
+	def test_update_billed_amount_based_on_po_TC_SCK_266(self):
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import update_billed_amount_based_on_po
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
 		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
