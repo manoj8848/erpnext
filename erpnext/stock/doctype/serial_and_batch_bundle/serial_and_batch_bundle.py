@@ -9,6 +9,7 @@ import frappe
 from frappe import _, _dict, bold
 from frappe.model.document import Document
 from frappe.query_builder import DocType
+from frappe.model.naming import make_autoname
 from frappe.query_builder.functions import CombineDatetime, Sum
 from frappe.utils import (
 	add_days,
