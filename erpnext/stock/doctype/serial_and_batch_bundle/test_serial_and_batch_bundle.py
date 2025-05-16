@@ -281,11 +281,14 @@ class TestSerialandBatchBundle(FrappeTestCase):
 				"gst_hsn_code": "01011010",
 				"has_serial_no": 1,
 				"has_batch_no": 1,
+				"serial_no_series": "MDC-.###",
 				"is_stock_item": 1,
 				"stock_uom": "Nos"
 			}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###"
+			item.save()
 		assert item.name == "Test Item"
 		assert item.has_serial_no == 1
 		assert item.has_batch_no == 1
@@ -718,19 +721,22 @@ class TestSerialandBatchBundle(FrappeTestCase):
 
 		# Ensure item exists
 		if not frappe.db.exists("Item", "Test Item"):
-			item = frappe.get_doc({
-				"doctype": "Item",
-				"item_code": "Test Item",
-				"item_name": "Test Item",
-				"item_group": "Products",
-				"gst_hsn_code": "01011010",
-				"has_serial_no": 1,
-				"has_batch_no": 1,
-				"is_stock_item": 1,
-				"stock_uom": "Nos"
-			}).insert()
+				item = frappe.get_doc({
+					"doctype": "Item",
+					"item_code": "Test Item",
+					"item_name": "Test Item",
+					"item_group": "Products",
+					"gst_hsn_code": "01011010",
+					"has_serial_no": 1,
+					"has_batch_no": 1,
+					"serial_no_series": "MDC-.###",
+					"is_stock_item": 1,
+					"stock_uom": "Nos"
+				}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###"
+			item.save()
 
 		# Create Serial No
 		if not frappe.db.exists("Serial No", "MDC001"):
@@ -862,19 +868,22 @@ class TestSerialandBatchBundle(FrappeTestCase):
 
 		# Create item if it doesn't exist
 		if not frappe.db.exists("Item", "Test Item"):
-			item = frappe.get_doc({
-				"doctype": "Item",
-				"item_code": "Test Item",
-				"item_name": "Test Item",
-				"item_group": "Products",
-				"gst_hsn_code": "01011010",
-				"has_serial_no": 1,
-				"has_batch_no": 1,
-				"is_stock_item": 1,
-				"stock_uom": "Nos"
-			}).insert()
+				item = frappe.get_doc({
+					"doctype": "Item",
+					"item_code": "Test Item",
+					"item_name": "Test Item",
+					"item_group": "Products",
+					"gst_hsn_code": "01011010",
+					"has_serial_no": 1,
+					"has_batch_no": 1,
+					"serial_no_series": "MDC-.###",
+					"is_stock_item": 1,
+					"stock_uom": "Nos"
+				}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###"
+			item.save()
 
 		# Create Serial No for the item
 		if not frappe.db.exists("Serial No", "MDC001"):
@@ -1014,19 +1023,22 @@ class TestSerialandBatchBundle(FrappeTestCase):
 
 		# Create item if it doesn't exist
 		if not frappe.db.exists("Item", "Test Item"):
-			item = frappe.get_doc({
-				"doctype": "Item",
-				"item_code": "Test Item",
-				"item_name": "Test Item",
-				"item_group": "Products",
-				"gst_hsn_code": "01011010",
-				"has_serial_no": 1,
-				"has_batch_no": 1,
-				"is_stock_item": 1,
-				"stock_uom": "Nos"
-			}).insert()
+				item = frappe.get_doc({
+					"doctype": "Item",
+					"item_code": "Test Item",
+					"item_name": "Test Item",
+					"item_group": "Products",
+					"gst_hsn_code": "01011010",
+					"has_serial_no": 1,
+					"has_batch_no": 1,
+					"serial_no_series": "MDC-.###",
+					"is_stock_item": 1,
+					"stock_uom": "Nos"
+				}).insert()
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###"
+			item.save()
 		assert frappe.db.exists("Item", "Test Item")
 
 		# Create Serial No for the item
@@ -1423,11 +1435,14 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			item.is_stock_item = 1
 			item.is_fixed_asset = 0
 			item.auto_create_assets = 0
+			item.serial_no_series = "MDC-.###",  
 			item.asset_naming_series = "ACC-ASS-.YYYY.-"
 			item.save()
 			assert frappe.db.exists("Item", "Test Item")
 		else:
 			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###",  
+			item.save()
 
 		if not frappe.db.exists("Serial No", "MDC001"):
 			serial_no = frappe.get_doc({
