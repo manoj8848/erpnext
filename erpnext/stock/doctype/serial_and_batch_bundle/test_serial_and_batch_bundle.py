@@ -168,7 +168,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
@@ -341,7 +341,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
@@ -526,7 +526,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 
 
 		dn = frappe.get_doc({
@@ -779,7 +779,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 
 		# Create Delivery Note
 		dn = frappe.get_doc({
@@ -926,7 +926,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 
 		# Create Delivery Note
 		dn = frappe.get_doc({
@@ -1084,7 +1084,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 		assert frappe.db.exists("Stock Entry", stock_entry.name)
 		assert stock_entry.docstatus == 1  # submitted
 
@@ -1488,7 +1488,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
@@ -1623,7 +1623,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			})
 			stock_entry.submit()
 		else:
-			batch = frappe.get_doc("Stock ENtry", item.name)
+			stock_entry = frappe.get_doc("Stock ENtry", item.name)
 		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
