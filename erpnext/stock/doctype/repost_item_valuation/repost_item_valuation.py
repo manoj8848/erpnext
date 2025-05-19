@@ -326,7 +326,7 @@ def repost(doc):
 		)
 
 		if status == "Failed":
- 			outgoing_email_account = frappe.get_cached_value(
+			outgoing_email_account = frappe.get_cached_value(
  				"Email Account", {"default_outgoing": 1, "enable_outgoing": 1}, "name"
  			)
 
