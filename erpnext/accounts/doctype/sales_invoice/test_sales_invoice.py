@@ -5302,6 +5302,12 @@ class TestSalesInvoice(FrappeTestCase):
 			account_currency="INR",
 			account_type="Cash",
 		)
+		create_account(
+			account_name="Deferred Revenue",
+			parent_account="Current Liabilities - _TC",
+			company="_Test Company",
+			account_currency="INR",
+		)
 
 		create_customer(
 			customer_name="_Test Customer",
@@ -5310,6 +5316,12 @@ class TestSalesInvoice(FrappeTestCase):
 			account="_Test Receivable - _TC"
 		)
 
+		frappe.set_value("Company", "_Test Company", {
+			"default_receivable_account": "Debtors - _TC",
+			"default_expense_account": "Cost of Goods Sold - _TC",
+			"default_inventory_account": "Stock In Hand - _TC",
+			"enable_perpetual_inventory":1
+		})
 		item = make_test_item(item_name="_Test Item")
 		item.enable_deferred_revenue=1
 		item.no_of_months=12
@@ -5353,6 +5365,7 @@ class TestSalesInvoice(FrappeTestCase):
                 ['Deferred Revenue - _TC', 0.0, sales_invoice.grand_total, sales_invoice.posting_date]
         ]
 		check_gl_entries(self, sales_invoice.name, expected_gl_entries, sales_invoice.posting_date)
+		frappe.db.rollback()
     
 	def test_deferred_revenue_invoice_multiple_item_TC_ACC_040(self):
 		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
@@ -5957,40 +5970,28 @@ class TestSalesInvoice(FrappeTestCase):
 		self.assertEqual(si.status, "Unpaid")	
 
 	def test_si_with_sr_calculate_with_fixed_TC_S_139(self):
-		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
-		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
-		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
-  
-		create_item(item_code = "_Test Item")
+		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
+		from erpnext.stock.doctype.item.test_item import create_item
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")
-		frappe.db.set_single_value("Selling Settings", "so_required", "No")
-		create_account(
-			account_name="_Test Account Shipping Charges",
-			parent_account="Cash In Hand - _TC",
-			company="_Test Company",
-			account_currency="INR",
-			account_type="Chargeable",
-		)
-		create_cost_center(cost_center_name="_Test Cost Center", company="_Test Company")
+		item = create_item("_Test Item 1")
 		create_customer(customer_name="_Test Customer",company="_Test Company")
-
-		shipping_charge = 100
-		shipping_rule = create_shipping_rule(shipping_rule_type="Selling", shipping_rule_name="_Test Shipping Rule")
-  
-		make_stock_entry(item_code="_Test Item", qty=10, rate=500, target="_Test Warehouse - _TC")
-  
-		si = create_sales_invoice(qty=5,rate=200, shipping_rule="_Test Shipping Rule", do_not_submit=True)
+		shipping_rule = create_shipping_rule(
+			shipping_rule_type="Selling", 
+			shipping_rule_name="Shipping Rule - Test Fixed",
+			args={"calculate_based_on": "Fixed", "shipping_amount": 100}
+    	)
+		self.assertEqual(shipping_rule.docstatus, 1)
+		make_stock_entry(item_code="_Test Item 1", qty=10, rate=500, target="_Test Warehouse - _TC")
+		si = create_sales_invoice(qty=5,rate=200, do_not_submit=True)
+		si.shipping_rule = shipping_rule.name
 		si.save()
 		si.submit()
-  
-		for ship in shipping_rule.conditions:
-			if ship.from_value <= si.items[0].qty <= ship.to_value:
-				shipping_charge = ship.shipping_amount
-
-		expected_grand_total = 1000 + shipping_charge
-
-		self.assertEqual(si.grand_total, expected_grand_total)
+		self.assertEqual(si.net_total, 1000)
+		self.assertEqual(si.total_taxes_and_charges, 100)
+		self.assertEqual(si.grand_total, 1100)
+		frappe.db.rollback()
 
 	def test_si_with_sr_calculate_with_net_total_TC_S_140(self):
 		from erpnext.accounts.doctype.shipping_rule.test_shipping_rule import create_shipping_rule
