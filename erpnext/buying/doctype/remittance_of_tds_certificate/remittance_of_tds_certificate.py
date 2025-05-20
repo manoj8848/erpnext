@@ -12,7 +12,7 @@ class RemittanceofTDScertificate(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from erpnext.buying.doctype.logs.logs import logs
 		from frappe.types import DF
 
