@@ -733,7 +733,9 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
-		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import calculate_outgoing_rate
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice	
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt	
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
 
 		if not frappe.db.exists("Warehouse", warehouse):
 			warehouse = create_warehouse(warehouse, company=company)
@@ -743,7 +745,7 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			create_customer("_Test Customer",currency="INR")
 
 		if not frappe.db.exists("Company", company):
-			create_child_company()
+			create_child_company("_Test Indian Registered Company")
 
 		fiscal_year = frappe.get_doc("Fiscal Year", "2025")
 		if not any(c.company == company for c in fiscal_year.companies):
@@ -802,24 +804,30 @@ class TestSerialandBatchBundle(FrappeTestCase):
 			batch = frappe.get_doc("Batch", "Batch_001")
 		assert batch.batch_id == "Batch_001"
 
+		location = "Test Location"
+		if not frappe.db.exists("Location", location):
+			frappe.get_doc({"doctype": "Location", "location_name": location}).insert()
+
+		supplier = "_Test Supplier"
+		if not frappe.db.exists("Supplier", supplier):
+			create_supplier(supplier_name="_Test Supplier", default_currency="INR")
+
 		# Create stock entry (Material Receipt)
-		if not frappe.db.exists("Stock Entry", item.name):
-			stock_entry = frappe.get_doc({
-				"doctype": "Stock Entry",
-				"stock_entry_type": "Material Receipt",
-				"company": company,
-				"items": [{
-					"item_code": item.name,
-					"qty": 1,
-					"s_warehouse": None,
-					"t_warehouse": warehouse,
-					"serial_no": "MDC001",
-					"batch_no": batch.name
-				}]
-			})
-			stock_entry.submit()
-		else:
-			stock_entry = frappe.get_doc("Stock ENtry", item.name)
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"company": company,
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC001",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+		
 		assert stock_entry.docstatus == 1
 
 		# Create Delivery Note
@@ -885,7 +893,56 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		}).insert(ignore_permissions=True)
 		serial_batch_bundle.submit()
 		assert serial_batch_bundle.docstatus == 1
+
+		serial_batch_bundle_stock_entry = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"voucher_detail_no": dn.items[0].name,
+			"entries": [{
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 1,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Stock Entry",
+			"voucher_no": stock_entry.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+
+		serial_batch_without_serial_batch = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"voucher_detail_no": dn.items[0].name,
+			"entries": [{
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 1,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Stock Entry",
+			"voucher_no": stock_entry.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+		serial_batch_bundle.submit()
+		assert serial_batch_bundle.docstatus == 1
 		serial_batch_bundle.calculate_outgoing_rate()
+		serial_batch_bundle_stock_entry.calculate_outgoing_rate()
+		serial_batch_without_serial_batch.calculate_outgoing_rate
+
+
+	
 
 	def test_inward_outward_serial_valuation(self):
 		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
