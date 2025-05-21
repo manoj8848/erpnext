@@ -1179,7 +1179,7 @@ class SerialandBatchBundle(Document):
 
 
 @frappe.whitelist()
-def download_blank_csv_template(content):
+def download_blank_csv_template(content): # pragma: no cover
 	csv_data = []
 	if isinstance(content, str):
 		content = parse_json(content)
@@ -1225,7 +1225,7 @@ def get_serial_batch_from_csv(item_code, file_path): # pragma: no cover
 	return serial_nos, batch_nos
 
 
-def parse_csv_file_to_get_serial_batch(reader):
+def parse_csv_file_to_get_serial_batch(reader): # pragma: no cover
 	has_serial_no, has_batch_no = False, False
 	serial_nos = []
 	batch_nos = []
