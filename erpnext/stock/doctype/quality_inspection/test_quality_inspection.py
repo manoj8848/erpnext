@@ -242,6 +242,104 @@ class TestQualityInspection(FrappeTestCase):
 		self.assertEqual(qi.readings[0].max_value, 30.0)
 		self.assertEqual(qi.readings[0].status, "Accepted")
 
+	def test_distribute_child_row_reference_03(self):
+		import unittest.mock
+
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+
+		# Setup common test data
+		company = setup_test_company_defaults()
+		item = create_item(item_code="_Test Item Dist", stock_uom="Nos", is_stock_item=1)
+		warehouse = create_warehouse("_Test Warehouse", company=company.name)
+		reference_name = "Test-Ref-Dist"
+		child_rows = ["ROW-1", "ROW-2", "ROW-3"]
+
+		stock_entry = frappe.new_doc("Stock Entry")
+		stock_entry.stock_entry_type = "Material Receipt"
+		stock_entry.company = company.name
+		stock_entry.to_warehouse = warehouse
+		stock_entry.append(
+			"items",
+			{
+				"item_code": item.name,
+				"qty": 1,
+				"uom": "Nos",
+				"t_warehouse": warehouse,
+				"allow_zero_valuation_rate": 1,
+			},
+		)
+		stock_entry.insert()
+		stock_entry.submit()
+
+		reference_name = stock_entry.name
+
+		# Create 3 Quality Inspections:
+		# 1st one is submitted and already has child row → will be skipped
+		qi1 = frappe.get_doc(
+			{
+				"doctype": "Quality Inspection",
+				"item_code": item.name,
+				"reference_type": "Stock Entry",
+				"reference_name": reference_name,
+				"child_row_reference": "ROW-1",
+				"inspection_type": "Incoming",
+			}
+		)
+		qi1.inspected_by = "Administrator"
+		qi1.sample_size = 5
+		qi1.insert()
+		qi1.db_set("docstatus", 1)
+
+		# 2nd one is draft and has child row → will be skipped and removed from available
+		qi2 = frappe.get_doc(
+			{
+				"doctype": "Quality Inspection",
+				"item_code": item.name,
+				"reference_type": "Stock Entry",
+				"reference_name": reference_name,
+				"child_row_reference": "ROW-2",
+				"inspection_type": "Incoming",
+			}
+		)
+		qi2.inspected_by = "Administrator"
+		qi2.sample_size = 5
+		qi2.insert()
+
+		# 3rd is the current one to test → no child row yet
+		qi3 = frappe.get_doc(
+			{
+				"doctype": "Quality Inspection",
+				"item_code": item.name,
+				"reference_type": "Stock Entry",
+				"reference_name": reference_name,
+				"inspection_type": "Incoming",
+			}
+		)
+		qi3.inspected_by = "Administrator"
+		qi3.sample_size = 5
+		qi3.insert()
+		from types import SimpleNamespace
+
+		# Patch frappe.get_all to simulate how distribute_child_row_reference pulls QIs
+		with unittest.mock.patch("frappe.get_all") as mock_get_all, unittest.mock.patch(
+			"frappe.db.set_value"
+		) as mock_set_value:
+			mock_get_all.return_value = [
+				SimpleNamespace(name=qi1.name, child_row_reference="ROW-1", docstatus=1),
+				SimpleNamespace(name=qi2.name, child_row_reference="ROW-2", docstatus=0),
+				SimpleNamespace(name=qi3.name, child_row_reference=None, docstatus=0),
+			]
+
+			# Call method under test
+			qi3.distribute_child_row_reference(child_rows[:])  # pass a copy to avoid in-place mutations
+
+		# Assertions
+		self.assertEqual(qi3.child_row_reference, "ROW-3")
+
+		# Ensure frappe.db.set_value is called to assign "ROW-3" to qi2 if needed
+		mock_set_value.assert_not_called()
+
 	def test_qa_for_delivery(self):
 		make_stock_entry(
 			item_code="_Test Item with QA", target="_Test Warehouse - _TC", qty=1, basic_rate=100
