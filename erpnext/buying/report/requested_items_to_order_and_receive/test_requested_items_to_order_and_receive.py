@@ -7,7 +7,7 @@ from frappe.utils import add_days, today
 
 from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
 from erpnext.buying.report.requested_items_to_order_and_receive.requested_items_to_order_and_receive import (
-	get_data,
+	get_data, execute
 )
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.material_request.material_request import make_purchase_order
@@ -44,6 +44,40 @@ class TestRequestedItemsToOrderAndReceive(FrappeTestCase):
 		self.assertEqual(len(data), 2)
 		self.assertEqual(data[0].ordered_qty, 0.0)
 		self.assertEqual(data[1].ordered_qty, 57.0)
+
+	def test_requested_items_TC_B_221(self):
+		data = execute(self.filters)
+
+		self.assertEqual(len(data[1]), 2)
+		self.assertEqual(data[1][0].ordered_qty, 0.0)
+		self.assertEqual(data[1][1].ordered_qty, 57.0)
+
+		values_dict = {
+			dataset['name']: dataset['values'][0]
+			for dataset in data[3]['data']['datasets']
+		}
+		self.assertEqual(values_dict.get("Qty to Order"), 57)
+		self.assertEqual(values_dict.get("Ordered Qty"), 57)
+		self.assertEqual(values_dict.get("Received Qty"), 0)
+		self.assertEqual(values_dict.get("Qty to Receive"), 114)
+
+		self.filters.update({"group_by_mr": 1})
+		data_1 = execute(self.filters)
+
+	def test_validate_filters_TC_B_222(self):
+		self.filters.update({"from_date": ""})
+
+		with self.assertRaises(frappe.ValidationError):
+			execute(self.filters)
+
+		self.filters.update({"from_date": today(),"to_date": add_days(today(), -1)})
+
+		with self.assertRaises(frappe.ValidationError):
+			execute(self.filters)
+
+		self.filters = {}
+		data = execute(self.filters)
+		self.assertEqual(len(data[1]), 0)
 
 	def setup_material_request(self, order=False, receive=False, days=0):
 		po = None
