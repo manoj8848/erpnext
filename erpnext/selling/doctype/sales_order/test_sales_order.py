@@ -6164,35 +6164,27 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 	@change_settings("Accounts Settings", {"credit_controller": "Administrator"})
 	def test_unlink_advance_payment_on_order_cancellation_TC_ACC_127(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import (
-			make_test_item,
 			get_payment_entry
 		)
-		sales_oreder_name = None
+
 		account_setting = frappe.get_doc("Accounts Settings")
 		account_setting.unlink_advance_payment_on_cancelation_of_order = 0
 		account_setting.save()
 
 		item = make_item("_Test Item")
-		try:
-			so = make_sales_order(
-				customer="_Test Customer",
-				company="_Test Company",	
-				item_code=item.name,
-				qty=1,
-				rate=1000,
-			)
-			sales_oreder_name = so.name
-			pe = get_payment_entry("Sales Order", so.name, bank_account="Cash - _TC")
-			pe.submit()
+		so = make_sales_order(
+			customer="_Test Customer",
+			company="_Test Company",
+			item_code=item.name,
+			qty=1,
+			rate=1000,
+		)
+		pe = get_payment_entry("Sales Order", so.name, bank_account="Cash - _TC")
+		pe.submit()
+
+		with self.assertRaises(frappe.LinkExistsError) as cm:
 			so.load_from_db()
 			so.cancel()
-		except Exception as e:
-			error_message = str(e)
-			# Remove HTML tags only if present
-			if "<" in error_message and ">" in error_message:
-				error_message = re.sub(r'<[^>]+>', '', error_message)
-
-			self.assertEqual(error_message, f"Cannot delete or cancel because Sales Order {sales_oreder_name} is linked with Payment Entry {pe.name} at Row: 1")
 		
 	def test_customer_credit_limit_bypass_TC_ACC_139(self):
 		
