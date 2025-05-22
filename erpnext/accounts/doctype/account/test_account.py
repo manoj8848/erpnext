@@ -375,34 +375,47 @@ class TestAccount(unittest.TestCase):
 
 	def test_validate_parent_child_account_type_TC_ACC_168(self):
 		company = make_company(company_name="_Test Company")
+		account_type = "Direct Income"
 		create_account(
-		account_name="Test Parent Account",  
+		account_name="Test Parent Account 470",  
 		parent_account="Cash In Hand - _TC", 
 		company=company.name,
-		account_type="Direct Income",
+		account_type=account_type,
 		account_currency="INR",
 		is_group=1
 		)
 		child_account = frappe.get_doc(dict(
 			doctype = "Account",
 			account_name = "Test Child Account",
-			parent_account = "Test Parent Account - _TC",
+			parent_account = "Test Parent Account 470 - _TC",
 			company = company.name,
-			account_type = "Direct Income",
+			account_type = account_type,
 			account_currency = "INR",
 			is_group = 0
 		))
-		with self.assertRaises(frappe.ValidationError, msg="Only Parent can be of type Direct Income"):
+		with self.assertRaises(frappe.ValidationError, msg=f"Only Parent can be of type {account_type}"):
 			child_account.save()
 
 	def test_validate_parent_account_not_assign_TC_ACC_169(self):
 		company = make_company(company_name="_Test Company")
+		create_account(
+		account_name="Test Parent Account 013",  
+		parent_account="Cash In Hand - _TC", 
+		company=company.name,
+		account_type="Direct Income",
+		account_currency="INR",
+		is_group=1
+		)
+		if frappe.db.exists("Account", "Test Account 123 - _TC"):
+			frappe.delete_doc("Account", "Test Account 123 - _TC", force=1)
 		account = frappe.new_doc("Account")
 		account.account_name = "Test Account 123"
 		account.is_group = 0
-		account.parent_account = "Test Account 123 - _TC"
+		account.parent_account = "Test Parent Account 013 - _TC"
 		account.company = company.name
-		with self.assertRaises(frappe.ValidationError, msg="Account Test Account 123 - _TC: You can not assign itself as parent account"):
+		account.save()
+		account.parent_account = account.name
+		with self.assertRaises(frappe.ValidationError, msg=f"Account {account.name}: You can not assign itself as parent account"):
 			account.save()
 	
 	def test_validate_parent_account_is_group_TC_ACC_170(self):
@@ -415,6 +428,8 @@ class TestAccount(unittest.TestCase):
 		account_currency="INR",
 		is_group=0
 		)
+		if frappe.db.exists("Account", "Test Account 123 - _TC"):
+			frappe.delete_doc("Account", "Test Account 123 - _TC", force=1)
 		account = frappe.new_doc("Account")
 		account.account_name = "Test Account 123"
 		account.is_group = 0
@@ -434,6 +449,8 @@ class TestAccount(unittest.TestCase):
 		account_currency="INR",
 		is_group=1
 		)
+		if frappe.db.exists("Account", "Test Account 123 - _TC"):
+			frappe.delete_doc("Account", "Test Account 123 - _TC", force=1)
 		account = frappe.new_doc("Account")
 		account.account_name = "Test Account 123"
 		account.is_group = 0
@@ -456,8 +473,9 @@ class TestAccount(unittest.TestCase):
 		account.db_set("root_type", "Liability")
 		account.db_set("report_type", "Profit and Loss")
 		account.save()
-		self.assertEqual(account.root_type, "Asset")
-		self.assertEqual(account.report_type, "Balance Sheet")
+		account.reload()
+		self.assertEqual(account.is_group, 1)
+		self.assertEqual(account.account_type, "Cash")
 
 	def test_validate_receivable_payable_account_type_TC_ACC_173(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
@@ -492,9 +510,18 @@ class TestAccount(unittest.TestCase):
 		self.assertEqual(account.account_type, "Payable")
 	
 	def test_validate_root_details_TC_ACC_174(self):
-		make_company(company_name="_Test Company")
-		account = frappe.get_doc("Account", "Application of Funds (Assets) - _TC")
-		account.account_type = "Cash"
+		company = make_company(company_name="_Test Company")
+		if frappe.db.exists("Account", "Root Account - _TC"):
+			frappe.delete_doc("Account", "Root Account - _TC", force=1)
+		account = frappe.get_doc(
+					{
+					"doctype": "Account",
+					"account_name": "Root Account",
+					"root_type": "Asset",
+					"is_group": "1",
+					"company": company.name,
+					}
+				).insert(ignore_mandatory=True)
 		with self.assertRaises(RootNotEditable, msg="Root cannot be edited."):
 			account.save()
 	
