@@ -360,7 +360,6 @@ def get_batches(item_code, warehouse, qty=1, throw=False, serial_no=None):
 
 	batch = frappe.qb.DocType("Batch")
 	sle = frappe.qb.DocType("Stock Ledger Entry")
-
 	query = (
 		frappe.qb.from_(batch)
 		.join(sle)
@@ -381,11 +380,14 @@ def get_batches(item_code, warehouse, qty=1, throw=False, serial_no=None):
 
 	if serial_no and frappe.get_cached_value("Item", item_code, "has_batch_no"):
 		serial_nos = get_serial_nos(serial_no)
+	
 		batches = frappe.get_all(
 			"Serial No",
 			fields=["distinct batch_no"],
 			filters={"item_code": item_code, "warehouse": warehouse, "name": ("in", serial_nos)},
+			order_by=None
 		)
+
 
 		if not batches:
 			validate_serial_no_with_batch(serial_nos, item_code)

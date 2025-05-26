@@ -10,6 +10,7 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_
 
 class TestClosingStockBalance(FrappeTestCase):
 
+	# codecov
 	def test_set_status_TC_SCK_292(self):
 		item_code = "Test Item"
 		company = "_Test Indian Registered Company"
@@ -69,5 +70,6 @@ class TestClosingStockBalance(FrappeTestCase):
 
 		# Assert that the document is now cancelled
 		self.assertEqual(closing_balance.docstatus, 2, "Closing Stock Balance should be cancelled.")
+		closing_balance.regenerate_closing_balance()
 
-
+	
