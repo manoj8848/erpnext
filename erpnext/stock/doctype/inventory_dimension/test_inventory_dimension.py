@@ -491,6 +491,39 @@ class TestInventoryDimension(FrappeTestCase):
 
 		self.assertEqual(site_name, "Site 1")
 
+		# # Teardown 
+		if frappe.db.exists("Inventory Dimension", {"dimension_name": "Inv Site"}):
+			frappe.delete_doc("Inventory Dimension", "Inv Site", force=True)
+		
+		affected_doctypes = [
+		"Stock Ledger Entry",
+		"Stock Entry Detail",
+		"Purchase Receipt Item",
+		"Delivery Note Item",
+		"Sales Invoice Item",
+		]
+		for doctype in affected_doctypes:
+			# Remove both source and target fields if they exist
+			for fieldname in ["inv_site", "to_inv_site"]:
+				if frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": fieldname}):
+					frappe.delete_doc("Custom Field", f"{doctype}-{fieldname}", force=True)
+			
+			# Drop the columns if they exist
+			if fieldname in frappe.db.get_table_columns(doctype):
+				frappe.db.sql(f"ALTER TABLE `tab{doctype}` DROP COLUMN IF EXISTS `{fieldname}`")
+		 # Clear inventory dimension cache
+		frappe.local.inventory_dimensions = {}
+		frappe.cache().delete_key("inventory_dimensions")
+		frappe.db.set_single_value("Stock Settings", "allow_negative_stock", 0)
+		frappe.db.commit()
+
+		# frappe.db.delete("Inventory Dimension", {"dimension_name": "Inv Site"})
+		# frappe.db.commit()
+		# frappe.local.inventory_dimensions = {}
+		# frappe.db.sql("ALTER TABLE `tabStock Ledger Entry` DROP COLUMN IF EXISTS `inv_site`")
+		# frappe.db.sql("ALTER TABLE `tabStock Entry Detail` DROP COLUMN IF EXISTS `inv_site`")
+		# frappe.db.sql("ALTER TABLE `tabStock Entry Detail` DROP COLUMN IF EXISTS `to_inv_site`")
+
 
 def get_voucher_sl_entries(voucher_no, fields):
 	return frappe.get_all(
