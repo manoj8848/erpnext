@@ -41,7 +41,7 @@ class PaymentRequest(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from erpnext.accounts.doctype.subscription_plan_detail.subscription_plan_detail import SubscriptionPlanDetail
 		from frappe.types import DF
 
