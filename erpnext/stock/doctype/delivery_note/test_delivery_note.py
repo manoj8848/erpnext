@@ -3359,8 +3359,8 @@ class TestDeliveryNote(FrappeTestCase):
 			properties={"parent_warehouse": "All Warehouses - _TC"},
 			company="_Test Company",
 		)
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+		# if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+		# 	frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 		
 	@if_app_installed("erpnext_crm")
 	def test_dn_submission_TC_SCK_148(self):

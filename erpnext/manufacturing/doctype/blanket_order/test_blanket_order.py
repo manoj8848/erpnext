@@ -16,8 +16,8 @@ from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_cre
 class TestBlanketOrder(FrappeTestCase):
 	def setUp(self):
 		frappe.flags.args = frappe._dict()
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+		# if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+		# 	frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 	def tearDown(self):
 		frappe.db.rollback()

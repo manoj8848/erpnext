@@ -34,9 +34,9 @@ class TestPOSInvoice(unittest.TestCase):
 		cls.test_user, cls.pos_profile = init_user_and_profile()
 		create_opening_entry(cls.pos_profile, cls.test_user)
 
-	def setUp(self):
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+	# def setUp(self):
+	# 	if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+	# 		frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 	def tearDown(self):
 		if frappe.session.user != "Administrator":

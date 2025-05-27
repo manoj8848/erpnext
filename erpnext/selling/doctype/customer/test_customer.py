@@ -32,8 +32,8 @@ class TestCustomer(FrappeTestCase):
 		if not frappe.get_value("Item", "_Test Item"):
 			make_test_records("Item")
 
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+		# if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+		# 	frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 	def tearDown(self):
 		set_credit_limit("_Test Customer", "_Test Company", 0)

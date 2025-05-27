@@ -12,8 +12,8 @@ class TestSellingSettings(unittest.TestCase):
 		# if setup was completed correctly
 		default = frappe.db.get_single_value("Selling Settings", "maintain_same_rate_action")
 		self.assertEqual("Stop", default)
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+		# if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+		# 	frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 	def test_toggle_discount_accounting_fields_coverage_TC_S_187(self):
 		

@@ -2581,8 +2581,8 @@ class TestPurchaseOrder(FrappeTestCase):
 		create_company()
 		validate_fiscal_year('_Test Company')
 		create_company_and_suppliers()
-		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
-			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
+		# if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+		# 	frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 
 	def tearDown(self):
