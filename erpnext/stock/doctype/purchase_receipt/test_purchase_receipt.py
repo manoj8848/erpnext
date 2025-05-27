@@ -5666,6 +5666,19 @@ class TestPurchaseReceipt(FrappeTestCase):
 			for item in pr.items:
 				frappe.db.set_value("Purchase Receipt Item", item.name, "purchase_order_item", po_item.name)
 
+		settings = frappe.get_doc("Repost Accounting Ledger Settings")
+		# Check if Purchase Invoice is already allowed
+		already_allowed = any(
+			d.document_type == "Purchase Invoice" and d.allowed for d in settings.allowed_types
+		)
+		if not already_allowed:
+			# Remove existing row for Purchase Invoice
+			settings.allowed_types = [
+				d for d in settings.allowed_types if d.document_type != "Purchase Invoice"
+			]
+			settings.append("allowed_types", {"document_type": "Purchase Invoice", "allowed": 1})
+			settings.save()
+			
 		pi1 = make_purchase_invoice(
 			purchase_order=po.name,
 			purchase_receipt=pr1.name,
