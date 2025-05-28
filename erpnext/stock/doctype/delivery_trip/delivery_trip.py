@@ -17,7 +17,7 @@ class DeliveryTrip(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.delivery_stop.delivery_stop import DeliveryStop
@@ -113,7 +113,6 @@ class DeliveryTrip(Document):
 
 			note_doc.flags.ignore_validate_update_after_submit = True
 			note_doc.save()
-
 		delivery_notes = [get_link_to_form("Delivery Note", note) for note in delivery_notes]
 		frappe.msgprint(_("Delivery Notes {0} updated").format(", ".join(delivery_notes)))
 
@@ -135,7 +134,6 @@ class DeliveryTrip(Document):
 		idx = 0
 		for route in route_list:
 			directions = self.get_directions(route, optimize)
-
 			if directions:
 				if optimize and len(directions.get("waypoint_order")) > 1:
 					self.rearrange_stops(directions.get("waypoint_order"), start=idx)
@@ -168,7 +166,6 @@ class DeliveryTrip(Document):
 				self.total_distance = total_distance * self.uom_conversion_factor
 			else:
 				idx += len(route) - 1
-
 		self.save()
 
 	def form_route_list(self, optimize):
