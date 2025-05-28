@@ -5014,6 +5014,7 @@ def check_gl_entries(
 		.select(gl.account, gl.debit, gl.credit, gl.posting_date)
 		.where(
 			(gl.voucher_type == voucher_type)
+			& (gl.voucher_type == "Landed Cost Voucher")
 			& (gl.voucher_no == voucher_no)
 			& (gl.posting_date >= posting_date)
 			& (gl.is_cancelled == 0)
