@@ -15,7 +15,7 @@ class QuickStockBalance(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		date: DF.Date
@@ -42,7 +42,6 @@ def get_stock_item_details(warehouse, date, item=None, barcode=None):
 		out["item"] = item
 
 	barcodes = frappe.db.get_values("Item Barcode", filters={"parent": out["item"]}, fieldname=["barcode"])
-
 	out["barcodes"] = [x[0] for x in barcodes]
 	out["qty"] = get_stock_balance(out["item"], warehouse, date)
 	out["value"] = get_stock_value_on(warehouse, date, out["item"])
