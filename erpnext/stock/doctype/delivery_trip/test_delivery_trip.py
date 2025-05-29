@@ -11,6 +11,7 @@ from erpnext.stock.doctype.delivery_trip.delivery_trip import (
 	get_contact_and_address,
 	notify_customers,
 )
+from frappe.contacts.doctype.contact.test_contact import create_contact
 from erpnext.tests.utils import create_test_contact_and_address
 
 
@@ -34,12 +35,25 @@ class TestDeliveryTrip(FrappeTestCase):
 
 	# codecov
 	def test_on_save_and_cancel_TC_SCK_306(self):
+		from erpnext.stock.doctype.delivery_trip.delivery_trip import get_contact_display
+		from erpnext.stock.doctype.delivery_trip.delivery_trip import get_driver_email
 		driver = create_driver()
 		address = create_address(driver)
 		delivery_trip_doc = create_delivery_trip(driver,address)
 		delivery_trip_doc.submit()
+		self.assertEqual(delivery_trip_doc.docstatus, 1)
 		delivery_trip_doc.reload()
 		delivery_trip_doc.cancel()
+		# contact display
+		contact = create_contact(name="Test Contact1",salutation="Mr")
+		contact_dsiplay = get_contact_display(contact)
+		self.assertEqual(delivery_trip_doc.docstatus, 2)
+		# get_driver_email
+		driver = create_driver()
+		email_driver = get_driver_email(driver)
+
+
+
 
 	# codecov
 	def test_process_route_TC_SCK_307(self):
@@ -70,6 +84,7 @@ class TestDeliveryTrip(FrappeTestCase):
 		delivery_trip_doc.process_route(optimize=1)
 		self.assertTrue(delivery_trip_doc.total_distance > 0)
 
+	# codecov
 	def test_form_route_list_TC_SCK_308(self):
 		driver = create_driver()
 		address = create_address(driver)
@@ -97,7 +112,34 @@ class TestDeliveryTrip(FrappeTestCase):
 		delivery_trip_doc.process_route(optimize=1)
 		self.assertTrue(delivery_trip_doc.total_distance > 0)
 
-	
+	# codecov
+	def test_notify_customers_TC_SCK_309(self):
+		from frappe import sendmail
+
+		driver = create_driver()
+		address = create_address(driver)
+		delivery_trip_doc = create_delivery_trip(driver, address)
+		delivery_trip_doc.submit()
+		self.assertEqual(delivery_trip_doc.docstatus, 1)
+		frappe.db.set_value("Delivery Settings", None, "send_with_attachment", 1)
+
+		# Mock frappe.sendmail to prevent actual email sending
+		original_sendmail = frappe.sendmail
+		frappe.sendmail = lambda *args, **kwargs: None
+
+		try:
+			notify_customers(delivery_trip=delivery_trip_doc.name)
+		finally:
+			frappe.sendmail = original_sendmail  # Restore original method
+
+		delivery_trip_doc.load_from_db()
+
+	# def test_get_attachments_TC_SCK_310(self):
+	# 	driver = create_driver()
+	# 	address = create_address(driver)
+	# 	delivery_trip = create_delivery_trip(driver, address)
+	# 	delivery_trip.get_attachments(delivery_stop)
+
 
 	def test_delivery_trip_notify_customers(self):
 		notify_customers(delivery_trip=self.delivery_trip.name)
