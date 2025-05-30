@@ -13,7 +13,7 @@ class ItemAlternative(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		alternative_item_code: DF.Link | None
@@ -63,7 +63,6 @@ class ItemAlternative(Document):
 				)
 
 		alternate_item_check_msg = _("Allow Alternative Item must be checked on Item {}")
-
 		if not item_data.allow_alternative_item:
 			frappe.throw(alternate_item_check_msg.format(self.item_code))
 		if self.two_way and not alternative_item_data.allow_alternative_item:
