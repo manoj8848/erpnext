@@ -7,14 +7,59 @@ import frappe
 from datetime import timedelta
 from frappe.utils import now_datetime
 from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import get_recipients
-
-
+from erpnext.setup.doctype.company.test_company import create_child_company
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 class TestStockRepostingSettings(unittest.TestCase):
 	def tearDown(self):
 		frappe.db.rollback()
-	
+
 	# codecov
 	def test_convert_to_item_wh_reposting_TC_SCK_315(self):
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import get_active_fiscal_year
+
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+		
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice	
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt	
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company("_Test Indian Registered Company")
+
+		fiscal_year = get_active_fiscal_year()
+
+		# Check or create item
+		if not frappe.db.exists("Item", "Test Item"):
+			item = frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Test Item",
+				"item_name": "Test Item",
+				"item_group": "Products",
+				"gst_hsn_code": "01011010",
+				"has_serial_no": 1,
+				"has_batch_no": 1,
+				"serial_no_series": "MDC-.###",
+				"is_stock_item": 1,
+				"stock_uom": "Nos"
+			}).insert()
+		else:
+			item = frappe.get_doc("Item", "Test Item")
+			item.serial_no_series = "MDC-.###"
+			item.save()
+		assert item.name == "Test Item"
+		assert item.has_serial_no == 1
+		assert item.has_batch_no == 1
+
 		start_dt = now_datetime()
 		end_dt = start_dt + timedelta(hours=1)
 
@@ -31,7 +76,94 @@ class TestStockRepostingSettings(unittest.TestCase):
 			"do_reposting_for_each_stock_transaction": 1
 		}).insert()
 
+		# Create serial number
+		if not frappe.db.exists("Serial No", "MDC001"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC001",
+				"item_code": item.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC001")
+
+		assert serial_no.name == "MDC001"
+
+		assert serial_no.serial_no == "MDC001"
+		assert serial_no.item_code == item.name
+
+		# Create batch
+		if not frappe.db.exists("Batch", "Batch_001"):
+			batch = frappe.get_doc({
+				"doctype": "Batch",
+				"batch_id": "Batch_001",
+				"stock_uom": "Nos",
+				"item": item.name,
+				"manufacturing_date": frappe.utils.now(),
+			}).insert(ignore_permissions=True)
+		else:
+			batch = frappe.get_doc("Batch", "Batch_001")
+		assert batch.batch_id == "Batch_001"
+
+		location = "Test Location"
+		if not frappe.db.exists("Location", location):
+			frappe.get_doc({"doctype": "Location", "location_name": location}).insert()
+
+		supplier = "_Test Supplier"
+		if not frappe.db.exists("Supplier", supplier):
+			create_supplier(supplier_name="_Test Supplier", default_currency="INR")
+
+		# Create stock entry (Material Receipt)
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"company": company,
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC001",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+
+		sle = frappe.get_doc({
+			"doctype": "Stock Ledger Entry",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"posting_date": stock_entry.posting_date,
+			"posting_time": frappe.utils.nowtime(),
+			"voucher_type": "Stock Entry",
+			"voucher_no": stock_entry.name,
+			"voucher_detail_no": stock_entry.items[0].name,
+			"actual_qty": -1,
+			"stock_uom": "Nos",
+			"company": company,
+			"batch_no": batch.name,
+			"serial_no": serial_no.name
+		})
+		sle.insert(ignore_permissions=True)
+
+		repost_item_valuation = frappe.get_doc({
+			"doctype": "Repost Item Valuation",
+			"posting_date": frappe.utils.nowdate(),
+			"based_on": "Transaction",
+			"voucher_type": "Stock Entry",  
+			"voucher_no": stock_entry.name,
+			"company": company
+		})
+		repost_item_valuation.insert()
+		repost_item_valuation.submit()
+		repost_item_valuation.reload()
+		stock_reposting_setting.reload()
+		frappe.db.set_value("Repost Item Valuation", repost_item_valuation.name, "status", "Queued")
 		stock_reposting_setting.convert_to_item_wh_reposting()
+		assert repost_item_valuation.docstatus == 1, "Repost Item Valuation should be submitted"
+		assert stock_reposting_setting.item_based_reposting == 1
+
 
 	def test_notify_reposting_error_to_role(self):
 		role = "Notify Reposting Role"
