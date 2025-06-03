@@ -13,7 +13,7 @@ class ItemVariantSettings(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.variant_field.variant_field import VariantField
@@ -67,3 +67,5 @@ class ItemVariantSettings(Document):
 				frappe.throw(
 					_("Cannot set the field <b>{0}</b> for copying in variants").format(d.field_name)
 				)
+
+	

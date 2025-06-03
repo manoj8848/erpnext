@@ -39,5 +39,8 @@ class TestQuickStockBalance(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True)
 		date = frappe.utils.now()
-		get_stock_item_details(warehouse.name, date, item=item.name, barcode="123456789012")
+		details = get_stock_item_details(warehouse.name, date, item=item.name, barcode="123456789012")
 		
+		self.assertEqual(details["item"],"Test Item")
+		self.assertEqual(details["barcodes"],['123456789012'])
+	

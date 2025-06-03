@@ -18,5 +18,5 @@ class TestManufacturer(unittest.TestCase):
 			"full_name":"Test Item manufacturer",
 			"country":"India"}).insert()
 		manufacturer_doc.onload()
-		
+		assert hasattr(manufacturer_doc, "__onload"), "__onload should be set after onload()"
 
