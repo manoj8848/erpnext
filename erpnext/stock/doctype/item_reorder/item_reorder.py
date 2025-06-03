@@ -13,7 +13,7 @@ class ItemReorder(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		material_request_type: DF.Literal["Purchase", "Transfer", "Material Issue", "Manufacture"]
