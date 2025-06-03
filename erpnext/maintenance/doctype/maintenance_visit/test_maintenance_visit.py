@@ -5,7 +5,6 @@ import unittest
 import frappe
 from frappe.utils.data import today
 
-from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
 from erpnext.stock.doctype.item.test_item import create_item
 
 # test_records = frappe.get_test_records('Maintenance Visit')
