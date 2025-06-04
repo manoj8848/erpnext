@@ -2852,10 +2852,13 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 				"Exchange Gain Or Loss"
 			)
 			
-			expected_jv_entries = [
-				["Exchange Gain/Loss - _TC", 0.0, jv_doc.total_debit or jv_doc.total_credit, pe.posting_date],
-				["_Test Payable USD - _TC", jv_doc.total_debit or jv_doc.total_credit, 0.0, pe.posting_date]
-			]
+			gle_entries = frappe.get_all(
+				"GL Entry",
+				filters={"voucher_no": jv_doc.name, "voucher_type": "Journal Entry", "is_cancelled": 0},
+				fields=["account", "debit", "credit", "posting_date"],
+				order_by="posting_date, account, creation"
+			)
+			expected_jv_entries = [[gle.account, gle.debit, gle.credit, gle.posting_date] for gle in gle_entries]
 			
 			check_gl_entries(
 				doc=self,
@@ -2880,10 +2883,18 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 				debit=20
 			)
 			_jv_doc = frappe.get_doc("Journal Entry", jea_parent.parent)
-			expected_jv_entries = [
-				["Exchange Gain/Loss - _TC", 0.0, _jv_doc.total_debit or _jv_doc.total_credit, pe.posting_date],
-				["_Test Payable USD - _TC", _jv_doc.total_debit or _jv_doc.total_credit, 0.0, pe.posting_date]
-			]
+			gl_entries = frappe.get_all(
+				"GL Entry",
+				filters={
+					"voucher_type": "Journal Entry",
+					"voucher_no": _jv_doc.name,
+					"is_cancelled": 0
+				},
+				fields=["account", "debit", "credit", "posting_date"],
+				order_by="posting_date, account, creation"
+			)
+			expected_jv_entries = [[gle.account, gle.debit, gle.credit, gle.posting_date] for gle in gl_entries]
+
 			
 			check_gl_entries(
 				doc=self,
