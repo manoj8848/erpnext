@@ -40,8 +40,6 @@ class TestWorkOrder(FrappeTestCase):
 	def setUp(self):
 		self.warehouse = "_Test Warehouse 2 - _TC"
 		self.item = "_Test Item"
-		if frappe.session.user != "Administrator":
-			frappe.set_user("Administrator")
 		prepare_data_for_backflush_based_on_materials_transferred()
 
 	def tearDown(self):
