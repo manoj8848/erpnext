@@ -7941,6 +7941,10 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 
 		po3 = make_purchase_order_for_default_supplier(so.name, selected_items=so_items)
 		self.assertEqual(po3[0].status, "Draft")
+		# Reset supplier's payment term
+		supplier.reload()
+		supplier.payment_terms = ""
+		supplier.save()
 
 	def test_set_delivery_date_coverage_TC_S_192(self):
 		from .sales_order import set_delivery_date
