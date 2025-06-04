@@ -7,8 +7,6 @@ from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 
 class TestManufacturingSettings(unittest.TestCase):
 	def test_manufacturing_settings_TC_SCK_220(self):
-		if frappe.session.user != "Administrator":
-			frappe.set_user("Administrator")
 		company = "_Test Company"
 		create_warehouse("_Test WIP Warehouse", company=company)
 		create_warehouse("_Test Scrap Warehouse", company=company)
@@ -26,8 +24,6 @@ class TestManufacturingSettings(unittest.TestCase):
 		self.assertEqual(settings.default_fg_warehouse, "_Test Finished Goods Warehouse - _TC")
 
 	def test_overproduction_percentage_for_work_order_TC_SCK_221(self):
-		if frappe.session.user != "Administrator":
-			frappe.set_user("Administrator")
 		# Set up the overproduction percentage for work orders
 		settings = frappe.get_doc({
 			"doctype": "Manufacturing Settings",
@@ -39,8 +35,6 @@ class TestManufacturingSettings(unittest.TestCase):
 		self.assertEqual(settings.overproduction_percentage_for_work_order, 10)
 		
 	def test_overproduction_percentage_for_sales_order_TC_SCK_222(self):
-		if frappe.session.user != "Administrator":
-			frappe.set_user("Administrator")
 		# Set up the overproduction percentage for sales orders
 		settings = frappe.get_doc({
 			"doctype": "Manufacturing Settings",

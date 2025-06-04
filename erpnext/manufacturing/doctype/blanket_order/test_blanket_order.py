@@ -16,8 +16,6 @@ from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_cre
 class TestBlanketOrder(FrappeTestCase):
 	def setUp(self):
 		frappe.flags.args = frappe._dict()
-		if frappe.session.user != "Administrator":
-			frappe.set_user("Administrator")
 
 	def tearDown(self):
 		frappe.db.rollback()
