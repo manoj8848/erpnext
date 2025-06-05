@@ -20,6 +20,7 @@ from erpnext.stock.doctype.material_request.material_request import (
 	raise_work_orders,
 	make_request_for_quotation
 )
+from erpnext.controllers.accounts_controller import InvalidQtyError
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.doctype.pick_list.pick_list import create_stock_entry as pl_stock_entry
 from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
@@ -34,6 +35,17 @@ from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_i
 from erpnext.buying.doctype.supplier.test_supplier import create_supplier
 
 class TestMaterialRequest(FrappeTestCase):
+	def test_material_request_qty(self):
+		mr = frappe.copy_doc(test_records[0])
+		mr.items[0].qty = 0
+		with self.assertRaises(InvalidQtyError):
+			mr.insert()
+
+		# No error with qty=1
+		mr.items[0].qty = 1
+		mr.save()
+		self.assertEqual(mr.items[0].qty, 1)
+
 	def test_make_purchase_order(self):
 		mr = frappe.copy_doc(test_records[0]).insert()
 

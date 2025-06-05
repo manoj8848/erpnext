@@ -204,14 +204,17 @@ def make_request_for_quotation(**args) -> "RequestforQuotation":
 			"description": "_Test Item",
 			"uom": args.uom or "_Test UOM",
 			"stock_uom": args.stock_uom or "_Test UOM",
-			"qty": args.qty or 5,
+			"qty": args.qty if args.qty is not None else 5,
 			"conversion_factor": args.conversion_factor or 1.0,
 			"warehouse": args.warehouse or "_Test Warehouse - _TC",
 			"schedule_date": nowdate(),
 		},
 	)
 
-	rfq.submit()
+	if not args.do_not_save:
+		rfq.insert()
+		if not args.do_not_submit:
+			rfq.submit()
 
 	return rfq
 
