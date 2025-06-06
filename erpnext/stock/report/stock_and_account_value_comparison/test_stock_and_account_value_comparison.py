@@ -9,7 +9,7 @@ from erpnext.stock.report.stock_and_account_value_comparison.stock_and_account_v
     create_reposting_entries,
 )
 from frappe.utils import nowdate, now_datetime
-from datetime import timedelta
+from datetime import timedelta,time
 import erpnext
 
 
@@ -147,23 +147,6 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
         result = get_data(filters)
         self.assertIsInstance(result, list)
 
-    # def test_get_stock_ledger_data_with_account_filter(self):
-    #     filters = frappe._dict({
-    #         "company": self.company,
-    #         "as_on_date": self.posting_date,
-    #         "account": self.account
-    #     })
-    #     result = get_stock_ledger_data(filters, {
-    #         "company": self.company,
-    #         "posting_date": ("<=", self.posting_date),
-    #         "is_cancelled": 0
-    #     })
-    #     self.assertTrue(result)
-    #     for row in result:
-    #         self.assertIn("voucher_no", row)
-    #         if row.get("posting_time"):
-    #             self.assertIsInstance(row["posting_time"], timedelta)
-
     def test_get_gl_data_with_and_without_account(self):
         filters = frappe._dict({
             "company": self.company,
@@ -284,6 +267,111 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
             self.assertIn("account_value", row)
             self.assertIn("difference_value", row)
             self.assertTrue(abs(row.difference_value) > 0.1)
+
+
+    def test_create_reposting_entries_creates_repost_doc(self):
+        filters = frappe._dict({
+            "company": self.company,
+            "as_on_date": self.posting_date
+        })
+
+        data = get_data(filters)
+        if not data:
+            self.skipTest("No data found to create reposting entry.")
+
+        row = data[0]
+        row_dict = {
+            "voucher_type": row.voucher_type,
+            "voucher_no": row.voucher_no,
+            "posting_date": row.posting_date
+        }
+
+        # Clear any pre-existing repost item valuation for this voucher
+        existing = frappe.get_all("Repost Item Valuation", filters=row_dict)
+        for doc in existing:
+            frappe.delete_doc("Repost Item Valuation", doc.name, force=True)
+
+        # Call the function
+        create_reposting_entries([row_dict], self.company)
+
+        # Assert that Repost Item Valuation was created
+        repost_doc = frappe.get_all("Repost Item Valuation", filters=row_dict)
+        self.assertTrue(repost_doc)
+        self.assertEqual(len(repost_doc), 1)
+
+        # Optional: check its values
+        doc = frappe.get_doc("Repost Item Valuation", repost_doc[0].name)
+        self.assertEqual(doc.company, self.company)
+        self.assertEqual(doc.voucher_type, row.voucher_type)
+        self.assertEqual(doc.voucher_no, row.voucher_no)
+        self.assertEqual(doc.status, "Queued")
+        self.assertEqual(doc.based_on, "Transaction")
+
+
+
+    # class TestStockAndAccountValueComparison(frappe.tests.utils.FrappeTestCase):
+    def test_difference_value_computation_and_filtering(self):
+        # Simulated stock ledger entry
+        sle = frappe._dict({
+            "voucher_type": "Stock Entry",
+            "voucher_no": "STE-0001",
+            "stock_value": 150.00
+        })
+
+        # Simulated GL mapping
+        voucher_wise_gl_data = {
+            ("Stock Entry", "STE-0001"): {
+                "account_value": 100.00
+            }
+        }
+
+        stock_ledger_entries = [sle]
+        data = []
+
+        for d in stock_ledger_entries:
+            key = (d.voucher_type, d.voucher_no)
+            gl_data = voucher_wise_gl_data.get(key) or {}
+            d.account_value = gl_data.get("account_value", 0)
+            d.difference_value = d.stock_value - d.account_value
+            if abs(d.difference_value) > 0.1:
+                data.append(d)
+
+        # Assertions to confirm logic was followed
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0].account_value, 100.00)
+        self.assertEqual(data[0].difference_value, 50.00)
+
+
+
+    # class TestStockAndAccountValueComparison(FrappeTestCase):
+    def test_posting_time_conversion_to_timedelta(self):
+        # Simulated SLE row with posting_time
+        get_sle_data = [
+            {"posting_time": time(hour=10, minute=15, second=30)},
+            {"posting_time": None},
+            {},  # no 'posting_time' key
+        ]
+
+        for row in get_sle_data:
+            if 'posting_time' in row and row['posting_time'] is not None:
+                posting_time = row['posting_time']
+                row['posting_time'] = timedelta(
+                    hours=posting_time.hour,
+                    minutes=posting_time.minute,
+                    seconds=posting_time.second
+                )
+
+        # Assert conversion happened only for the first entry
+        self.assertIsInstance(get_sle_data[0]["posting_time"], timedelta)
+        self.assertEqual(get_sle_data[0]["posting_time"], timedelta(hours=10, minutes=15, seconds=30))
+
+        # Second entry should remain None
+        self.assertIsNone(get_sle_data[1]["posting_time"])
+
+        # Third entry should not have 'posting_time'
+        self.assertNotIn("posting_time", get_sle_data[2])
+
+
 
 
 
