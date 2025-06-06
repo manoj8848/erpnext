@@ -12,7 +12,7 @@ class TestManufacturer(unittest.TestCase):
 		frappe.db.rollback()
 
 	# codecov
-	def test_onload_TC_SCK_314(self):
+	def test_onload_TC_SCK_315(self):
 		manufacturer_doc = frappe.get_doc(
 			{
 				"doctype": "Manufacturer",
