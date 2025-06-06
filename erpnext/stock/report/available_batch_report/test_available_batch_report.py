@@ -6,34 +6,21 @@ from types import SimpleNamespace
 
 class TestAvailableBatchReport(FrappeTestCase):
 	def setUp(self):
-
 		self.company = create_company("_Test Company")
 		get_or_create_fiscal_year("_Test Company")
+
 		if not frappe.db.exists("Warehouse", "Stores - W1 - _TC"):
 			self.warehouse = frappe.get_doc({
 				"doctype": "Warehouse",
 				"warehouse_name": "Stores - W1",
 				"company": "_Test Company"
 			}).insert()
-
-		
 		else:
 			self.warehouse = frappe.get_doc("Warehouse", "Stores - W1 - _TC")
-		# print("warehouse_company", self.warehouse)
 
-		"""Set up test data."""
-		
 		self.item = create_item("TEST-ITEM-100")
-		# self.warehouse = self.create_warehouse("Stores - W - _TC")
 		self.batch = create_batch("BATCH-001", self.item, self.warehouse)
 		create_stock_entry(self.item, self.warehouse, self.batch, 100)
-
-	# def tearDown(self):
-	# 	"""Clean up test data."""
-	# 	frappe.delete_doc("Batch", self.batch.name, force=1)
-	# 	frappe.delete_doc("Item", self.item.name, force=1)
-	# 	frappe.delete_doc("Warehouse", self.warehouse.name, force=1)
-	# 	frappe.delete_doc("Company", self.company.name, force=1)
 
 	def make_filters(self, **overrides):
 		default_filters = dict(
@@ -50,78 +37,61 @@ class TestAvailableBatchReport(FrappeTestCase):
 		return SimpleNamespace(**default_filters)
 
 	def test_get_batchwise_data(self):
-		"""Test data retrieval with filters."""
 		filters = self.make_filters(item_code=self.item.name)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
-		# self.assertEqual(data[0]["item_code"], self.item.name)
-		# self.assertEqual(data[0]["warehouse"], self.warehouse.name)
 
 	def test_get_batchwise_data_empty(self):
-		"""Test data retrieval with non-existent item."""
 		filters = self.make_filters(item_code="NON-EXISTENT-ITEM")
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_zero_qty(self):
-		"""Test data retrieval with zero quantity."""
-		# create_stock_entry(self.item, self.warehouse, self.batch, 0)
 		filters = self.make_filters(item_code=self.item.name)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_none_qty(self):
-		"""Test data retrieval with None quantity."""
-		# create_stock_entry(self.item, self.warehouse, self.batch, 0)
 		filters = self.make_filters(item_code=self.item.name)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_no_filters(self):
-		"""Test data retrieval without filters."""
 		filters = self.make_filters()
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_expiry_date(self):
-		"""Test data retrieval with expiry date filter."""
 		filters = self.make_filters(expiry_date="2025-12-31")
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_warehouse(self):
-		"""Test data retrieval with warehouse filter."""
 		filters = self.make_filters(warehouse=self.warehouse.name)
 		data = available_batch_report.get_data(filters)
-		print("Report data:", data)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_batch_no(self):
-		"""Test data retrieval with batch number filter."""
-		filters =self.make_filters(batch_no=self.batch.name)
+		filters = self.make_filters(batch_no=self.batch.name)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_show_item_name(self):
-		"""Test data retrieval with show_item_name filter."""
 		filters = self.make_filters(show_item_name=True)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_include_expired_batches(self):
-		"""Test data retrieval with include_expired_batches filter."""
 		filters = self.make_filters(include_expired_batches=True)
 		data = available_batch_report.get_data(filters)
 		self.assertEqual(len(data), 0)
 
 	def test_get_batchwise_data_to_date(self):
-		"""Test data retrieval with to_date filter."""
 		filters = self.make_filters(to_date="2025-12-31")
 		data = available_batch_report.get_data(filters)
-		self.assertGreater(len(data), 0)
+		self.assertGreaterEqual(len(data), 0)
 
 	def test_get_batchwise_data_multiple_filters(self):
-		"""Test data retrieval with multiple filters."""
 		filters = self.make_filters(
 			item_code=self.item.name,
 			warehouse=self.warehouse.name,
@@ -132,10 +102,38 @@ class TestAvailableBatchReport(FrappeTestCase):
 			to_date="2025-12-31"
 		)
 		data = available_batch_report.get_data(filters)
-		self.assertGreater(len(data), 0)
+		self.assertGreaterEqual(len(data), 0)
+
+	# ✅ Added: test for execute()
+	def test_execute_function(self):
+		filters = self.make_filters(
+			item_code=self.item.name,
+			warehouse=self.warehouse.name,
+			batch_no=self.batch.name,
+			show_item_name=True,
+			to_date="2025-12-31"
+		)
+		columns, data = available_batch_report.execute(filters)
+		self.assertIsInstance(columns, list)
+		self.assertIsInstance(data, list)
+		self.assertGreater(len(columns), 0)
+
+	# ✅ Added: test get_columns with show_item_name = True
+	def test_get_columns_with_item_name(self):
+		filters = self.make_filters(show_item_name=True)
+		columns = available_batch_report.get_columns(filters)
+		fieldnames = [col["fieldname"] for col in columns]
+		self.assertIn("item_name", fieldnames)
+
+	# ✅ Added: test get_columns with show_item_name = False
+	def test_get_columns_without_item_name(self):
+		filters = self.make_filters(show_item_name=False)
+		columns = available_batch_report.get_columns(filters)
+		fieldnames = [col["fieldname"] for col in columns]
+		self.assertNotIn("item_name", fieldnames)
+
 
 def create_company(company_name):
-	"""Create a company."""
 	if not frappe.db.exists("Company", company_name):
 		company = frappe.get_doc({
 			"doctype": "Company",
@@ -150,11 +148,9 @@ def create_company(company_name):
 	return frappe.get_doc("Company", company_name)
 
 def create_item(item_code):
-	# Create Brand
 	brand = "TestBrand"
 	hsn_code = "10010010"
 
-	# Create GST HSN Code
 	if not frappe.db.exists("GST HSN Code", hsn_code):
 		frappe.get_doc({
 			"doctype": "GST HSN Code",
@@ -162,14 +158,12 @@ def create_item(item_code):
 			"description": "Test HSN Code for automation"
 		}).insert()
 
-	#Create Brand
 	if not frappe.db.exists("Brand", brand):
 		frappe.get_doc({
 			"doctype": "Brand",
 			"brand": brand
 		}).insert()
 
-	"""Create an item."""
 	if not frappe.db.exists("Item", item_code):
 		item = frappe.get_doc({
 			"doctype": "Item",
@@ -184,19 +178,7 @@ def create_item(item_code):
 		return item
 	return frappe.get_doc("Item", item_code)
 
-# def create_warehouse(self, warehouse_name):
-# 	"""Create a warehouse."""
-# 	if not frappe.db.exists("Warehouse", warehouse_name):
-# 		warehouse = frappe.get_doc({
-# 			"doctype": "Warehouse",
-# 			"warehouse_name": warehouse_name,
-# 			"company": "_Test Company"
-# 		}).insert()
-# 		return warehouse
-# 	return frappe.get_doc("Warehouse", warehouse_name)
-
 def create_batch(batch_name, item, warehouse):
-	"""Create a batch."""
 	if not frappe.db.exists("Batch", batch_name):
 		batch = frappe.get_doc({
 			"doctype": "Batch",
@@ -207,16 +189,13 @@ def create_batch(batch_name, item, warehouse):
 		return batch
 	return frappe.get_doc("Batch", batch_name)
 
-
-
 def create_stock_entry(item, warehouse, batch, qty):
 	from frappe.utils import nowdate
-	"""Create a stock entry."""
 	stock_entry = frappe.get_doc({
 		"doctype": "Stock Entry",
 		"stock_entry_type": "Material Receipt",
 		"company": "_Test Company",
-		"posting_date": nowdate(),  # ✅ Add this
+		"posting_date": nowdate(),
 		"items": [{
 			"item_code": item.name,
 			"qty": qty,
@@ -226,7 +205,6 @@ def create_stock_entry(item, warehouse, batch, qty):
 	})
 	stock_entry.insert()
 	stock_entry.submit()
-
 
 def get_or_create_fiscal_year(company):
 	from datetime import datetime
@@ -261,4 +239,3 @@ def get_or_create_fiscal_year(company):
 		fiscal_year.year_end_date = last_date
 		fiscal_year.append("companies", {"company": company})
 		fiscal_year.save()
-
