@@ -167,17 +167,38 @@ class TestWarehouse(FrappeTestCase):
 			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
 
 		# Create a bin with quantities
-		frappe.get_doc({
-			"doctype":"Bin",
-			"item_code": "_Test Item",
-			"warehouse": warehouse,
-			"actual_qty": 5,
-			"reserved_qty": 0,
-			"ordered_qty": 0,
-			"indented_qty": 0,
-			"planned_qty": 0,
-			"projected_qty": 0,
-		}).insert()
+		bin_key = {
+    		"item_code": "_Test Item",
+    		"warehouse": warehouse,
+		}
+
+		existing_bin = frappe.db.get_value("Bin", bin_key, "name")
+
+		if existing_bin:
+		    # Update existing Bin
+			bin_doc = frappe.get_doc("Bin", existing_bin)
+			bin_doc.update({
+		        "actual_qty": 5,
+		        "reserved_qty": 0,
+		        "ordered_qty": 0,
+		        "indented_qty": 0,
+		        "planned_qty": 0,
+		        "projected_qty": 0,
+		    })
+			bin_doc.save()
+		else:
+		    # Insert new Bin
+			frappe.get_doc({
+		        "doctype": "Bin",
+		        **bin_key,
+		        "actual_qty": 5,
+		        "reserved_qty": 0,
+		        "ordered_qty": 0,
+		        "indented_qty": 0,
+		        "planned_qty": 0,
+		        "projected_qty": 0,
+			}).insert()
+
 
 		# Try to delete warehouse, should raise ValidationError
 		with self.assertRaises(frappe.ValidationError) as context:
@@ -225,6 +246,7 @@ class TestWarehouse(FrappeTestCase):
 			}).insert()
 		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 
+		
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
 
 		# Simulate a reload to trigger onload
@@ -248,7 +270,7 @@ class TestWarehouse(FrappeTestCase):
 
     	# Create two stock accounts if not exist
 		for acc in [account1, account2]:
-			if not frappe.db.exists("Account", acc):
+			if not frappe.db.exists("Account", erpnext.encode_company_abbr(acc, company)):
 				frappe.get_doc({
 		            "doctype": "Account",
 		            "account_name": acc,
@@ -269,13 +291,15 @@ class TestWarehouse(FrappeTestCase):
 			}).insert()
 
 		# Create the test warehouse
-		warehouse_doc = frappe.get_doc({
-		    "doctype": "Warehouse",
-		    "warehouse_name": warehouse_name,
-		    "company": company,
-		    "parent_warehouse": parent_warehouse_name,
-		    "account": erpnext.encode_company_abbr(account1, company)
-		}).insert()
+		test_warehouse_name = erpnext.encode_company_abbr("_Test Warehouse", company)
+		if not frappe.db.exists("Warehouse", test_warehouse_name):
+			warehouse_doc = frappe.get_doc({
+			    "doctype": "Warehouse",
+			    "warehouse_name": warehouse_name,
+			    "company": company,
+			    "parent_warehouse": parent_warehouse_name,
+			    "account": erpnext.encode_company_abbr(account1, company)
+			}).insert()
 
     	# Make sure the test item is stock item with valuation rate
 		item = frappe.get_doc("Item", "_Test Item")
@@ -294,7 +318,7 @@ class TestWarehouse(FrappeTestCase):
 
     	# Create third stock account if not exist (to test warning)
 		account3 = "_Test Stock Account 3"
-		if not frappe.db.exists("Account", account3):
+		if not frappe.db.exists("Account", erpnext.encode_company_abbr(account3, company)):
 			frappe.get_doc({
             "doctype": "Account",
             "account_name": account3,
@@ -316,7 +340,7 @@ class TestWarehouse(FrappeTestCase):
 
 	def test_add_root_warehouse_node_TC_SCK_333(self):
 		frappe.form_dict = frappe._dict({
-			"warehouse_name": "_Test Warehouse",
+			"warehouse_name": "_Test Node Warehouse",
 			"company":"_Test Company",
 			"is_group": 1,
 			"is_root": 1,
@@ -325,10 +349,14 @@ class TestWarehouse(FrappeTestCase):
 
 		from erpnext.stock.doctype.warehouse.warehouse import add_node
 
+		node_warehouse_name = erpnext.encode_company_abbr("_Test Node Warehouse", "_Test Company")
+		if frappe.db.exists("Warehouse", node_warehouse_name):
+			frappe.delete_doc("Warehouse", node_warehouse_name, force=1)
+
 		add_node()
 
 		# Suffix should match company's abbr
-		wh = frappe.get_doc("Warehouse", erpnext.encode_company_abbr("_Test Warehouse", "_Test Company"))
+		wh = frappe.get_doc("Warehouse", erpnext.encode_company_abbr("_Test Node Warehouse", "_Test Company"))
 		self.assertEqual(wh.company, "_Test Company")
 		self.assertIsNone(wh.parent_warehouse)
 		self.assertTrue(wh.is_group)
