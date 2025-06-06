@@ -19,6 +19,9 @@ def stock_analytics(filters):
 class TestStockAnalyticsReport(FrappeTestCase):
 	def setUp(self) -> None:
 		self.item = make_item().name
+		item = frappe.get_doc("Item", self.item)
+		item.valuation_rate = 100
+		item.save()
 		self.warehouse = "_Test Warehouse - _TC"
 
 	def assert_single_item_report(self, movement, expected_buckets):
@@ -112,3 +115,120 @@ class TestStockAnalyticsReport(FrappeTestCase):
 			(-10, add_to_date(today, months=5).replace(day=15)),
 		]
 		self.assert_single_item_report(movement, [100, 50, 50, 70, 70, 60])
+
+	def test_value_mode(self):
+		today = getdate()
+		posting_date = today.replace(day=15)
+
+		make_stock_entry(
+			item=self.item,
+			qty=10,
+			rate=100,
+			posting_date=posting_date,
+			to_warehouse=self.warehouse,
+		)
+
+		filters = _dict(
+			range="Monthly",
+			from_date=posting_date.replace(day=1),
+			to_date=posting_date.replace(day=28),
+			value_quantity="Value",
+			company="_Test Company",
+			item_code=self.item,
+			warehouse=self.warehouse,
+		)
+
+		cols, data = stock_analytics(filters)
+		self.assertEqual(len(data), 1)
+		row = frappe._dict(data[0])
+		expected_value = 10 * 100
+		self.assertEqual(row.get(cols[-1]["fieldname"]), expected_value)
+
+	def test_stock_reconciliation_entry(self):
+		posting_date = getdate().replace(day=10)
+
+		doc = frappe.get_doc({
+			"doctype": "Stock Reconciliation",
+			"company": "_Test Company",
+			"posting_date": posting_date,
+			"posting_time": "12:00",
+			"purpose": "Stock Reconciliation",  # ✅ Required
+			"items": [
+				{
+					"item_code": self.item,
+					"warehouse": self.warehouse,
+					"qty": 15,
+					"valuation_rate": 200,
+				}
+			]
+		})
+		doc.insert()
+		doc.submit()
+
+		filters = _dict(
+			range="Monthly",
+			from_date=posting_date.replace(day=1),
+			to_date=posting_date.replace(day=28),
+			value_quantity="Quantity",
+			company="_Test Company",
+			item_code=self.item,
+			warehouse=self.warehouse,
+		)
+
+		cols, data = stock_analytics(filters)
+		self.assertEqual(len(data), 1)
+		row = frappe._dict(data[0])
+		self.assertEqual(row.get(cols[-1]["fieldname"]), 15)
+
+
+
+
+	def test_weekly_range(self):
+		today = getdate()
+		posting_date = today.replace(day=10)
+
+		make_stock_entry(
+			item=self.item,
+			qty=5,
+			posting_date=posting_date,
+			to_warehouse=self.warehouse,
+		)
+
+		filters = _dict(
+			range="Weekly",
+			from_date=posting_date.replace(day=1),
+			to_date=posting_date.replace(day=28),
+			value_quantity="Quantity",
+			company="_Test Company",
+			item_code=self.item,
+			warehouse=self.warehouse,
+		)
+
+		cols, data = stock_analytics(filters)
+		self.assertEqual(len(data), 1)
+		self.assertGreaterEqual(len(cols[-4:]), 1)
+
+	def test_quarterly_range(self):
+		today = getdate()
+		posting_date = today.replace(day=15)
+
+		make_stock_entry(
+			item=self.item,
+			qty=8,
+			posting_date=posting_date,
+			to_warehouse=self.warehouse,
+		)
+
+		filters = _dict(
+			range="Quarterly",
+			from_date=posting_date.replace(day=1),
+			to_date=posting_date.replace(day=28),
+			value_quantity="Quantity",
+			company="_Test Company",
+			item_code=self.item,
+			warehouse=self.warehouse,
+		)
+
+		cols, data = stock_analytics(filters)
+		self.assertEqual(len(data), 1)
+		self.assertGreaterEqual(len(cols), 1)
