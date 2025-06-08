@@ -32,8 +32,25 @@ from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_r
 from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_purchase_invoice
 from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_invoice as create_purchase_invoice
 from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+from erpnext.stock.doctype.material_request.material_request import get_list_context,update_status,validate_available_budget
+
+
 
 class TestMaterialRequest(FrappeTestCase):
+
+	def setUp(self):
+		super().setUp()
+
+		# Ensure _Test Company exists
+		if not frappe.db.exists("Company", "_Test Company"):
+			company = frappe.new_doc("Company")
+			company.company_name = "_Test Company"
+			company.default_currency = "INR"
+			company.insert()
+
+	def tearDown(self):
+		frappe.db.rollback()		
+
 	def test_make_purchase_order(self):
 		mr = frappe.copy_doc(test_records[0]).insert()
 
@@ -7836,6 +7853,190 @@ class TestMaterialRequest(FrappeTestCase):
 		frappe.db.delete("Budget Entry", {"voucher_no": self.mr.name})
 		frappe.delete_doc("Work Breakdown Structure", self.wbs.name, force=True)
 		frappe.delete_doc("Material Request", self.mr.name, force=True)
+
+	def test_get_list_context_executes_TC_SCK_346(self):
+		context = {}
+		result = get_list_context(context)
+
+		self.assertIsInstance(result, dict)
+		self.assertIn("title", result)
+		self.assertEqual(result["title"], "Material Request")	
+
+	def test_update_status_function_TC_SCK_347(self):
+
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		# Create item with valid warehouse and company
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+
+		# Create a test Material Request
+		doc = frappe.get_doc({
+			"doctype": "Material Request",
+			"material_request_type": "Purchase",
+			"transaction_date": frappe.utils.nowdate(),
+			"schedule_date": frappe.utils.nowdate(),
+			"company": "_Test Company",
+			"items": [
+				{
+					"item_code": "_Test Item",
+					"qty": 1,
+					"schedule_date": frappe.utils.nowdate(),
+					"warehouse":warehouse
+				}
+			]
+		})
+		doc.insert()
+		doc.submit()
+
+		# Call the whitelisted method
+		update_status(doc.name, "Stopped")
+
+		# Reload and assert
+		updated_doc = frappe.get_doc("Material Request", doc.name)
+		self.assertEqual(updated_doc.status, "Stopped")	
+
+	def test_validate_budget_stop_action_TC_SCK_348(self):
+
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+
+		# Create a dummy Material Request doc
+		mr = frappe.get_doc({
+			"doctype": "Material Request",
+			"material_request_type": "Purchase",
+			"transaction_date": frappe.utils.nowdate(),
+			"items": [{
+				"item_code": "_Test Item",
+				"qty": 5,
+				"uom": "Nos",
+				"schedule_date": frappe.utils.nowdate(),
+				"work_breakdown_structure": "Test WBS"
+			}]
+		})
+
+		# Override methods manually
+		def fake_get_wbs_amount(doc, wbs):
+			return 1000
+
+		def fake_check_available_budget(wbs, amt, doctype, date):
+			return {
+				"wbs": wbs,
+				"available_bgt": -200,
+				"action": "Stop"
+			}
+
+		# Inject custom methods
+		mr.get_wbs_amount = fake_get_wbs_amount
+		mr.check_available_budget = fake_check_available_budget
+
+		# Monkey patch globally (if required)
+		from erpnext.stock.doctype import material_request
+		material_request.material_request.get_wbs_amount = fake_get_wbs_amount
+		material_request.material_request.check_available_budget = fake_check_available_budget
+
+		# This should raise validation error
+		with self.assertRaises(frappe.ValidationError) as e:
+			validate_available_budget(mr)
+
+		self.assertIn("Available Budget Limit Exceeded", str(e.exception))	
+
+	def test_validate_budget_warn_action_TC_SCK_349(self):
+
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+			
+		mr = frappe.get_doc({
+			"doctype": "Material Request",
+			"material_request_type": "Purchase",
+			"transaction_date": frappe.utils.nowdate(),
+			"items": [{
+				"item_code": "_Test Item",
+				"qty": 5,
+				"uom": "Nos",
+				"schedule_date": frappe.utils.nowdate(),
+				"work_breakdown_structure": "Test WBS"
+			}]
+		})
+
+		def fake_get_wbs_amount(doc, wbs):
+			return 1000
+
+		def fake_check_available_budget(wbs, amt, doctype, date):
+			return {
+				"wbs": wbs,
+				"available_bgt": -300,
+				"action": "Warn"
+			}
+
+		from erpnext.stock.doctype import material_request
+		material_request.material_request.get_wbs_amount = fake_get_wbs_amount
+		material_request.material_request.check_available_budget = fake_check_available_budget
+
+		try:
+			validate_available_budget(mr)
+		except frappe.ValidationError:
+			self.fail("Should not raise ValidationError when action is Warn")
+	
+
+	def test_validate_available_budget_multiple_wbs_TC_SCK_350(self):
+
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+	
+    	# Create Material Request doc with 2 different WBS
+		mr = frappe.get_doc({
+    	    "doctype": "Material Request",
+    	    "material_request_type": "Purchase",
+    	    "transaction_date": frappe.utils.nowdate(),
+    	    "schedule_date": frappe.utils.nowdate(),
+    	    "company": "_Test Company",
+    	    "items": [
+    	        {
+    	            "item_code": "_Test Item",
+    	            "qty": 1,
+    	            "schedule_date": frappe.utils.nowdate(),
+    	            "warehouse": warehouse,
+    	            "work_breakdown_structure": "WBS-001"
+    	        },
+    	        {
+    	            "item_code": "_Test Item",
+    	            "qty": 2,
+    	            "schedule_date": frappe.utils.nowdate(),
+    	            "warehouse": warehouse,
+    	            "work_breakdown_structure": "WBS-002"
+    	        }
+    	    ]
+    	})
+
+    	# Monkey patching the functions so that coverage goes into the branches
+		def fake_get_wbs_amount(self, wbs):
+			return 100
+
+		def fake_check_available_budget(wbs, amt, doctype, date):
+			return {
+    	        "available_bgt": -50,
+    	        "action": "Warn",  # or "Stop" to trigger frappe.throw
+    	        "wbs": wbs
+    	    }
+
+		from erpnext.stock.doctype import material_request
+		material_request.material_request.get_wbs_amount = fake_get_wbs_amount
+		material_request.material_request.check_available_budget = fake_check_available_budget
+
+    	# Run method
+		validate_available_budget(mr)
+
+    	# No exception = success (warn only triggers msgprint)
+		assert True
+
+
 	
 def get_in_transit_warehouse(company):
 	if not frappe.db.exists("Warehouse Type", "Transit"):
