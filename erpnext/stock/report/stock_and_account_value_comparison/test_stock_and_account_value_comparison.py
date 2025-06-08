@@ -12,7 +12,6 @@ from frappe.utils import nowdate, now_datetime
 from datetime import timedelta, time
 import erpnext
 
-
 class TestStockAndAccountValueComparison(FrappeTestCase):
     def setUp(self):
         self.company = "_Test Company"
@@ -20,6 +19,9 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
         self.warehouse = "_Test Warehouse - _TC - _C"
         self.account = "Stock In Hand - _TC"
         self.posting_date = nowdate()
+
+        # Fix for global override issue with frappe.db.exists
+        frappe.db.exists = frappe.db.__class__.exists.__get__(frappe.db)
 
         self.ensure_test_data()
         get_or_create_fiscal_year(self.company)
@@ -76,7 +78,7 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
                 "rate": 100
             }]
         })
-        se.insert(ignore_permissions=True)
+        se.insert()
         se.submit()
         return se.name
 
@@ -97,7 +99,7 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
                 "company": self.company,
                 "incoming_rate": 100,
                 "is_cancelled": 0,
-            }).insert(ignore_permissions=True)
+            }).insert()
 
     def create_gl_entry(self):
         if not frappe.db.exists("GL Entry", {"voucher_no": self.stock_entry}):
@@ -111,7 +113,7 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
                 "voucher_no": self.stock_entry,
                 "company": self.company,
                 "fiscal_year": frappe.defaults.get_user_default("fiscal_year")
-            }).insert(ignore_permissions=True)
+            }).insert()
 
     def test_execute_with_perpetual_inventory(self):
         filters = frappe._dict({
@@ -361,19 +363,14 @@ def get_or_create_fiscal_year(company):
 
     if existing_fy:
         fiscal_year = frappe.get_doc("Fiscal Year", existing_fy[0].name)
-        for years in fiscal_year.companies:
-            if years.company == company:
-                pass
-            else:
-                fiscal_year.append("companies", {"company": company})
-                fiscal_year.save()
+        if not any(row.company == company for row in fiscal_year.companies):
+            fiscal_year.append("companies", {"company": company})
+            fiscal_year.save()
     else:
         current_year = datetime.now().year
-        first_date = f"01-01-{current_year}"
-        last_date = f"31-12-{current_year}"
         fiscal_year = frappe.new_doc("Fiscal Year")
         fiscal_year.year = f"{current_year}"
-        fiscal_year.year_start_date = first_date
-        fiscal_year.year_end_date = last_date
+        fiscal_year.year_start_date = f"01-01-{current_year}"
+        fiscal_year.year_end_date = f"31-12-{current_year}"
         fiscal_year.append("companies", {"company": company})
         fiscal_year.save()

@@ -1,11 +1,20 @@
-# test_total_stock.py
-
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-
 class TestTotalStockSummary(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.original_get_value = frappe.db.get_value  # Save original method
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.db.get_value = cls.original_get_value  # Restore original after tests
+		super().tearDownClass()
+
 	def setUp(self):
+		# Restore frappe.db.get_value to prevent leaked lambda
+		frappe.db.get_value = self.original_get_value
 
 		hsn_code = "10010010"
 
@@ -84,7 +93,6 @@ class TestTotalStockSummary(FrappeTestCase):
 		columns_company = get_columns({})
 		assert "Company" in columns_company[0]
 
-
 	def test_get_total_stock_variants(self):
 		from erpnext.stock.report.total_stock_summary.total_stock_summary import get_total_stock
 
@@ -97,4 +105,3 @@ class TestTotalStockSummary(FrappeTestCase):
 		data2 = get_total_stock({"group_by": "Warehouse", "company": "Test Company"})
 		assert data2
 		assert any(float(d[3]) > 0 for d in data2)
-
