@@ -24,7 +24,7 @@ class ItemAttribute(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.item_attribute_value.item_attribute_value import ItemAttributeValue
@@ -49,7 +49,7 @@ class ItemAttribute(Document):
 	def on_update(self):
 		self.validate_exising_items()
 		self.set_enabled_disabled_in_items()
-		
+
 	def set_enabled_disabled_in_items(self):
 		db_value = self.get_doc_before_save()
 		if not db_value or db_value.disabled != self.disabled:
