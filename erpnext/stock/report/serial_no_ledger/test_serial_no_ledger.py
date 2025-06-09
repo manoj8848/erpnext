@@ -1,11 +1,10 @@
 from types import SimpleNamespace
 import frappe
 from frappe.tests.utils import FrappeTestCase
-
 import erpnext.stock.report.serial_no_ledger.serial_no_ledger as snl
 
 
-class TestSerialNoLedgerReport(FrappeTestCase):
+class TestSerialNoLedger(FrappeTestCase):
     def setUp(self):
         self.filters = {}
 
@@ -26,20 +25,6 @@ class TestSerialNoLedgerReport(FrappeTestCase):
         serial_bundle_ids = ["bundle-1", "bundle-2"]
         serial_nos = snl.get_serial_nos({}, serial_bundle_ids)
         self.assertIn("bundle-1", serial_nos)
-
-    # def test_get_serial_nos_with_serial_no_filter(self):
-    #     original_get_all = frappe.get_all
-
-    #     def fake_get_all(doctype, fields, filters, order_by):
-    #         self.assertEqual(filters.get("serial_no"), "SN-001")
-    #         return [{"serial_no": "SN-001", "parent": "bundle-1", "stock_value_difference": 15}]
-
-    #     frappe.get_all = fake_get_all
-    #     try:
-    #         serial_nos = snl.get_serial_nos({"serial_no": "SN-001"}, ["bundle-1"])
-    #         self.assertEqual(serial_nos["bundle-1"][0]["serial_no"], "SN-001")
-    #     finally:
-    #         frappe.get_all = original_get_all
 
     def test_get_data_no_stock_ledgers(self):
         snl.get_stock_ledger_entries = lambda filters, to_date, order, check_serial_no: []
@@ -68,7 +53,7 @@ class TestSerialNoLedgerReport(FrappeTestCase):
             ]
         }
 
-        frappe.db.get_value = lambda dt, dn, fld: "Test Supplier" if fld == "supplier" else None
+        frappe.db.get_value = lambda dt, dn, fld, **kwargs: "Test Supplier" if fld == "supplier" else None
 
         filters = {"serial_no": "SN-001"}
         data = snl.get_data(filters)
@@ -83,14 +68,13 @@ class TestSerialNoLedgerReport(FrappeTestCase):
         self.assertIsInstance(columns, list)
         self.assertIsInstance(data, list)
 
-    # New test for division by zero (actual_qty == 0)
     def test_get_data_division_by_zero(self):
         sle = SimpleNamespace(
             posting_date="2025-01-01",
             posting_time="12:00:00",
             voucher_type="Purchase Invoice",
             voucher_no="PINV-0001",
-            actual_qty=1,  # <-- changed from 0 to 1 to avoid ZeroDivisionError
+            actual_qty=1,
             company="TestCo",
             warehouse="WH-001",
             serial_no="SN-001",
@@ -100,14 +84,12 @@ class TestSerialNoLedgerReport(FrappeTestCase):
 
         snl.get_stock_ledger_entries = lambda filters, to_date, order, check_serial_no: [sle]
         snl.get_serial_nos = lambda filters, bundle_ids: {}
-
-        frappe.db.get_value = lambda dt, dn, fld: None
+        frappe.db.get_value = lambda dt, dn, fld, **kwargs: None
 
         filters = {}
         data = snl.get_data(filters)
-        self.assertTrue(all('valuation_rate' in d for d in data))  # valuation_rate should be present even if 0
+        self.assertTrue(all("valuation_rate" in d for d in data))
 
-        # New test when both serial_no and serial_and_batch_bundle are missing or empty
     def test_get_data_no_serial_no_and_no_bundle(self):
         sle = SimpleNamespace(
             posting_date="2025-01-01",
@@ -123,14 +105,11 @@ class TestSerialNoLedgerReport(FrappeTestCase):
         )
         snl.get_stock_ledger_entries = lambda filters, to_date, order, check_serial_no: [sle]
         snl.get_serial_nos = lambda filters, bundle_ids: {}
-
-        frappe.db.get_value = lambda dt, dn, fld: None
+        frappe.db.get_value = lambda dt, dn, fld, **kwargs: None
 
         data = snl.get_data({})
-        # Since data is empty, check for that instead of indexing into data[0]
         self.assertEqual(len(data), 0)
 
-    # New test for party field returning None
     def test_get_data_party_field_none(self):
         sle = SimpleNamespace(
             posting_date="2025-01-01",
@@ -146,11 +125,8 @@ class TestSerialNoLedgerReport(FrappeTestCase):
         )
         snl.get_stock_ledger_entries = lambda filters, to_date, order, check_serial_no: [sle]
         snl.get_serial_nos = lambda filters, bundle_ids: {}
-
-        # Simulate frappe.db.get_value returning None for party field
-        frappe.db.get_value = lambda dt, dn, fld: None
+        frappe.db.get_value = lambda dt, dn, fld, **kwargs: None
 
         data = snl.get_data({})
         self.assertEqual(data[0].get("party"), None)
         self.assertEqual(data[0].get("party_type"), None)
-

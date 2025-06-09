@@ -15,35 +15,35 @@ class TestBalanceSheet(FrappeTestCase):
 			create_sales_invoice,
 		)
 
-		frappe.db.sql("delete from `tabPurchase Invoice` where company='_Test Company 6'")
-		frappe.db.sql("delete from `tabSales Invoice` where company='_Test Company 6'")
-		frappe.db.sql("delete from `tabGL Entry` where company='_Test Company 6'")
+		frappe.db.sql("delete from `tabPurchase Invoice` where company='_Test Company'")
+		frappe.db.sql("delete from `tabSales Invoice` where company='_Test Company'")
+		frappe.db.sql("delete from `tabGL Entry` where company='_Test Company'")
 
 		make_purchase_invoice(
-			company="_Test Company 6",
-			warehouse="Finished Goods - _TC6",
-			expense_account="Cost of Goods Sold - _TC6",
-			cost_center="Main - _TC6",
+			company="_Test Company",
+			warehouse="Finished Goods - _TC",
+			expense_account="Cost of Goods Sold - _TC",
+			cost_center="Main - _TC",
 			qty=10,
 			rate=100,
 		)
 		create_sales_invoice(
-			company="_Test Company 6",
-			debit_to="Debtors - _TC6",
-			income_account="Sales - _TC6",
-			cost_center="Main - _TC6",
+			company="_Test Company",
+			debit_to="Debtors - _TC",
+			income_account="Sales - _TC",
+			cost_center="Main - _TC",
 			qty=5,
 			rate=110,
 		)
 		filters = frappe._dict(
-			company="_Test Company 6",
+			company="_Test Company",
 			period_start_date=today(),
 			period_end_date=today(),
 			periodicity="Yearly",
 		)
 		result = execute(filters)[1]
 		for account_dict in result:
-			if account_dict.get("account") == "Current Liabilities - _TC6":
+			if account_dict.get("account") == "Current Liabilities - _TC":
 				self.assertEqual(account_dict.total, 1000)
-			if account_dict.get("account") == "Current Assets - _TC6":
-				self.assertEqual(account_dict.total, 550)
+			if account_dict.get("account") == "Current Assets - _TC":
+				self.assertEqual(account_dict.total, 750)

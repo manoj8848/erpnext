@@ -9,6 +9,7 @@ from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delive
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
 from frappe import _dict
+from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 
 class TestStockLedgerReport(FrappeTestCase):
 	def setUp(self) -> None:
