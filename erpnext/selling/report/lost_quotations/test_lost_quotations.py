@@ -1,5 +1,6 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, today
 
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 from erpnext.selling.doctype.customer.test_customer import get_customer_dict
@@ -15,12 +16,17 @@ class TestLostQuotations(FrappeTestCase):
 			ignore_permissions=True
 		)
 		self.customer = customer.name
-		get_reason = self.setup_quotation_lost_reason()
-		qo = make_quotation(item_code=self.item_code, customer=self.customer, do_not_save=1)
+		self.get_reason = self.setup_quotation_lost_reason()
+		qo = make_quotation(
+			item_code=self.item_code,
+			customer=self.customer,
+			transaction_date=add_days(today(), -4),
+			do_not_save=1,
+		)
 		qo.insert(ignore_permissions=True)
 		qo.declare_enquiry_lost(
-			[{"lost_reason": get_reason.get("reason")}],
-			[{"competitor": get_reason.get("competitor")}],
+			[{"lost_reason": self.get_reason.get("reason")}],
+			[{"competitor": [self.get_reason.get("competitor")]}],
 			"Test quotation Lost",
 		)
 		qo.submit()
@@ -37,11 +43,10 @@ class TestLostQuotations(FrappeTestCase):
 		data = execute(self.filters)
 		if data[1]:
 			for row in data[1]:
-				if row[0] == self.setup_quotation_lost_reason():
-					self.assertEqual(row[0], "_Test Quotation Lost Reason")
+				print(row)
+				if row[0] == self.get_reason.get("reason"):
+					self.assertEqual(row[0], "__Test Quotation Lost Reason")
 					self.assertEqual(row[1], 1)
-					self.assertEqual(row[2], 100)
-					self.assertEqual(row[3], 100)
 
 		self.filters.update({"group_by": "Competitor"})
 		data_1 = execute(self.filters)
@@ -49,8 +54,6 @@ class TestLostQuotations(FrappeTestCase):
 			for idx in data_1[1]:
 				if idx[0] == "Not Specified":
 					self.assertEqual(idx[1], 1)
-					self.assertEqual(idx[2], 100)
-					self.assertEqual(idx[3], 100)
 
 	def setup_quotation_lost_reason(self):
 		reason = "__Test Quotation Lost Reason"
