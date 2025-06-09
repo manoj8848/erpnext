@@ -43,6 +43,7 @@ class TestTotalStockSummary(FrappeTestCase):
 				"item_group": "All Item Groups" ,
 			}).insert()
 
+
 		# Create Company
 		if not frappe.db.exists("Company", "Test Company"):
 			frappe.get_doc({
