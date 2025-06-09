@@ -8392,7 +8392,7 @@ def create_registered_customer():
 				"customer_name": "_Test Registered Customer",
 				"customer_type": "Company",
 				"customer_group": "Commercial",
-				"territory": "India",
+				"territory": "_Test Territory",
 				"gstin": "24AANFA2641L1ZF",
 				"gst_category": "Registered Regular",
 			}
