@@ -14,6 +14,12 @@ class TestAccountPaybale(AccountsTestMixin, FrappeTestCase):
         self.create_supplier()
         self.create_item()
         self.clear_old_entries()
+        frappe.db.set_value(
+			"Company",
+			"_Test Company",
+			"stock_received_but_not_billed",
+			"Stock Received But Not Billed - _TC",
+		)
 
     def teaDown(self):
         frappe.db.rollback()
