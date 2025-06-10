@@ -29,23 +29,8 @@ class TestDeliveryNoteTrendsReport(unittest.TestCase):
 			}]
 		}).insert(ignore_permissions=True)
 		self.dn.submit()
-		fiscal_years = frappe.get_all("Fiscal Year", filters={"year": year}, fields=["name"])
-		for fy in fiscal_years:
-			doc = frappe.get_doc("Fiscal Year", fy.name)
-			if not doc.companies:
-				doc.delete()
-		if not frappe.db.exists("Fiscal Year", "2024-2025"):
-			fiscal_year = frappe.new_doc("Fiscal Year")
-			fiscal_year.year = "2024-2025"
-			fiscal_year.year_start_date = "2024-04-01"
-			fiscal_year.year_end_date = "2025-03-31"
-			fiscal_year.append("companies", {"company": "_Test Company"})
-			fiscal_year.save()
-		else:
-			fiscal_year = frappe.get_doc("Fiscal Year", "2024-2025")
-			if not any(d.company == "_Test Company" for d in fiscal_year.companies):
-				fiscal_year.append("companies", {"company": "_Test Company"})
-				fiscal_year.save()
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		get_or_create_fiscal_year("_Test Company")
 
 		
 	def test_execute_with_valid_filters(self):
