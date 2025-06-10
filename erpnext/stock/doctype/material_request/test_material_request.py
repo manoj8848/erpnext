@@ -9123,8 +9123,8 @@ class TestMaterialRequest(FrappeTestCase):
 		update_status(doc.name, "Stopped")
 
 		# Reload and assert
-		updated_doc = frappe.get_doc("Material Request", doc.name)
-		self.assertEqual(updated_doc.status, "Stopped")
+		doc.reload()
+		self.assertEqual(doc.status, "Stopped")
 
 	def test_validate_budget_stop_action_TC_SCK_348(self):
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
@@ -9168,10 +9168,8 @@ class TestMaterialRequest(FrappeTestCase):
 		material_request.material_request.check_available_budget = fake_check_available_budget
 
 		# This should raise validation error
-		with self.assertRaises(frappe.ValidationError) as e:
+		with self.assertRaises(frappe.ValidationError, msg="Available Budget Limit Exceeded"):
 			validate_available_budget(mr)
-
-		self.assertIn("Available Budget Limit Exceeded", str(e.exception))
 
 	def test_validate_budget_warn_action_TC_SCK_349(self):
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
@@ -9207,10 +9205,10 @@ class TestMaterialRequest(FrappeTestCase):
 		material_request.material_request.get_wbs_amount = fake_get_wbs_amount
 		material_request.material_request.check_available_budget = fake_check_available_budget
 
-		try:
+		with self.assertRaises(
+			frappe.ValidationError, msg="Should not raise ValidationError when action is Warn"
+		):
 			validate_available_budget(mr)
-		except frappe.ValidationError:
-			self.fail("Should not raise ValidationError when action is Warn")
 
 	def test_validate_available_budget_multiple_wbs_TC_SCK_350(self):
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
