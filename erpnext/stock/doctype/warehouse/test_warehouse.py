@@ -20,6 +20,20 @@ class TestWarehouse(FrappeTestCase):
 		if not frappe.get_value("Item", "_Test Item"):
 			make_test_records("Item")
 
+		# Ensure _Test Company exists
+		if not frappe.db.exists("Company", "_Test Company"):
+			company = frappe.new_doc("Company")
+			company.company_name = "_Test Company"
+			company.default_currency = "INR"
+			company.insert()
+
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+
+		get_or_create_fiscal_year("_Test Company")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
 	def test_parent_warehouse(self):
 		parent_warehouse = frappe.get_doc("Warehouse", "_Test Warehouse Group - _TC")
 		self.assertEqual(parent_warehouse.is_group, 1)
@@ -106,10 +120,10 @@ class TestWarehouse(FrappeTestCase):
 	def test_create_warehouse_TC_SCK_157(self):
 		"""Test warehouse creation with valid inputs."""
 		if not frappe.db.exists("Company", "_Test Company"):
-				company = frappe.new_doc("Company")
-				company.company_name = "_Test Company"
-				company.default_currency = "INR"
-				company.insert()
+			company = frappe.new_doc("Company")
+			company.company_name = "_Test Company"
+			company.default_currency = "INR"
+			company.insert()
 		warehouse = create_warehouse("_Test Warehouse", properties=None, company="_Test Company")
 
 		# Fetch created warehouse
@@ -120,8 +134,10 @@ class TestWarehouse(FrappeTestCase):
 		self.assertEqual(created_warehouse.company, "_Test Company")
 		self.assertFalse(created_warehouse.is_rejected_warehouse)
 
-		warehouse_rej = create_warehouse("_Test Warehouse - Rejected", properties={"is_rejected_warehouse":1}, company="_Test Company")
-		
+		warehouse_rej = create_warehouse(
+			"_Test Warehouse - Rejected", properties={"is_rejected_warehouse": 1}, company="_Test Company"
+		)
+
 		# Fetch created warehouse
 		created_warehouse = frappe.get_doc("Warehouse", warehouse_rej)
 
@@ -129,53 +145,246 @@ class TestWarehouse(FrappeTestCase):
 		self.assertTrue(created_warehouse.is_rejected_warehouse)
 
 		# Attempt to use this warehouse in a Stock Entry (should fail)
-		stock_entry = frappe.get_doc({
-			"doctype": "Stock Entry",
-			"stock_entry_type": "Material Receipt",
-			"items": [
-				{
-					"item_code": "Test Item",
-					"qty": 1,
-					"t_warehouse": created_warehouse.name
-				}
-			]
-		})
+		stock_entry = frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"stock_entry_type": "Material Receipt",
+				"items": [{"item_code": "Test Item", "qty": 1, "t_warehouse": created_warehouse.name}],
+			}
+		)
 
 		with self.assertRaises(frappe.ValidationError):
 			stock_entry.insert()
 
+	def test_on_trash_with_existing_quantity_TC_SCK_329(self):
+		"""Test warehouse creation with valid inputs."""
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		# Create item with valid warehouse and company
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+
+		# Make sure the test item is stock item with valuation rate
+		item = frappe.get_doc("Item", "_Test Item")
+		item.is_stock_item = 1
+		item.valuation_rate = 100
+		item.save(ignore_permissions=True)
+
+		se = frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"stock_entry_type": "Material Receipt",
+				"company": "_Test Company",
+				"items": [
+					{
+						"item_code": "_Test Item",
+						"qty": 5,
+						"t_warehouse": warehouse,
+						"uom": "Nos",
+						"stock_uom": "Nos",
+						"conversion_factor": 1,
+					}
+				],
+			}
+		)
+		se.insert()
+		se.submit()
+
+		# Try to delete warehouse, should raise ValidationError
+		with self.assertRaises(frappe.ValidationError, msg="can not be deleted as quantity exists"):
+			frappe.delete_doc("Warehouse", warehouse)
+
+	def test_on_trash_with_existing_stock_ledger_entry_TC_SCK_330(self):
+		"""Test warehouse creation with valid inputs."""
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		# Create item with valid warehouse and company
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+
+		# setting item valuation rate
+		item = frappe.get_doc("Item", "_Test Item")
+		item.valuation_rate = 100  # or any positive float value
+		item.save(ignore_permissions=True)
+
+		# Create stock entry using your helper function
+		make_stock_entry(item_code="_Test Item", qty=5, company="_Test Company", to_warehouse=warehouse)
+
+		# clear all Bin quantities to allow on_trash to reach SLE check
+		bin_doc = frappe.get_doc("Bin", {"warehouse": warehouse, "item_code": "_Test Item"})
+		bin_doc.actual_qty = 0
+		bin_doc.projected_qty = 0
+		bin_doc.save(ignore_permissions=True)
+
+		# Try deleting the warehouse - should fail due to SLE
+		with self.assertRaises(frappe.ValidationError, msg="stock ledger entry exists"):
+			frappe.delete_doc("Warehouse", warehouse)
+
+	def test_onload_loads_account_if_perpetual_inventory_enabled_TC_SCK_331(self):
+		# Ensure test company exists and enable perpetual inventory
+		if not frappe.db.exists("Company", "_Test Company"):
+			frappe.get_doc(
+				{"doctype": "Company", "company_name": "_Test Company", "abbreviation": "_TC"}
+			).insert()
+		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
+
+		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+
+		# Simulate a reload to trigger onload
+		doc = frappe.get_doc("Warehouse", warehouse)
+		doc.onload()
+
+		# Check if perpetual inventory account is loaded
+		expected_account = get_warehouse_account("_Test Warehouse", "_Test Company")
+		loaded_account = doc.get_onload("account")
+
+		self.assertEqual(loaded_account, expected_account)
+
+	def test_warn_about_multiple_warehouse_account_TC_SCK_332(self):
+		company = "_Test Company"
+		warehouse_name = "_Test Warehouse"
+		account1 = "_Test Stock Account 1"
+		account2 = "_Test Stock Account 2"
+
+		stock_group_account = get_stock_assets_group(company)
+
+		# Create two stock accounts if not exist
+		for acc in [account1, account2]:
+			if not frappe.db.exists("Account", erpnext.encode_company_abbr(acc, company)):
+				frappe.get_doc(
+					{
+						"doctype": "Account",
+						"account_name": acc,
+						"company": company,
+						"parent_account": stock_group_account,
+						"account_type": "Stock",
+						"is_group": 0,
+					}
+				).insert(ignore_if_duplicate=True)
+
+				# Create parent warehouse group if not exist
+		parent_warehouse_name = erpnext.encode_company_abbr("_Test Warehouse Group", company)
+		if not frappe.db.exists("Warehouse", parent_warehouse_name):
+			frappe.get_doc(
+				{
+					"doctype": "Warehouse",
+					"warehouse_name": "_Test Warehouse Group",
+					"company": company,
+					"is_group": 1,
+				}
+			).insert()
+
+		# Create the test warehouse
+		test_warehouse_name = erpnext.encode_company_abbr("_Test Warehouse", company)
+		if not frappe.db.exists("Warehouse", test_warehouse_name):
+			warehouse_doc = frappe.get_doc(
+				{
+					"doctype": "Warehouse",
+					"warehouse_name": warehouse_name,
+					"company": company,
+					"parent_warehouse": parent_warehouse_name,
+					"account": erpnext.encode_company_abbr(account1, company),
+				}
+			).insert()
+
+		warehouse_doc = frappe.get_doc("Warehouse", test_warehouse_name)
+
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=test_warehouse_name, company="_Test Company")
+
+			# Make sure the test item is stock item with valuation rate
+		item = frappe.get_doc("Item", "_Test Item")
+		item.is_stock_item = 1
+		item.valuation_rate = 100
+		item.save(ignore_permissions=True)
+
+		# Create and submit stock entry - this will auto-create SLE and GL entries
+		s_entry = make_stock_entry(item_code="_Test Item", target=test_warehouse_name, qty=1)
+		s_entry.submit()
+
+		# Reload warehouse and assign a different account to trigger warning
+		warehouse_doc.reload()
+		warehouse_doc.account = erpnext.encode_company_abbr(account2, company)
+		warehouse_doc.save()
+
+		# Create third stock account if not exist (to test warning)
+		account3 = "_Test Stock Account 3"
+		if not frappe.db.exists("Account", erpnext.encode_company_abbr(account3, company)):
+			frappe.get_doc(
+				{
+					"doctype": "Account",
+					"account_name": account3,
+					"company": company,
+					"parent_account": stock_group_account,
+					"account_type": "Stock",
+					"is_group": 0,
+				}
+			).insert()
+
+			# Change warehouse account to third account to trigger warning
+		warehouse_doc.account = erpnext.encode_company_abbr(account3, company)
+		warehouse_doc.save()
+
+		# Call method to cover warning logic
+		warehouse_doc.warn_about_multiple_warehouse_account()
+
+	def test_add_root_warehouse_node_TC_SCK_333(self):
+		frappe.form_dict = frappe._dict(
+			{
+				"warehouse_name": "_Test Node Warehouse",
+				"company": "_Test Company",
+				"is_group": 1,
+				"is_root": 1,
+				"doctype": "Warehouse",
+			}
+		)
+
+		from erpnext.stock.doctype.warehouse.warehouse import add_node
+
+		node_warehouse_name = erpnext.encode_company_abbr("_Test Node Warehouse", "_Test Company")
+		if frappe.db.exists("Warehouse", node_warehouse_name):
+			frappe.delete_doc("Warehouse", node_warehouse_name, force=1)
+
+		add_node()
+
+		# Suffix should match company's abbr
+		wh = frappe.get_doc("Warehouse", erpnext.encode_company_abbr("_Test Node Warehouse", "_Test Company"))
+		self.assertEqual(wh.company, "_Test Company")
+		self.assertIsNone(wh.parent_warehouse)
+		self.assertTrue(wh.is_group)
+
 
 def create_warehouse(warehouse_name, properties=None, company=None):
-    if not company:
-        company = "_Test Company"
+	if not company:
+		company = "_Test Company"
 
-    parent_warehouse = "_Test Warehouse Group - _TC"
+	parent_warehouse = "_Test Warehouse Group"
+	parent_warehouse_name = erpnext.encode_company_abbr(parent_warehouse, company)
 
-    # Ensure the parent warehouse exists
-    if not frappe.db.exists("Warehouse", parent_warehouse):
-        parent_w = frappe.new_doc("Warehouse")
-        parent_w.warehouse_name = parent_warehouse
-        parent_w.company = company
-        parent_w.is_group = 1  # Set as a group warehouse
-        parent_w.save()
+	# Ensure the parent warehouse exists
+	if not frappe.db.exists("Warehouse", parent_warehouse_name):
+		parent_w = frappe.new_doc("Warehouse")
+		parent_w.warehouse_name = parent_warehouse
+		parent_w.company = company
+		parent_w.is_group = 1  # Set as a group warehouse
+		parent_w.save()
 
-    warehouse_id = erpnext.encode_company_abbr(warehouse_name, company)
+	warehouse_id = erpnext.encode_company_abbr(warehouse_name, company)
 
-    if not frappe.db.exists("Warehouse", warehouse_id):
-        w = frappe.new_doc("Warehouse")
-        w.warehouse_name = warehouse_name
-        w.parent_warehouse = parent_warehouse
-        w.company = company
-        w.account = get_warehouse_account(warehouse_name, company)
+	if not frappe.db.exists("Warehouse", warehouse_id):
+		w = frappe.new_doc("Warehouse")
+		w.warehouse_name = warehouse_name
+		w.parent_warehouse = parent_warehouse_name
+		w.company = company
+		w.account = get_warehouse_account(warehouse_name, company)
 
-        if properties:
-            w.update(properties)
+		if properties:
+			w.update(properties)
 
-        w.save()
-        return w.name
-    else:
-        return warehouse_id
-
+		w.save()
+		return w.name
+	else:
+		return warehouse_id
 
 
 def get_warehouse(**args):
@@ -220,3 +429,27 @@ def get_group_stock_account(company, company_abbr=None):
 			company_abbr = frappe.get_cached_value("Company", company, "abbr")
 		group_stock_account = "Current Assets - " + company_abbr
 	return group_stock_account
+
+
+def get_stock_assets_group(company):
+	stock_group = frappe.db.get_value(
+		"Account", {"company": company, "account_type": "Stock", "is_group": 1}, "name"
+	)
+	if not stock_group:
+		abbr = erpnext.get_company_abbr(company)
+		stock_group = f"Stock Assets - {abbr}"
+	return stock_group
+
+
+def create_stock_account(account_name, company, parent_account):
+	if not frappe.db.exists("Account", account_name):
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"account_name": account_name,
+				"company": company,
+				"parent_account": parent_account,
+				"account_type": "Stock",
+				"is_group": 0,
+			}
+		).insert(ignore_if_duplicate=True)

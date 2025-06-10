@@ -17,7 +17,7 @@ class Warehouse(NestedSet):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		account: DF.Link | None
@@ -102,17 +102,16 @@ class Warehouse(NestedSet):
 		"If Warehouse value is split across multiple accounts, warn."
 
 		def get_accounts_where_value_is_booked(name):
-			query =f"""
+			query = f"""
 					SELECT DISTINCT ON (gle.account) gle.account, sle.creation
 					FROM "tabStock Ledger Entry" sle
 					JOIN "tabGL Entry" gle ON sle.voucher_no = gle.voucher_no
 					JOIN "tabAccount" ac ON ac.name = gle.account
-					WHERE sle.warehouse = '{name}' AND ac.account_type = 'Stock' 
+					WHERE sle.warehouse = '{name}' AND ac.account_type = 'Stock'
 					ORDER BY gle.account, sle.creation;
 					"""
-			
-			return frappe.db.sql(query=query,as_dict=True)
 
+			return frappe.db.sql(query=query, as_dict=True)
 
 		if self.is_new():
 			return
