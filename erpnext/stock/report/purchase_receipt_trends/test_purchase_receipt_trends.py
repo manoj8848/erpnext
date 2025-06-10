@@ -18,17 +18,26 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 		frappe.set_user("Administrator")
 		self.company = frappe.get_doc("Company", "_Test Company")
 
-		# Set required accounts for GL entries
-		frappe.db.set_value("Company", self.company.name, "stock_received_but_not_billed", "_Test Stock Received But Not Billed - _TC")
-		frappe.db.set_value("Company", self.company.name, "default_expense_account", "Cost of Goods Sold - _TC")
-		frappe.db.set_value("Company", self.company.name, "default_inventory_account", "Stock In Hand - _TC")
-		frappe.db.set_value("Company", self.company.name, "default_payable_account", "Creditors - _TC")
-		frappe.db.set_value("Company", self.company.name, "stock_adjustment_account", "Stock Adjustment - _TC")
-		frappe.db.set_value("Company", self.company.name, "cost_center", "Main - _TC")
+		# Fetch dynamic accounts
+		self.expense_account = frappe.get_value("Company", self.company.name, "default_expense_account")
+		self.inventory_account = frappe.get_value("Company", self.company.name, "default_inventory_account")
+		self.payable_account = frappe.get_value("Company", self.company.name, "default_payable_account")
+		self.stock_received_account = frappe.get_value("Company", self.company.name, "stock_received_but_not_billed")
+		self.stock_adjustment_account = frappe.get_value("Company", self.company.name, "stock_adjustment_account")
+		self.cost_center = frappe.get_value("Company", self.company.name, "cost_center")
+
+		# Fallback in case some required account fields are not set
+		assert all([
+			self.expense_account,
+			self.inventory_account,
+			self.payable_account,
+			self.stock_received_account,
+			self.stock_adjustment_account,
+			self.cost_center,
+		]), "One or more required company account fields are missing"
 
 		self.supplier_names = []
 		self.purchase_receipts = []
-
 		self.warehouse = create_warehouse("_Test PR Trends WH")
 
 		for i in range(12):
@@ -42,13 +51,19 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 			else:
 				supplier = frappe.get_doc("Supplier", supplier_name)
 
-			# Ensure default payable account is set
 			self.supplier_names.append(supplier.name)
 
 			item = create_item(f"_Test Item Chart {i}", {
 				"is_stock_item": 1,
 				"stock_uom": "Nos"
 			})
+
+			item.append("item_defaults", {
+				"company": self.company.name,
+				"expense_account": self.expense_account,
+				"buying_cost_center": self.cost_center
+			})
+			item.save()
 
 			pr = make_purchase_receipt(
 				company=self.company.name,
@@ -98,21 +113,23 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 	def test_execute_with_empty_data(self):
 		if not frappe.db.exists("Fiscal Year", "2099-2100"):
 			frappe.get_doc({
-                "doctype": "Fiscal Year",
-                "year": "2099-2100",
-                "year_start_date": getdate("2099-04-01"),
-                "year_end_date": getdate("2100-03-31"),
-                "disabled": 0,
-				"companies": [{'company': "_Test Company"}]
-            }).insert(ignore_permissions=True)
+				"doctype": "Fiscal Year",
+				"year": "2099-2100",
+				"year_start_date": getdate("2099-04-01"),
+				"year_end_date": getdate("2100-03-31"),
+				"disabled": 0,
+				"companies": [{"company": self.company.name}]
+			}).insert(ignore_permissions=True)
+
 		filters = frappe._dict({
-            "company": "_Test Company",
-            "fiscal_year": "2099-2100",
-            "based_on": "Supplier",
-            "group_by": "Item",
-            "period": "Monthly",
-            "period_based_on": "posting_date"
-        })
+			"company": self.company.name,
+			"fiscal_year": "2099-2100",
+			"based_on": "Supplier",
+			"group_by": "Item",
+			"period": "Monthly",
+			"period_based_on": "posting_date"
+		})
+
 		cols, data, none_val, chart = execute(filters)
 		self.assertEqual(data, [])
 
@@ -136,4 +153,3 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 		data = []
 		chart = get_chart_data(data, self.default_filters)
 		self.assertEqual(chart, [])
-
