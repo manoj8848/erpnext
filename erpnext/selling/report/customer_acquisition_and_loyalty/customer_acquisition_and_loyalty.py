@@ -174,7 +174,7 @@ def get_customer_stats(filters, tree_view=False):
 		customers_in.setdefault(key, {"new": [0, 0.0], "repeat": [0, 0.0]})
 
 		# if filters.from_date <= si.posting_date.strftime('%Y-%m-%d'):
-		if getdate(filters.from_date) <= getdate(si.posting_date):
+		if getdate(filters.get("from_date")) <= getdate(si.posting_date):
 			customers_in[key][new_or_repeat][0] += 1
 			customers_in[key][new_or_repeat][1] += si.base_grand_total
 		if new_or_repeat == "new":
