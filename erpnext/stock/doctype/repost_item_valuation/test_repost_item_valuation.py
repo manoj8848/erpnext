@@ -41,6 +41,20 @@ class TestRepostItemValuation(FrappeTestCase, StockTestMixin):
 		item = make_item("Repost item")
 		warehouse = "_Test Warehouse - _TC"
 
+		stock_entry = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Receipt",
+		"company": company,
+		"items": [{
+			"item_code": item.name,
+			"qty": 1,
+			"t_warehouse": warehouse,
+			"basic_rate": 100
+			}]
+		})
+		stock_entry.insert(ignore_permissions=True)
+		stock_entry.submit()
+
 		dn = frappe.get_doc({
 			"doctype": "Delivery Note",
 			"customer": customer,
