@@ -27,86 +27,15 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
 		else:
 			self.company = "_Test Company"
 
-		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
-			# print("working","working")
-			self.warehouse = create_warehouse(warehouse_name="_Test Warehouse - _TC", company="_Test Company")
-		else:
-			frappe.db.set_value(
-				"Warehouse", "_Test Warehouse - _TC", "company", "_Test Company", update_modified=False
-			)
-			self.warehouse = frappe.db.get_value("Warehouse", "_Test Warehouse - _TC", "name")
-
-		if not frappe.db.exists("Item", "_Test Item"):
-			self.item_code = create_item(item_code="_Test Item", valuation_rate=100)
-		else:
-			self.item_code = "_Test Item"
-
+		# self.company = company
+		self.warehouse = create_warehouse(warehouse_name="_Test Warehouse - _TC", company="_Test Company")
+		self.item_code = create_item(item_code="_Test Item", valuation_rate=100)
 		self.account = "Stock In Hand - _TC"
 		self.posting_date = nowdate()
-
 		get_or_create_fiscal_year("_Test Company")
 		self.stock_entry = self.create_stock_entry()
 		self.create_stock_ledger_entry()
 		self.create_gl_entry()
-
-	def create_stock_entry(self):
-		se = frappe.get_doc(
-			{
-				"doctype": "Stock Entry",
-				"stock_entry_type": "Material Receipt",
-				"company": "_Test Company",
-				"posting_date": self.posting_date,
-				"items": [
-					{
-						"item_code": self.item_code,
-						"qty": 10,
-						"uom": "Nos",
-						"t_warehouse": self.warehouse,
-						"rate": 100,
-					}
-				],
-			}
-		)
-		se.insert(ignore_permissions=True)
-		se.submit()
-		return se.name
-
-	def create_stock_ledger_entry(self):
-		if not frappe.db.exists("Stock Ledger Entry", {"voucher_no": self.stock_entry}):
-			frappe.get_doc(
-				{
-					"doctype": "Stock Ledger Entry",
-					"item_code": self.item_code,
-					"warehouse": self.warehouse,
-					"posting_date": self.posting_date,
-					"posting_time": now_datetime().time(),
-					"voucher_type": "Stock Entry",
-					"voucher_no": self.stock_entry,
-					"voucher_detail_no": self.stock_entry + "-ROW1",
-					"actual_qty": 10,
-					"stock_value": 1000,
-					"stock_value_difference": 1000,
-					"company": self.company,
-					"incoming_rate": 100,
-					"is_cancelled": 0,
-				}
-			).insert(ignore_permissions=True)
-
-	def create_gl_entry(self):
-		if not frappe.db.exists("GL Entry", {"voucher_no": self.stock_entry}):
-			frappe.get_doc(
-				{
-					"doctype": "GL Entry",
-					"posting_date": self.posting_date,
-					"account": self.account,
-					"debit_in_account_currency": 1000,
-					"credit_in_account_currency": 0,
-					"voucher_type": "Stock Entry",
-					"voucher_no": self.stock_entry,
-					"company": self.company,
-					"fiscal_year": frappe.defaults.get_user_default("fiscal_year"),
-				}
-			).insert(ignore_permissions=True)
 
 	def test_execute_with_perpetual_inventory_T_SAAVC_001(self):
 		filters = frappe._dict({"company": self.company, "as_on_date": self.posting_date})
@@ -312,3 +241,62 @@ class TestStockAndAccountValueComparison(FrappeTestCase):
 
 		# Third entry should not have 'posting_time'
 		self.assertNotIn("posting_time", get_sle_data[2])
+
+	def create_stock_entry(self):
+		se = frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"stock_entry_type": "Material Receipt",
+				"company": "_Test Company",
+				"posting_date": self.posting_date,
+				"items": [
+					{
+						"item_code": self.item_code,
+						"qty": 10,
+						"uom": "Nos",
+						"t_warehouse": self.warehouse,
+						"rate": 100,
+					}
+				],
+			}
+		)
+		se.insert(ignore_permissions=True)
+		se.submit()
+		return se.name
+
+	def create_stock_ledger_entry(self):
+		if not frappe.db.exists("Stock Ledger Entry", {"voucher_no": self.stock_entry}):
+			frappe.get_doc(
+				{
+					"doctype": "Stock Ledger Entry",
+					"item_code": self.item_code,
+					"warehouse": self.warehouse,
+					"posting_date": self.posting_date,
+					"posting_time": now_datetime().time(),
+					"voucher_type": "Stock Entry",
+					"voucher_no": self.stock_entry,
+					"voucher_detail_no": self.stock_entry + "-ROW1",
+					"actual_qty": 10,
+					"stock_value": 1000,
+					"stock_value_difference": 1000,
+					"company": self.company,
+					"incoming_rate": 100,
+					"is_cancelled": 0,
+				}
+			).insert(ignore_permissions=True)
+
+	def create_gl_entry(self):
+		if not frappe.db.exists("GL Entry", {"voucher_no": self.stock_entry}):
+			frappe.get_doc(
+				{
+					"doctype": "GL Entry",
+					"posting_date": self.posting_date,
+					"account": self.account,
+					"debit_in_account_currency": 1000,
+					"credit_in_account_currency": 0,
+					"voucher_type": "Stock Entry",
+					"voucher_no": self.stock_entry,
+					"company": self.company,
+					"fiscal_year": frappe.defaults.get_user_default("fiscal_year"),
+				}
+			).insert(ignore_permissions=True)
