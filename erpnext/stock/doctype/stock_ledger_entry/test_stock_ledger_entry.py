@@ -30,6 +30,9 @@ from erpnext.stock.stock_ledger import get_previous_sle
 from erpnext.stock.tests.test_utils import StockTestMixin
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import on_doctype_update
+from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import StockLedgerEntry
+
+
 
 
 
@@ -1407,8 +1410,6 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 			basic_rate=100,
 			stock_entry_type="Material Receipt",
 		)
-		stock_entry.save()
-		stock_entry.submit()
 
 		# Get the corresponding SLE
 		sle_name = frappe.db.get_value(
@@ -1425,6 +1426,77 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 	def test_on_doctype_update_adds_indexes_TC_SCK_360(self):
 		# Call the function
 		on_doctype_update()
+
+	def test_validate_backdated_stock_transaction_TC_SCK_391(self):
+		from erpnext.stock.doctype.stock_settings.stock_settings import StockSettings
+		from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import StockLedgerEntry
+	
+		# Setup
+		frappe.set_user("Administrator")
+		warehouse = create_warehouse("_Test WH Time Auth", company="_Test Company")
+
+		item_code = "_Test Item TimeAuth"
+		if not frappe.db.exists("Item", item_code):
+			create_item(item_code, warehouse=warehouse)
+
+		# Assign a role in Stock Settings
+		role = "Stock Manager"
+		settings = frappe.get_doc("Stock Settings")
+		settings.role_allowed_to_create_edit_back_dated_transactions = role
+		settings.save()
+
+		# Create a test user who is NOT authorized
+		test_user = "unauth_user@example.com"
+		if not frappe.db.exists("User", test_user):
+			frappe.get_doc({
+				"doctype": "User",
+				"email": test_user,
+				"first_name": "Unauth",
+				"roles": [{"role": "Employee"}]
+			}).insert(ignore_permissions=True)
+
+		# Create a valid recent Stock Entry
+		se = make_stock_entry(
+			item_code=item_code,
+			qty=1,
+			target=warehouse,
+			basic_rate=100,
+			stock_entry_type="Material Receipt"
+		)
+		se.submit()
+
+		# Simulate a Stock Ledger Entry for a backdated transaction
+		frappe.set_user(test_user)
+
+		# Get actual last transaction time
+		last_sle_time = frappe.db.sql(
+			"""
+			SELECT MAX((posting_date || ' ' || posting_time)::timestamp)
+			FROM `tabStock Ledger Entry`
+			WHERE docstatus = 1 AND is_cancelled = 0 AND item_code = %s AND warehouse = %s
+		""",
+			(item_code, warehouse)
+		)[0][0]
+
+		# Use earlier posting date/time to simulate backdated entry
+		backdated_sle = frappe.new_doc("Stock Ledger Entry")
+		backdated_sle.item_code = item_code
+		backdated_sle.warehouse = warehouse
+		backdated_sle.posting_date = "2020-01-01"
+		backdated_sle.posting_time = "00:00:00"
+		backdated_sle.is_cancelled = 0
+		backdated_sle.docstatus = 1
+
+		# Validate and assert exception is raised
+		with self.assertRaises(BackDatedStockTransaction) as e:
+			StockLedgerEntry.validate_with_last_transaction_posting_time(backdated_sle)
+
+		exception_msg = str(e.exception)
+		self.assertIn("Last Stock Transaction for item", exception_msg)
+		self.assertIn("You are not authorized", exception_msg)
+		self.assertIn("Please contact any of the following users", exception_msg)
+
+	
 
 def create_repack_entry(**args):
 	args = frappe._dict(args)

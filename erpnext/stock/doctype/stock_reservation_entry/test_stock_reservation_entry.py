@@ -38,10 +38,10 @@ class TestStockReservationEntry(FrappeTestCase):
 			create_company("_Test Company")
 
 		"""Test warehouse creation with valid inputs."""
-		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
+		self.warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
 
 		self.sr_item = make_item(properties={"is_stock_item": 1, "valuation_rate": 100})
-		create_material_receipt(items={self.sr_item.name: self.sr_item}, warehouse=warehouse, qty=100)
+		create_material_receipt(items={self.sr_item.name: self.sr_item}, warehouse=self.warehouse, qty=100)
 
 	@change_settings("Stock Settings", {"allow_negative_stock": 0})
 	def test_validate_stock_reservation_settings(self) -> None:
@@ -849,7 +849,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"has_serial_no": 1,
 				"is_stock_item": 1,
 				"maintain_stock": 1,
-				"gst_hsn_code":"100111"
+				"gst_hsn_code":"100111",
+				"item_group": "All Item Groups"
 			})
 			item.insert(ignore_permissions=True)
 
@@ -884,7 +885,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
 				"has_batch_no": 1,
-				"gst_hsn_code":"100111"
+				"gst_hsn_code":"100111",
+				"item_group": "All Item Groups"
 			})
 			item.insert(ignore_permissions=True)
 
@@ -941,7 +943,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
 				"has_batch_no": 1,
-				"gst_hsn_code":"100111"
+				"gst_hsn_code":"100111",
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		warehouse = create_warehouse("WH-Partial-False", company="_Test Company")
@@ -1060,7 +1063,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
 				"gst_hsn_code":"100111",
-				"valuation_rate":100
+				"valuation_rate":100,
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		# Step 2: Create warehouse
@@ -1146,7 +1150,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
 				"gst_hsn_code":"100111",
-				"valuation_rate":100
+				"valuation_rate":100,
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		# Create warehouse
@@ -1234,7 +1239,8 @@ class TestStockReservationEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"is_stock_item": 1,
 				"gst_hsn_code":"100111",
-				"valuation_rate":100
+				"valuation_rate":100,
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		# Create warehouse
@@ -1326,6 +1332,7 @@ class TestStockReservationEntry(FrappeTestCase):
 				"is_stock_item": 0,
 				"stock_uom": "Nos",
 				"gst_hsn_code":"100111",
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 	
 		warehouse = create_warehouse("WH-Non-Stock", company="_Test Company")
@@ -1378,6 +1385,7 @@ class TestStockReservationEntry(FrappeTestCase):
 				"is_stock_item": 1,
 				"stock_uom": "Nos",
 				"gst_hsn_code":"100111",
+				"item_group": "All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		# Create a group warehouse
