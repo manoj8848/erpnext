@@ -57,6 +57,7 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 			item.append("item_defaults", {
 				"company": self.company.name,
 				"expense_account": self.expense_account,
+				"default_warehouse": self.warehouse,
 				"buying_cost_center": self.cost_center
 			})
 			item.save()
@@ -91,7 +92,8 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 
 		for supplier in self.supplier_names:
 			if frappe.db.exists("Supplier", supplier):
-				frappe.delete_doc("Supplier", supplier, force=True)
+				supplier = frappe.get_doc("Supplier", supplier)
+				supplier.disabled = 1
 
 		if frappe.db.exists("Fiscal Year", "2099-2100"):
 			frappe.delete_doc("Fiscal Year", "2099-2100", force=True)
