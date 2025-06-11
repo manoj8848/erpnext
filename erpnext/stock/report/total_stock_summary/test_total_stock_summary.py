@@ -54,7 +54,6 @@ class TestTotalStockSummary(FrappeTestCase):
 		assert any(
 			row[0] == self.warehouse and row[1] == self.item.item_code for row in data
 		), f"Expected data row for warehouse '{self.warehouse}' and item '{self.item.item_code}', got {data}"
-
 		# Test with no filters (default group_by should be Company)
 		columns_default, data_default = execute()
 		assert columns_default, "Expected columns with default filters"
@@ -68,7 +67,6 @@ class TestTotalStockSummary(FrappeTestCase):
 
 		# Simulate empty stock scenario
 		frappe.db.sql("DELETE FROM `tabBin` WHERE item_code = %s", self.item.name)
-		frappe.db.commit()
 		columns_empty, data_empty = execute(self.filters)
 		assert columns_empty, "Expected columns even if no data"
 		assert data_empty == [], f"Expected no data after deleting stock, got {data_empty}"
