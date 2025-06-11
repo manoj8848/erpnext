@@ -62,4 +62,4 @@ class TestSupplierSalesAnalyticsReport(unittest.TestCase):
         self.assertNotIn(self.item2.name, supplier_map, f"{self.item2.name} should not be in report for {self.supplier_a.name}")
 
     def tearDown(self):
-		frappe.db.rollback()
+         frappe.db.rollback()
