@@ -27,7 +27,7 @@ class TestPurchaseOrder(FrappeTestCase):
 
 		for doc in po.get("items"):
 			if doc.get("item_code"):
-				doc.set("schedule_date", "2013-04-12")
+				doc.set("schedule_date", add_days(today(), 1))
 
 		po.insert()
 

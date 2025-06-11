@@ -3997,6 +3997,59 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 		self.assertTrue(sles)
 
+	def test_internal_pr_qty_change_only_single_batch(self):
+		from erpnext.stock.doctype.delivery_note.delivery_note import make_inter_company_purchase_receipt
+		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
+
+		prepare_data_for_internal_transfer()
+
+		def get_sabb_qty(sabb):
+			return frappe.get_value("Serial and Batch Bundle", sabb, "total_qty")
+
+		item = make_item("Item with only Batch", {"has_batch_no": 1})
+		item.create_new_batch = 1
+		item.save()
+
+		make_purchase_receipt(
+			item_code=item.item_code,
+			qty=10,
+			rate=100,
+			company="_Test Company with perpetual inventory",
+			warehouse="Stores - TCP1",
+		)
+
+		dn = create_delivery_note(
+			item_code=item.item_code,
+			qty=10,
+			rate=100,
+			company="_Test Company with perpetual inventory",
+			customer="_Test Internal Customer 2",
+			cost_center="Main - TCP1",
+			warehouse="Stores - TCP1",
+			target_warehouse="Work In Progress - TCP1",
+		)
+		pr = make_inter_company_purchase_receipt(dn.name)
+
+		pr.items[0].warehouse = "Stores - TCP1"
+		pr.items[0].qty = 8
+		pr.save()
+
+		# Test 1 - Check if SABB qty is changed on first save
+		self.assertEqual(abs(get_sabb_qty(pr.items[0].serial_and_batch_bundle)), 8)
+
+		pr.items[0].qty = 6
+		pr.items[0].received_qty = 6
+		pr.save()
+
+		# Test 2 - Check if SABB qty is changed when saved again
+		self.assertEqual(abs(get_sabb_qty(pr.items[0].serial_and_batch_bundle)), 6)
+
+		pr.items[0].qty = 12
+		pr.items[0].received_qty = 12
+
+		# Test 3 - OverAllowanceError should be thrown as qty is greater than qty in DN
+		self.assertRaises(erpnext.controllers.status_updater.OverAllowanceError, pr.submit)
+
 	def test_purchase_order_and_receipt_TC_SCK_072(self):
 		company = "_Test Company"
 		company_doc = frappe.get_doc("Company", company)
