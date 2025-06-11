@@ -6222,7 +6222,9 @@ class TestSalesInvoice(FrappeTestCase):
 				}
 			],
 		)
-		si.set_missing_values()
+		if "india_compliance" in frappe.get_installed_apps():
+			si.place_of_supply = "27-Maharashtra"
+			si.company_gstin = "27AAATI9664A1ZN"
 		si.calculate_taxes_and_totals()
 		si.shipping_rule = shipping_rule.name
 		si.insert()
