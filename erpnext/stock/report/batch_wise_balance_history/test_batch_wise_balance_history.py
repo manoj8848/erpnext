@@ -5,10 +5,13 @@ from frappe.utils import getdate, nowdate, add_days, now_datetime
 from erpnext.stock.doctype.item.test_item import create_item
 from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 from erpnext.stock.report.batch_wise_balance_history import batch_wise_balance_history
+from erpnext.stock.doctype import repost_item_valuation
+import importlib
 
 class TestBatchWiseBalanceHistoryReport(unittest.TestCase):
     def setUp(self):
         super().setUp()
+		importlib.reload(repost_item_valuation)
 
         self.item = create_item(item_code="Test Batch Item", is_stock_item=1, valuation_rate=100)
         self.item.has_batch_no = 1
