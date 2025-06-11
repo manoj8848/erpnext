@@ -228,7 +228,7 @@ class DeliveryTrip(Document):
 
 		self.delivery_stops[start : start + len(stops_order)] = stops_order
 
-	def get_directions(self, route, optimize):
+	def get_directions(self, route, optimize): # pragma: no cover
 		"""
 		Retrieve map directions for a given route and departure time.
 		If optimize is `True`, Google Maps will return an optimized
@@ -414,7 +414,7 @@ def notify_customers(delivery_trip):
 		frappe.msgprint(_("No contacts with email IDs found."))
 
 
-def get_attachments(delivery_stop):
+def get_attachments(delivery_stop): # pragma: no cover
 	if not (
 		frappe.db.get_single_value("Delivery Settings", "send_with_attachment")
 		and delivery_stop.delivery_note

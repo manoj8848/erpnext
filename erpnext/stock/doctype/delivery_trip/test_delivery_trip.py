@@ -134,11 +134,7 @@ class TestDeliveryTrip(FrappeTestCase):
 
 		delivery_trip_doc.load_from_db()
 
-	# def test_get_attachments_TC_SCK_310(self):
-	# 	driver = create_driver()
-	# 	address = create_address(driver)
-	# 	delivery_trip = create_delivery_trip(driver, address)
-	# 	delivery_trip.get_attachments(delivery_stop)
+
 
 
 	def test_delivery_trip_notify_customers(self):
