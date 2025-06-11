@@ -1,6 +1,13 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from erpnext.accounts.doctype.account.test_account import create_account
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+from erpnext.stock.doctype.item.test_item import create_item
+from erpnext.stock.doctype.stock_entry.test_stock_entry import get_or_create_fiscal_year
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
+
 class TestTotalStockSummary(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -16,94 +23,67 @@ class TestTotalStockSummary(FrappeTestCase):
 		# Restore frappe.db.get_value to prevent leaked lambda
 		frappe.db.get_value = self.original_get_value
 
-		hsn_code = "10010010"
+		self.company = create_company("_Test Company")
+		self.company = "_Test Company"
+		self.warehouse = create_warehouse(warehouse_name="_Test Warehouse - _TC", company="_Test Company")
+		self.item = create_item(
+			item_code="TEST-STOCK-ITEM",
+			valuation_rate=100,
+			warehouse="_Test Warehouse - _TC",
+			company="_Test Company",
+		)
 
-		# Create GST HSN Code
-		if not frappe.db.exists("GST HSN Code", hsn_code):
-			frappe.get_doc({
-				"doctype": "GST HSN Code",
-				"hsn_code": hsn_code,
-				"description": "Test HSN Code for automation"
-			}).insert()
+		get_or_create_fiscal_year("_Test Company")
 
-		# Ensure UOM exists
-		if not frappe.db.exists("UOM", "Nos"):
-			frappe.get_doc({"doctype": "UOM", "uom_name": "Nos"}).insert()
+		self.stock_entry_name = create_stock_entry(
+			item_code=self.item, warehouse="_Test Warehouse - _TC", qty=15, company="_Test Company"
+		)
 
-		# Create Item
-		if not frappe.db.exists("Item", "TEST-STOCK-ITEM"):
-			frappe.get_doc({
-				"doctype": "Item",
-				"item_code": "TEST-STOCK-ITEM",
-				"item_name": "Test Stock Item",
-				"description": "Description",
-				"is_stock_item": 1,
-				"stock_uom": "Nos",
-				"gst_hsn_code": hsn_code,
-				"item_group": "All Item Groups" ,
-			}).insert()
+		self.filters = {"group_by": "Warehouse", "company": "_Test Company"}
 
-
-		# Create Company
-		if not frappe.db.exists("Company", "Test Company"):
-			frappe.get_doc({
-				"doctype": "Company",
-				"company_name": "Test Company",
-				"default_currency": "INR"
-			}).insert()
-
-		# Create Warehouse
-		if not frappe.db.exists("Warehouse", "Test Warehouse - TC"):
-			frappe.get_doc({
-				"doctype": "Warehouse",
-				"warehouse_name": "Test Warehouse - TC",
-				"company": "Test Company"
-			}).insert()
-
-		# Create Bin with quantity
-		if not frappe.db.exists("Bin", {"item_code": "TEST-STOCK-ITEM", "warehouse": "Test Warehouse - TC"}):
-			frappe.get_doc({
-				"doctype": "Bin",
-				"item_code": "TEST-STOCK-ITEM",
-				"warehouse": "Test Warehouse - TC",
-				"actual_qty": 25
-			}).insert()
-
-	def test_execute_without_filters(self):
+	def test_execute_without_filters_T_TSS_001(self):
 		from erpnext.stock.report.total_stock_summary.total_stock_summary import execute
 
-		columns, data = execute()
-		assert columns
-		assert data
-		assert "Company" in columns[0]
+		# Test with filters - group by Warehouse
+		columns, data = execute(self.filters)
+		assert columns, "Expected columns to be returned"
+		assert data, "Expected data to be returned"
+		assert columns[0].startswith("Warehouse"), f"Expected first column to be 'Warehouse', got '{columns[0]}'"
+		assert any(
+			row[0] == self.warehouse and row[1] == self.item.item_code
+			for row in data
+		), f"Expected data row for warehouse '{self.warehouse}' and item '{self.item.item_code}', got {data}"
 
-	def test_execute_with_group_by_warehouse(self):
-		from erpnext.stock.report.total_stock_summary.total_stock_summary import execute
+		# Test with no filters (default group_by should be Company)
+		columns_default, data_default = execute()
+		assert columns_default, "Expected columns with default filters"
+		assert data_default, "Expected data with default filters"
+		assert columns_default[0].startswith("Company"), f"Expected first column to be 'Company', got '{columns_default[0]}'"
+		assert any(
+			row[0] == self.company and row[1] == self.item.name
+			for row in data_default
+		), f"Expected row for company '{self.company}', got {data_default}"
 
-		filters = {"group_by": "Warehouse", "company": "Test Company"}
-		columns, data = execute(filters)
-		assert columns
-		assert data
-		assert "Warehouse" in columns[0]
+		# Simulate empty stock scenario
+		frappe.db.sql("DELETE FROM `tabBin` WHERE item_code = %s", self.item.name)
+		frappe.db.commit()
+		columns_empty, data_empty = execute(self.filters)
+		assert columns_empty, "Expected columns even if no data"
+		assert data_empty == [], f"Expected no data after deleting stock, got {data_empty}"
 
-	def test_get_columns_variants(self):
-		from erpnext.stock.report.total_stock_summary.total_stock_summary import get_columns
 
-		columns_warehouse = get_columns({"group_by": "Warehouse"})
-		assert "Warehouse" in columns_warehouse[0]
 
-		columns_company = get_columns({})
-		assert "Company" in columns_company[0]
-
-	def test_get_total_stock_variants(self):
-		from erpnext.stock.report.total_stock_summary.total_stock_summary import get_total_stock
-
-		# Without group_by
-		data = get_total_stock({})
-		assert data
-		assert any(float(d[3]) > 0 for d in data)
-
-		# With group_by Warehouse
-		data2 = get_total_stock({"group_by": "Warehouse", "company": "Test Company"})
-		assert data2
-		assert any(float(d[3]) > 0 for d in data2)
+def create_stock_entry(item_code, warehouse, qty, company):
+	se = frappe.get_doc(
+		{
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"company": company,
+			"items": [
+				{"item_code": item_code, "qty": qty, "uom": "Nos", "t_warehouse": warehouse, "rate": 100}
+			],
+		}
+	)
+	se.insert(ignore_permissions=True)
+	se.submit()
+	return se.name
