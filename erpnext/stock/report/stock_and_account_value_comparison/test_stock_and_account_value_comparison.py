@@ -23,9 +23,8 @@ from erpnext.stock.report.stock_and_account_value_comparison.stock_and_account_v
 class TestStockAndAccountValueComparison(FrappeTestCase):
 	def setUp(self):
 		if not frappe.db.exists("Company", "_Test Company"):
-			self.company = create_company("_Test Company")
-		else:
-			self.company = "_Test Company"
+			create_company("_Test Company")
+		self.company = "_Test Company"
 
 		# self.company = company
 		self.warehouse = create_warehouse(warehouse_name="_Test Warehouse - _TC", company="_Test Company")
