@@ -1310,6 +1310,7 @@ class TestItem(FrappeTestCase):
 		template = frappe.get_doc({
 			"doctype": "Item",
 			"item_code": "_test_variant_attr",
+			"item_group": "All Item Groups",
 			"gst_hsn_code": "14455767",
 			"has_variants":1,
 			"attributes": [
@@ -1321,6 +1322,7 @@ class TestItem(FrappeTestCase):
 		variant = frappe.get_doc({
 			"doctype": "Item",
 			"item_code": "_test_variant_attr1",
+			"item_group": "All Item Groups",
 			"gst_hsn_code": "14455767",
 			"variant_of": template.name,
 			"attributes": [
