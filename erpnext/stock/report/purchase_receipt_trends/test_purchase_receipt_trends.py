@@ -52,17 +52,13 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 
 			self.supplier_names.append(supplier.name)
 
-			item = create_item(f"_Test Item Chart {i}", {
-				"is_stock_item": 1,
-				"stock_uom": "Nos"
-			})
-
-			# Overwrite item_defaults to avoid ValidationError
-			item.item_defaults = [{
+			item = create_item(item_code= f"_Test Item Chart {i}", is_stock_item = 1, stock_uom =  "Nos"})
+			item.set("item_defaults", [])  # Clear existing defaults
+			item.append("item_defaults", {
 				"company": self.company.name,
 				"expense_account": self.expense_account,
 				"buying_cost_center": self.cost_center
-			}]
+			})
 			item.save()
 
 			pr = make_purchase_receipt(
