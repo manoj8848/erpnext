@@ -9,22 +9,21 @@ from erpnext.stock.doctype import repost_item_valuation
 import importlib
 
 class TestBatchWiseBalanceHistoryReport(unittest.TestCase):
-    def setUp(self):
-        super().setUp()
+	def setUp(self):
+		super().setUp()
 		importlib.reload(repost_item_valuation)
-
-        self.item = create_item(item_code="Test Batch Item", is_stock_item=1, valuation_rate=100)
-        self.item.has_batch_no = 1
-        self.item.save()
-        self.warehouse = "_Test Warehouse - _TC"
-        self.batch = self.make_batch(self.item)
-        self.company = "_Test Company"
-
-        posting_datetime = now_datetime()
-        posting_date = posting_datetime.date()
-        posting_time = posting_datetime.time()
-
-        make_stock_entry(
+		self.item = create_item(item_code="Test Batch Item", is_stock_item=1, valuation_rate=100)
+		self.item.has_batch_no = 1
+		self.item.save()
+		self.warehouse = "_Test Warehouse - _TC"
+		self.batch = self.make_batch(self.item)
+		self.company = "_Test Company"
+		
+		posting_datetime = now_datetime()
+		posting_date = posting_datetime.date()
+		posting_time = posting_datetime.time()
+		
+		make_stock_entry(
             item=self.item.name,
             qty=10,
             rate=100,
@@ -32,9 +31,9 @@ class TestBatchWiseBalanceHistoryReport(unittest.TestCase):
             posting_time=posting_time,
             to_warehouse=self.warehouse,
             batch_no=self.batch,
-        )
-
-        make_stock_entry(
+		)
+		
+		make_stock_entry(
             item=self.item.name,
             qty=5,
             rate=100,
@@ -42,9 +41,9 @@ class TestBatchWiseBalanceHistoryReport(unittest.TestCase):
             posting_time=posting_time,
             to_warehouse=self.warehouse,
             batch_no=self.batch,
-        )
-
-        make_stock_entry(
+		)
+		
+		make_stock_entry(
             item=self.item.name,
             qty=3,
             rate=100,
@@ -52,11 +51,10 @@ class TestBatchWiseBalanceHistoryReport(unittest.TestCase):
             posting_time=posting_time,
             from_warehouse=self.warehouse,
             batch_no=self.batch,
-        )
-
-
-        self.from_date = add_days(posting_datetime.date(), -3)
-        self.to_date = posting_datetime.date()
+		)
+		
+		self.from_date = add_days(posting_datetime.date(), -3)
+		self.to_date = posting_datetime.date()
 
     def make_batch(self, item_code):
         from frappe.utils import nowdate
