@@ -75,7 +75,7 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 
 		self.default_filters = frappe._dict({
 			"company": self.company.name,
-			"fiscal_year": "2024-2025",
+			"fiscal_year": "2025",
 			"based_on": "Supplier",
 			"group_by": "Item",
 			"period": "Monthly",
@@ -88,8 +88,7 @@ class TestPurchaseReceiptTrendsReport(FrappeTestCase):
 				doc = frappe.get_doc("Purchase Receipt", pr.name)
 				if doc.docstatus == 1:
 					doc.cancel()
-				doc.delete()
-
+					
 		for supplier in self.supplier_names:
 			if frappe.db.exists("Supplier", supplier):
 				supplier = frappe.get_doc("Supplier", supplier)
