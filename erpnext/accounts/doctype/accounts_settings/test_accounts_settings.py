@@ -24,11 +24,8 @@ class TestAccountsSettings(unittest.TestCase):
 	def test_enable_payment_schedule_in_print_method_TC_ACC_199(self):
 		from unittest.mock import patch
 
-		self.accounts_settings = frappe.get_doc("Accounts Settings", "Accounts Settings")
-		self.accounts_settings.show_payment_schedule_in_print = 1
-
-		# Create test document
-		settings = frappe.new_doc("Accounts Settings")
+		# Get Account Settings
+		settings = frappe.get_doc("Accounts Settings")
 		settings.show_payment_schedule_in_print = 1
 
 		# Manually set _doc_before_save to simulate previous state
@@ -46,4 +43,4 @@ class TestAccountsSettings(unittest.TestCase):
 			settings.validate()
 			mock_method.assert_called_once()
 		settings.enable_payment_schedule_in_print()
-		self.assertEqual(self.accounts_settings.show_payment_schedule_in_print, 1)
+		self.assertEqual(self.show_payment_schedule_in_print, 1)
