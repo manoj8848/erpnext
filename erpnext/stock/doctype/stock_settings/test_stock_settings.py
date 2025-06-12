@@ -60,11 +60,10 @@ class TestStockSettings(FrappeTestCase):
 		settings = frappe.get_doc("Stock Settings")
 		settings.enable_stock_reservation = 1  # Trying to enable it
 		settings.allow_negative_stock = 0
-
-		# with self.assertRaises(frappe.ValidationError) as context:
-		settings.save()
+		msg = "As there are negative stock, you can not enable Stock Reservation."
+		with self.assertRaises(frappe.ValidationError, msg=msg):
+			settings.save()
 		self.assertEqual(settings.enable_stock_reservation, 1)
-		frappe.flags.in_test = True
 
 	# codecov
 	@change_settings("Stock Settings", {"allow_negative_stock": 1, "enable_stock_reservation": 1})
@@ -75,10 +74,10 @@ class TestStockSettings(FrappeTestCase):
 		settings.enable_stock_reservation = 0  # Trying to enable it
 		settings.allow_negative_stock = 0
 
-		# with self.assertRaises(frappe.ValidationError) as context:
+		msg = "As there are reserved stock, you cannot disable Stock Reservation."
+		with self.assertRaises(frappe.ValidationError, msg=msg):
+			settings.save()
 		self.assertEqual(settings.allow_negative_stock, 0)
-		settings.save()
-		frappe.flags.in_test = True
 
 	# codecov
 	@change_settings(
