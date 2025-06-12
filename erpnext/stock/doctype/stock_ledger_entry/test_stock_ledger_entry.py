@@ -1396,8 +1396,6 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 		)
 
 	def test_cannot_cancel_sle_directly_TC_SCK_359(self):
-		import erpnext.controllers.stock_controller as stock_controller
-		stock_controller.create_item_wise_repost_entries = lambda *args, **kwargs: None
 
 		warehouse = create_warehouse(warehouse_name="_Test Warehouse",company="_Test Company")
 
@@ -1432,9 +1430,6 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 	def test_validate_backdated_stock_transaction_TC_SCK_391(self):
 		from erpnext.stock.doctype.stock_settings.stock_settings import StockSettings
 		from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import StockLedgerEntry
-		import erpnext.controllers.stock_controller as stock_controller
-		stock_controller.create_item_wise_repost_entries = lambda *args, **kwargs: None
-
 	
 		# Setup
 		frappe.set_user("Administrator")
