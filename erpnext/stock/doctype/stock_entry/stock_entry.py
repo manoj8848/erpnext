@@ -2899,23 +2899,28 @@ def get_used_alternative_items(
 	return used_alternative_items
 
 
+# Switched from frappe.get_all to frappe.db.sql to prevent PostgreSQL GROUPING ERROR.
+# frappe.get_all with aggregate fields can trigger unwanted ORDER BY clauses internally,
+# which causes validation errors in PostgreSQL unless grouped fields are explicitly handled.
+# This change ensures compatibility with both MariaDB and PostgreSQL without changing logic.
 def get_valuation_rate_for_finished_good_entry(work_order):
 	work_order_qty = flt(
 		frappe.get_cached_value("Work Order", work_order, "material_transferred_for_manufacturing")
 	)
-	field = "(SUM(total_outgoing_value) / %s) as valuation_rate" % (work_order_qty)
-	stock_data = frappe.get_all(
-		"Stock Entry",
-		fields=field,
-		filters={
-			"docstatus": 1,
-			"purpose": "Material Transfer for Manufacture",
-			"work_order": work_order,
-		},
-	)
 
-	if stock_data:
-		return stock_data[0].valuation_rate
+	if not work_order_qty:
+		return 0  # Avoid ZeroDivisionError
+	query = """
+		SELECT SUM(total_outgoing_value) / %s AS valuation_rate
+		FROM `tabStock Entry`
+		WHERE docstatus = 1
+			AND purpose = 'Material Transfer for Manufacture'
+			AND work_order = %s
+	"""
+	result = frappe.db.sql(query, (work_order_qty, work_order), as_dict=1)
+	if result and result[0].valuation_rate is not None:
+		return result[0].valuation_rate
+
 
 
 @frappe.whitelist()

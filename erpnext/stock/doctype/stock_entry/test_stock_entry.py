@@ -4560,68 +4560,87 @@ class TestStockEntry(FrappeTestCase):
 		self.assertGreaterEqual(updated_item.actual_qty, 2)
 
 	def test_move_sample_to_retention_warehouse_TC_SCK_364(self):
-		company = "_Test Company"
+		frappe.set_user("Administrator")
 
-		# Create Retention Warehouse
-		retention_warehouse = create_warehouse(warehouse_name="Sample Retention",company="_Test Company")
+		# Step 1: Set retention warehouse in Stock Settings
+		retention_warehouse = create_warehouse("_Test Retention WH", company="_Test Company")
+		frappe.db.set_value("Stock Settings", None, "sample_retention_warehouse", retention_warehouse)
 
-		# Set in Stock Settings
-		frappe.set_value("Stock Settings", None, "sample_retention_warehouse", retention_warehouse)
+		# Step 2: Create source warehouse
+		source_warehouse = create_warehouse("_Test Source WH", company="_Test Company")
 
-		# Create Source Warehouse
-		source_warehouse = create_warehouse(warehouse_name="Source WH",company="_Test Company")
+		# Step 3: Create item
+		if not frappe.db.exists("Item", "Test Item"):
+			make_item("Test Item", {"stock_uom": "Nos", "is_stock_item": 1,"has_batch_no": 1})
 
-		# Create Item Group if not exists
-		if not frappe.db.exists("Item Group", "Test Group"):
+
+		# Also insert the corresponding batch
+		if not frappe.db.exists("Batch", "TEST-BATCH-001"):
 			frappe.get_doc({
-				"doctype": "Item Group",
-				"item_group_name": "Test Group",
-				"is_group": 0
-			}).insert()	
-
-		# Create Item
-		item_code = "_Test Item"
-		if not frappe.db.exists("Item", item_code):
-			frappe.get_doc({
-				"doctype": "Item",
-				"item_code": item_code,
-				"item_name": "Test Item",
-				"item_group":"Test Group",
-				"is_stock_item": 1,
-				"has_batch_no": 1,
-				"create_new_batch": 1,
-				"stock_uom": "Nos",
-				"gst_hsn_code":"100111",
-				"sample_quantity": 10
+				"doctype": "Batch",
+				"batch_id": "TEST-BATCH-001",
+				"item": "Test Item",
+				"warehouse": source_warehouse,
+				"expiry_date": add_days(nowdate(), 365)
 			}).insert()
 
-		# Create Serial and Batch Bundle
-		bundle_name = custom_create_serial_and_batch_bundle()
+		stock_entry = frappe.get_doc({
+    		"doctype": "Stock Entry",
+    		"stock_entry_type": "Material Receipt",
+    		"purpose": "Material Receipt",
+    		"company": "_Test Company",
+    		"items": [
+    		    {
+    		        "item_code": "Test Item",
+    		        "t_warehouse": source_warehouse,
+    		        "qty": 10,
+    		        "uom": "Nos",
+    		        "stock_uom": "Nos",
+    		        "conversion_factor": 1.0,
+    		        "rate": 100,
+					"batch_no": "TEST-BATCH-001"
+    		    }
+    		],
+    		"docstatus": 1
+		}).insert()
 
 
-		# Duplicate bundle outward to simulate sample packaging
-		creator = SerialBatchCreation({
-			"type_of_transaction": "Outward",
-			"serial_and_batch_bundle": bundle_name,
-			"item_code": item_code,
-			"warehouse": source_warehouse,
-		})
-		creator.duplicate_package()
+		# Step 4: Create Serial and Batch Bundle with 1 linked Batch
+		sbb = frappe.get_doc({
+    		"doctype": "Serial and Batch Bundle",
+    		"item_code": "Test Item",
+    		"package_type": "Batch",
+    		"type_of_transaction": "Outward",
+    		"voucher_type": "Stock Entry",
+    		"voucher_no": stock_entry.name,
+    		"entries": [{
+    		    "batch_no": "TEST-BATCH-001",
+    		    "qty": 10
+    		}]
+		}).insert()
 
-		# Prepare item data
-		items = [{
-			"item_code": item_code,
-			"sample_quantity": 2,
-			"serial_and_batch_bundle": creator.serial_and_batch_bundle,
-			"t_warehouse": source_warehouse,
-			"valuation_rate": 100,
-			"uom": "Nos",
-			"stock_uom": "Nos",
-			"qty": 10 
-		}]
 
-		# Call the target function
-		move_sample_to_retention_warehouse(company, json.dumps(items))
+		
+
+
+		# Step 5: Prepare input data
+		items = [
+			{
+				"item_code": "Test Item",
+				"sample_quantity": 2,
+				"transfer_qty": 10,
+				"serial_and_batch_bundle": sbb.name,
+				"t_warehouse": source_warehouse,
+				"valuation_rate": 50,
+				"uom": "Nos",
+				"stock_uom": "Nos",
+				"conversion_factor": 1.0
+			}
+		]
+
+		# Call the function
+		move_sample_to_retention_warehouse("_Test Company", json.dumps(items))
+
 
 	def test_get_expired_batch_items_TC_SCK_365(self):
 		from erpnext.stock.doctype.stock_entry.stock_entry import get_expired_batch_items
@@ -4847,6 +4866,7 @@ class TestStockEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"valuation_rate": 100,
 				"gst_hsn_code": "01011010",
+				"item_group":"All Item Groups"
 
 			}).insert(ignore_permissions=True)
 
@@ -4858,6 +4878,7 @@ class TestStockEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"valuation_rate": 100,
 				"gst_hsn_code": "01011010",
+				"item_group":"All Item Groups"
 
 			}).insert(ignore_permissions=True)	
 
@@ -5049,7 +5070,7 @@ class TestStockEntry(FrappeTestCase):
 
 		self.assertIn("UOM Conversion Factor is mandatory", str(cm.exception))
 
-	def test_create_serial_and_batch_bundle_combined_conditions_TC_TC_SCK_401(self):
+	def test_create_serial_and_batch_bundle_combined_conditions_TC_SCK_401(self):
 		frappe.set_user("Administrator")	
 		# Setup: Create item with both serial and batch tracking
 		item_code = "_Test SerialBatch Item"
@@ -5063,6 +5084,7 @@ class TestStockEntry(FrappeTestCase):
 		        "is_stock_item": 1,
 		        "stock_uom": "Nos",
 				"gst_hsn_code": "01011010",
+				"item_group":"All Item Groups"
 
 		    }).insert()	
 		# Setup: Create warehouse
@@ -5120,7 +5142,9 @@ class TestStockEntry(FrappeTestCase):
 				"is_stock_item": 1,
 				"has_serial_no": 1,
 				"gst_hsn_code": "01011010",
-				"serial_no_series": "SRL-TEST-.#####"
+				"serial_no_series": "SRL-TEST-.#####",
+				"item_group":"All Item Groups"
+				
 
 			})
 			item.insert()
@@ -5181,7 +5205,8 @@ class TestStockEntry(FrappeTestCase):
 		    "stock_uom": "Nos",
 		    "default_warehouse": default_wh,
 		    "gst_hsn_code": "01011010",
-			 "include_item_in_manufacturing": 1
+			 "include_item_in_manufacturing": 1,
+			 "item_group":"All Item Groups"
 		}).insert(ignore_permissions=True)
 
 
@@ -5196,6 +5221,7 @@ class TestStockEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"default_warehouse": default_wh,
 				"gst_hsn_code": "01011010",
+				 "item_group":"All Item Groups"
 			}).insert(ignore_permissions=True)
 
 		# Create the raw material item manually
@@ -5206,7 +5232,8 @@ class TestStockEntry(FrappeTestCase):
 				"item_name": "_Test Item",
 				"is_stock_item": 1,
 				"gst_hsn_code": "01011010",
-				"valuation_rate":100
+				"valuation_rate":100,
+				 "item_group":"All Item Groups"
 			}).insert(ignore_permissions=True)	
 
 		# Create the raw material item manually
@@ -5219,6 +5246,7 @@ class TestStockEntry(FrappeTestCase):
 				"stock_uom": "Nos",
 				"default_warehouse": default_wh,
 				"gst_hsn_code": "01011010",
+				 "item_group":"All Item Groups"
 			}).insert(ignore_permissions=True)	
 
 		if not frappe.db.exists("BOM", {"item": "Sub Raw Bom Mat", "is_active": 1}):
@@ -5290,6 +5318,260 @@ class TestStockEntry(FrappeTestCase):
 		self.assertEqual(result_doc.doctype, "Stock Entry")
 		self.assertGreater(len(result_doc.items), 0)
 		self.assertEqual(result_doc.items[0].item_code, "Sub Raw Mat")
+
+	def test_get_valuation_rate_for_finished_good_entry_TC_SCK_408(self):
+		frappe.set_user("Administrator")
+
+		fg_warehouse = create_warehouse("_Test FG WH", company="_Test Company")
+		wip_warehouse = create_warehouse("_Test WIP WH", company="_Test Company")
+		test_warehouse=create_warehouse("_Test Warehouse", company="_Test Company")
+		
+		if not frappe.db.exists("Item", "Sub Raw Mat"):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Sub Raw Mat",
+				"item_name": "Sub Raw Mat",
+				"is_stock_item": 1,
+				"stock_uom": "Nos",
+				"default_warehouse": "_Test Warehouse - _TC",
+				"gst_hsn_code": "01011010",
+				"item_group":"All Item Groups",
+				"valuation_rate":100
+			}).insert(ignore_permissions=True)	
+
+		# Then pass it into create_item
+		if not frappe.db.exists("Item", "Valuation FG"):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "Valuation FG",
+				"item_name": "Valuation FG",
+				"is_stock_item": 1,
+				"stock_uom": "Nos",
+				"default_warehouse": "_Test Warehouse - _TC",
+				"gst_hsn_code": "01011010",
+				 "item_group":"All Item Groups"
+			}).insert(ignore_permissions=True)	
+
+		if not frappe.db.exists("BOM", {"item": "Valuation FG", "is_active": 1}):
+			bom = frappe.get_doc({
+				"doctype": "BOM",
+				"item": "Valuation FG",
+				"quantity": 1,
+				"is_active": 1,
+				"is_default": 1,
+				"company": "_Test Company",
+				"items": [
+					{
+						"item_code": "Sub Raw Mat",  # or any raw material
+						"qty": 2
+					}
+				]
+		}).insert()
+		else:
+			bom = frappe.get_doc("BOM", {"item": "Valuation FG", "is_active": 1})
+
+
+		work_order = frappe.get_doc({
+			"doctype": "Work Order",
+			"production_item": "Valuation FG",
+			"qty": 10,
+			"material_transferred_for_manufacturing": 5,
+			"fg_warehouse": fg_warehouse,
+			"wip_warehouse": wip_warehouse,
+			"bom_no":bom.name,
+			"stock_uom": "Nos",
+			"company": "_Test Company"
+		}).insert()
+
+		work_order.submit()
+		# Create Stock Entry for the Work Order
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"purpose": "Material Transfer for Manufacture",
+			"stock_entry_type": "Material Transfer for Manufacture",
+			"work_order": work_order.name,
+			"company": "_Test Company",
+			"items": [
+				{
+					"item_code": "Sub Raw Mat",
+					"s_warehouse": test_warehouse,  # your source warehouse
+					"t_warehouse": wip_warehouse,  # transfer to WIP
+					"qty": 5,
+					"uom": "Nos",
+					"stock_uom": "Nos",
+					"conversion_factor": 1,
+					"rate": 100,
+					"Allow Zero Valuation Rate":1
+				}
+			],
+			"total_outgoing_value": 500,
+			"docstatus": 1
+		}).insert()
+
+
+		# Function under test
+		from erpnext.stock.doctype.stock_entry.stock_entry import get_valuation_rate_for_finished_good_entry
+		valuation_rate = get_valuation_rate_for_finished_good_entry(work_order.name)
+
+		# Assertion: 500 (value) / 5 (qty) = 100
+		self.assertEqual(valuation_rate, 100)
+
+	def test_set_items_for_stock_in_TC_SCK_409(self):
+		frappe.set_user("Administrator")
+
+		# Step 1: Create source and target warehouses
+		source_warehouse = create_warehouse("_Test Source WH", company="_Test Company")
+		target_warehouse = create_warehouse("_Test Target WH", company="_Test Company")
+
+		# Step 2: Create item
+		item_code = "Test Stock Transfer Item"
+		make_item(item_code, {"is_stock_item":1,"valuation_rate":100})
+
+		# Step 3: Create outgoing stock entry (Material Transfer)
+		outgoing_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Transfer",
+			"purpose": "Material Transfer",
+			"company": "_Test Company",
+			"items": [
+				{
+					"item_code": item_code,
+					"s_warehouse": source_warehouse,
+					"t_warehouse": target_warehouse,
+					"qty": 5,
+					"uom": "Nos",
+					"stock_uom": "Nos",
+					"conversion_factor": 1.0,
+				}
+			],
+			"docstatus": 1
+		}).insert()
+
+		# Step 4: Create new incoming stock entry to simulate receipt
+		incoming_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"purpose": "Material Transfer",
+			"stock_entry_type": "Material Transfer",
+			"company": "_Test Company",
+			"outgoing_stock_entry": outgoing_entry.name
+		})
+
+		# Step 5: Call method under test
+		incoming_entry.set_items_for_stock_in()
+
+		# Step 6: Assertions
+		self.assertEqual(len(incoming_entry.items), 1)
+		item = incoming_entry.items[0]
+		self.assertEqual(item.item_code, item_code)
+		self.assertEqual(item.s_warehouse, target_warehouse)
+		self.assertEqual(item.against_stock_entry, outgoing_entry.name)
+		self.assertEqual(item.qty, 5)
+	
+	def test_make_serial_and_batch_bundle_for_transfer_TC_SCK_410(self):
+		frappe.set_user("Administrator")
+
+		# Create warehouses
+		source_wh = create_warehouse("_Test Source WH", company="_Test Company")
+		target_wh = create_warehouse("_Test Target WH", company="_Test Company")
+
+		# Create item
+		item_code = "Batch Transfer Item"
+		make_item(item_code, {"is_stock_item":1, "has_batch_no":1,"valuation_rate":100})
+
+		if not frappe.db.exists("Batch", "TEST-BATCH-001"):
+			frappe.get_doc({
+				"doctype": "Batch",
+				"batch_id": "TEST-BATCH-001",
+				"item": item_code,
+				"warehouse": source_wh,
+				"expiry_date": add_days(nowdate(), 365)
+			}).insert()
+
+		frappe.get_doc({
+    		"doctype": "Stock Entry",
+    		"stock_entry_type": "Material Receipt",
+    		"purpose": "Material Receipt",
+    		"company": "_Test Company",
+    		"items": [{
+    		    "item_code": item_code,
+    		    "t_warehouse": source_wh,
+    		    "qty": 5,
+    		    "uom": "Nos",
+    		    "stock_uom": "Nos",
+    		    "conversion_factor": 1.0,
+    		    "rate": 100,
+    		    "batch_no": "TEST-BATCH-001"
+    		}],
+    		"docstatus": 1
+		}).insert()
+
+
+		outgoing_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"purpose": "Material Transfer",
+			"stock_entry_type": "Material Transfer",
+			"company": "_Test Company",
+			"items": [{
+				"item_code": item_code,
+				"s_warehouse": source_wh,
+				"t_warehouse": target_wh,
+				"qty": 5,
+				"uom": "Nos",
+				"stock_uom": "Nos",
+				"conversion_factor": 1.0,
+				"batch_no": "TEST-BATCH-001"
+			}],
+			"docstatus": 1
+		}).insert()
+
+		frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"item_code": item_code,
+			"package_type": "Batch",
+			"type_of_transaction": "Outward",
+			"voucher_type": "Stock Entry",
+			"voucher_no": outgoing_entry.name,
+			"entries": [{
+				"batch_no": "TEST-BATCH-001",
+				"qty": 5
+			}]
+		}).insert()
+
+
+
+		ste_detail_name = outgoing_entry.items[0].name
+
+		#Create receiving Stock Entry referencing outgoing entry
+		receiving_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"purpose": "Material Transfer",
+			"stock_entry_type": "Material Transfer",
+			"company": "_Test Company",
+			"outgoing_stock_entry": outgoing_entry.name,
+			"items": [{
+				"item_code": item_code,
+				"s_warehouse": target_wh,
+				"t_warehouse": source_wh,
+				"qty": 5,
+				"uom": "Nos",
+				"stock_uom": "Nos",
+				"conversion_factor": 1.0,
+				"ste_detail": ste_detail_name
+			}]
+		})
+
+		# Mock make_package_for_transfer to return new bundle name
+		def mock_make_package(bundle, wh, direction, do_not_submit):
+			return "NEW-SBB-001"
+
+		receiving_entry.make_package_for_transfer = mock_make_package
+
+		# Call function under test
+		receiving_entry.make_serial_and_batch_bundle_for_transfer()
+
+		# Assert that new bundle was assigned to item
+		self.assertEqual(receiving_entry.items[0].serial_and_batch_bundle, "NEW-SBB-001")
+
 
 def create_bom(bom_item, rm_items, company=None, qty=None, properties=None):
 	bom = frappe.new_doc("BOM")
