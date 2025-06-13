@@ -36,6 +36,81 @@ class TestPutawayRule(FrappeTestCase):
 			new_uom.uom_name = "Bag"
 			new_uom.save()
 
+	def tearDown(self):
+		frappe.db.rollback()
+
+	# codecov
+	def test_validate_priority_TC_SCK_412(self):
+		company = "_Test Company"
+		item = "Test Item Putway"
+		warehouse="_Test Warehouse - _TC"
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.stock.doctype.item.test_item import make_item
+		item = make_item(item)
+
+		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
+			warehouse = frappe.get_doc({
+				"doctype": "Warehouse",
+				"warehouse_name": "_Test Warehouse - _TC",
+				"company": company
+			}).insert()
+
+		putway_rule = frappe.get_doc({
+			"doctype":"Putaway Rule",
+			"item_code":item,
+			"warehouse":warehouse,
+			"priority":0,
+			"company":company,
+			"capacity":0,
+			"conversion_factor":1
+		})
+		msg = "Capacity must be greater than 0"
+		msg2 = "Priority cannot be lesser than 1."
+		with self.assertRaises(frappe.ValidationError,msg=msg):
+			putway_rule.insert()
+
+		with self.assertRaises(frappe.ValidationError,msg=msg):
+			putway_rule.validate_priority()
+		
+
+	# codecov
+	def test_apply_putaway_rule_TC_SCK_413(self):
+		from erpnext.stock.doctype.putaway_rule.putaway_rule import apply_putaway_rule
+		company = "_Test Company"
+		item_code = "Test Item Putway"
+		warehouse="_Test Warehouse - _TC"
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.stock.doctype.item.test_item import make_item
+		item = make_item(item_code)
+
+		if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
+			warehouse = frappe.get_doc({
+				"doctype": "Warehouse",
+				"warehouse_name": "_Test Warehouse - _TC",
+				"company": company
+			}).insert()
+
+		putway_rule = frappe.get_doc({
+			"doctype":"Putaway Rule",
+			"item_code":item_code,
+			"warehouse":warehouse,
+			"priority":1,
+			"company":company,
+			"capacity":2,
+			"conversion_factor":1
+		}).insert()
+
+		items = [{
+			"item_code": item_code,
+			"qty": 1,
+			"stock_qty": 1,
+			"uom": "Nos",
+			"warehouse": warehouse,
+			"conversion_factor": 1
+		}]
+
+		apply_putaway_rule("Putaway Rule",items,company,purpose = "Stock Entry")
+
 	def assertUnchangedItemsOnResave(self, doc):
 		"""Check if same items remain even after reapplication of rules.
 

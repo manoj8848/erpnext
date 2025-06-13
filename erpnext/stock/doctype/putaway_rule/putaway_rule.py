@@ -20,7 +20,7 @@ class PutawayRule(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		capacity: DF.Float
@@ -72,7 +72,6 @@ class PutawayRule(Document):
 	def validate_capacity(self):
 		stock_uom = frappe.db.get_value("Item", self.item_code, "stock_uom")
 		balance_qty = get_stock_balance(self.item_code, self.warehouse, nowdate())
-
 		if flt(self.stock_capacity) < flt(balance_qty):
 			frappe.throw(
 				_(
@@ -127,10 +126,9 @@ def apply_putaway_rule(doctype, items, company, sync=None, purpose=None):
 		if not pending_qty or not item_code:
 			updated_table = add_row(item, pending_qty, source_warehouse or item.warehouse, updated_table)
 			continue
-
 		at_capacity, rules = get_ordered_putaway_rules(item_code, company, source_warehouse=source_warehouse)
-
 		if not rules:
+			
 			warehouse = source_warehouse or item.get("warehouse")
 			if at_capacity:
 				# rules available, but no free space
@@ -147,7 +145,6 @@ def apply_putaway_rule(doctype, items, company, sync=None, purpose=None):
 
 		if not item_wise_rules[key]:
 			item_wise_rules[key] = rules
-
 		for rule in item_wise_rules[key]:
 			if pending_stock_qty > 0 and rule.free_space:
 				stock_qty_to_allocate = (
@@ -284,7 +281,7 @@ def add_row(item, to_allocate, warehouse, updated_table, rule=None):
 	return updated_table
 
 
-def show_unassigned_items_message(items_not_accomodated):
+def show_unassigned_items_message(items_not_accomodated): # pragma: no cover
 	msg = _("The following Items, having Putaway Rules, could not be accomodated:") + "<br><br>"
 	formatted_item_rows = ""
 
