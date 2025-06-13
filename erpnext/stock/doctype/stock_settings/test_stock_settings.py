@@ -83,7 +83,7 @@ class TestStockSettings(FrappeTestCase):
 	@change_settings(
 		"Stock Settings",
 		{
-			"allow_negative_stock": 1,
+			"allow_negative_stock": 0,
 			"enable_stock_reservation": 1,
 			"allow_to_edit_stock_uom_qty_for_sales": 0,
 		},
