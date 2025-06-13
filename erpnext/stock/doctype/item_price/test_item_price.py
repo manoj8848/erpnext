@@ -6,6 +6,7 @@ import frappe
 from frappe.test_runner import make_test_records_for_doctype
 from frappe.tests.utils import FrappeTestCase
 
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 from erpnext.stock.doctype.item_price.item_price import ItemPriceDuplicateItem
 from erpnext.stock.get_item_details import get_price_list_rate_for, process_args
 
@@ -15,6 +16,42 @@ class TestItemPrice(FrappeTestCase):
 		super().setUp()
 		frappe.db.sql("delete from `tabItem Price`")
 		make_test_records_for_doctype("Item Price", force=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	# codecov
+	def test_update_price_list_details_TC_SCK_324(self):
+		item1 = make_test_item("Test Item")
+		item2 = make_test_item("Test Item2")
+
+		item_price1 = frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": item1.name,
+				"price_list": "_Test Price List",
+				"currency": "INR",
+				"price_list_rate": 500,
+			}
+		).insert()
+		self.assertEqual(item_price1.item_code, item1.name)
+
+		item_price2 = frappe.get_doc(
+			{
+				"doctype": "Item Price",
+				"item_code": item2.name,
+				"price_list": "_Test Price List",
+				"currency": "INR",
+				"price_list_rate": 500,
+			}
+		).insert()
+		price_list_doc = frappe.get_doc("Price List", "_Test Price List")
+		price_list_doc.enabled = 0
+		price_list_doc.save()
+
+		msg = "The price list _Test Price List does not exist or is disabled"
+		with self.assertRaises(frappe.ValidationError, msg=msg):
+			item_price2.update_price_list_details()
 
 	def test_template_item_price(self):
 		from erpnext.stock.doctype.item.test_item import make_item

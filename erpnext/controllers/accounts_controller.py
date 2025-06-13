@@ -893,6 +893,9 @@ class AccountsController(TransactionBase):
 									and item.get("use_serial_batch_fields")
 								)
 							):
+								if fieldname == "batch_no" and not item.batch_no:
+ 									item.set("rate", ret.get("rate"))
+ 									item.set("price_list_rate", ret.get("price_list_rate"))
 								item.set(fieldname, value)
 
 								if fieldname == "batch_no" and item.batch_no and not item.is_free_item:

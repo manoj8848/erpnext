@@ -19,7 +19,7 @@ class QualityInspection(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.quality_inspection_reading.quality_inspection_reading import (
@@ -75,17 +75,17 @@ class QualityInspection(Document):
 
 		if self.readings:
 			self.inspect_and_set_status()
-		
+
 		self.validate_inspection_required()
 		self.set_child_row_reference()
 		self.set_company()
+
 	def set_company(self):
 		if self.reference_type and self.reference_name:
 			company = frappe.get_cached_value(self.reference_type, self.reference_name, "company")
 			if company != self.company:
 				self.company = company
 
-				
 	def set_child_row_reference(self):
 		if self.child_row_reference:
 			return
@@ -105,6 +105,7 @@ class QualityInspection(Document):
 			self.child_row_reference = child_row_references[0]
 		else:
 			self.distribute_child_row_reference(child_row_references)
+
 	def distribute_child_row_reference(self, child_row_references):
 		quality_inspections = frappe.get_all(
 			"Quality Inspection",
@@ -131,7 +132,7 @@ class QualityInspection(Document):
 					"Quality Inspection", row.name, "child_row_reference", child_row_references[0]
 				)
 			child_row_references.remove(child_row_references[0])
-			
+
 	def validate_inspection_required(self):
 		if frappe.db.get_single_value(
 			"Stock Settings", "allow_to_make_quality_inspection_after_purchase_or_delivery"
@@ -175,8 +176,8 @@ class QualityInspection(Document):
 			child.update(d)
 			child.status = "Accepted"
 			child.parameter_group = frappe.get_value(
- 				"Quality Inspection Parameter", d.specification, "parameter_group"
- 			)
+				"Quality Inspection Parameter", d.specification, "parameter_group"
+			)
 
 	@frappe.whitelist()
 	def get_quality_inspection_template(self):
@@ -265,8 +266,7 @@ class QualityInspection(Document):
 				# 	args,
 				# )
 
-
-			# in postgresql directly two tables updation is not allowed due to that created two querires
+				# in postgresql directly two tables updation is not allowed due to that created two querires
 				frappe.db.sql(
 					f"""
 					UPDATE `tab{doctype}` t1

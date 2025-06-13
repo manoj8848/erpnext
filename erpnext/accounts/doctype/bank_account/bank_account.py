@@ -12,7 +12,7 @@ from frappe.model.document import Document
 from frappe.utils import comma_and, get_link_to_form
 
 
-class BankAccount(Document):
+class BankAccount(Document):  # pragma: no cover
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 

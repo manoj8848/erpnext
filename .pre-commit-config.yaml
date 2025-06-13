@@ -12,7 +12,7 @@ repos:
         exclude: ".*json$|.*txt$|.*csv|.*md"
       - id: check-yaml
       - id: no-commit-to-branch
-        args: ['--branch', 'develop']
+        args: ['--branch', 'develop','--branch', 'pre-prod','--branch', 'pre-prod-develop','--branch', 'version-15']
       - id: check-merge-conflict
       - id: check-ast
       - id: check-json
@@ -54,6 +54,14 @@ repos:
                 erpnext/templates/pages/order.js|
                 erpnext/templates/includes/.*
             )$
+
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.22.0
+    hooks:
+      - id: commitlint
+        name: Checking commit subject
+        stages: [commit-msg]
+        additional_dependencies: ['@commitlint/config-conventional','conventional-changelog-conventionalcommits']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.2.0

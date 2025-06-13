@@ -14,7 +14,7 @@ class MaintenanceVisit(TransactionBase):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.maintenance.doctype.maintenance_visit_purpose.maintenance_visit_purpose import (

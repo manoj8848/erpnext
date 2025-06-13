@@ -16,7 +16,7 @@ class InstallationNote(TransactionBase):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.selling.doctype.installation_note_item.installation_note_item import (

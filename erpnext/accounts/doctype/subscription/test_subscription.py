@@ -548,6 +548,11 @@ class TestSubscription(FrappeTestCase):
 			self.assertEqual(subscription.plans[0].plan, "_Test Plan For PI")
     
 	def test_subscription_plan_with_template_for_pi_TC_ACC_086(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		create_plan(plan_name="_Test Plan For PI", cost=900, currency="INR")
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")

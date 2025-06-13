@@ -1,7 +1,8 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days
+from frappe.utils import add_days, today
 
+from erpnext.selling.doctype.customer.test_customer import get_customer_dict_new
 from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note, make_sales_invoice
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.selling.report.sales_order_analysis.sales_order_analysis import execute
@@ -252,3 +253,54 @@ class TestSalesOrderAnalysis(FrappeTestCase):
 		for key, val in expected_value.items():
 			with self.subTest(key=key, val=val):
 				self.assertEqual(data[0][key], val)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_validations_sales_order_analytics_TC_S_204(self):
+		item = create_item("__Test Analytics Item")
+		item2 = create_item("__Test Analytics Item 1")
+		customer = frappe.get_doc(get_customer_dict_new("_Test Analytics Customer")).insert(
+			ignore_permissions=True
+		)
+		self.filters = {}
+		data = execute(self.filters)
+		self.assertEqual(len(data[1]), 0)
+
+		filters = {"company": "_Test Company", "from_date": add_days(today(), 1), "to_date": today()}
+		with self.assertRaises(frappe.ValidationError):
+			data_1 = execute(filters)
+
+		so = make_sales_order(
+			transaction_date=today(),
+			item=item.item_code,
+			qty=1,
+			rate=1000,
+			customer=customer.name,
+			do_not_save=True,
+		)
+		so.po_no = ""
+		so.taxes_and_charges = ""
+		so.taxes = ""
+		so.append("items", {"item_code": item2.item_code, "qty": 5, "rate": 50000, "delivery_date": today()})
+		so.insert(ignore_permissions=True)
+		so.submit()
+
+		data_2 = execute(
+			{
+				"company": so.company,
+				"from_date": add_days(today(), -1),
+				"to_date": today(),
+				"sales_order": [so.name],
+				"warehouse": "_Test Warehouse - _TC",
+				"group_by_so": 1,
+			}
+		)
+		if data_2[1]:
+			for row in data_2[1]:
+				if row.get("item_code") == item.item_code:
+					self.assertEqual(row.get("status"), "To Deliver and Bill")
+					self.assertEqual(row.get("customer"), "_Test Analytics Customer")
+					self.assertEqual(row.get("item_code"), "__Test Analytics Item")
+					self.assertEqual(row.get("warehouse"), "_Test Warehouse - _TC")
+					self.assertEqual(row.get("company"), "_Test Company")

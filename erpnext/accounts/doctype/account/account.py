@@ -28,13 +28,45 @@ class Account(NestedSet):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		account_currency: DF.Link | None
 		account_name: DF.Data
 		account_number: DF.Data | None
-		account_type: DF.Literal["", "Accumulated Depreciation", "Asset Received But Not Billed", "Bank", "Cash", "Chargeable", "Capital Work in Progress", "Cost of Goods Sold", "Current Asset", "Current Liability", "Depreciation", "Direct Expense", "Direct Income", "Equity", "Expense Account", "Expenses Included In Asset Valuation", "Expenses Included In Valuation", "Fixed Asset", "Income Account", "Indirect Expense", "Indirect Income", "Liability", "Payable", "Receivable", "Round Off", "Stock", "Stock Adjustment", "Stock Received But Not Billed", "Service Received But Not Billed", "Tax", "Temporary"]
+		account_type: DF.Literal[
+			"",
+			"Accumulated Depreciation",
+			"Asset Received But Not Billed",
+			"Bank",
+			"Cash",
+			"Chargeable",
+			"Capital Work in Progress",
+			"Cost of Goods Sold",
+			"Current Asset",
+			"Current Liability",
+			"Depreciation",
+			"Direct Expense",
+			"Direct Income",
+			"Equity",
+			"Expense Account",
+			"Expenses Included In Asset Valuation",
+			"Expenses Included In Valuation",
+			"Fixed Asset",
+			"Income Account",
+			"Indirect Expense",
+			"Indirect Income",
+			"Liability",
+			"Payable",
+			"Receivable",
+			"Round Off",
+			"Stock",
+			"Stock Adjustment",
+			"Stock Received But Not Billed",
+			"Service Received But Not Billed",
+			"Tax",
+			"Temporary",
+		]
 		balance_must_be: DF.Literal["", "Debit", "Credit"]
 		company: DF.Link
 		disabled: DF.Check
@@ -72,7 +104,6 @@ class Account(NestedSet):
 		self.name = get_autoname_with_number(self.account_number, self.account_name, self.company)
 
 	def validate(self):
-
 		if frappe.local.flags.allow_unverified_charts:
 			return
 		self.validate_parent()
@@ -420,12 +451,8 @@ def get_account_currency(account):
 		return
 
 	def generator():
-		account_currency = frappe.get_cached_value(
-			"Account", account, "account_currency"
-		)
-		company = frappe.get_cached_value(
-			"Account", account, "company"
-		)
+		account_currency = frappe.get_cached_value("Account", account, "account_currency")
+		company = frappe.get_cached_value("Account", account, "company")
 		if not account_currency:
 			account_currency = frappe.get_cached_value("Company", company, "default_currency")
 

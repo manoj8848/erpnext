@@ -43,12 +43,14 @@ def employee_query(
 
 	mcond = "" if ignore_permissions else get_match_cond(doctype)
 
+	like_operator = "ilike" if frappe.db.db_type == "postgres" else "like"
+
 	return frappe.db.sql(
 		"""select {fields} from `tabEmployee`
 		where status in ('Active', 'Suspended')
 			and docstatus < 2
-			and ({key} like %(txt)s
-				or employee_name like %(txt)s)
+			and ({key} {like_op} %(txt)s
+				or employee_name {like_op} %(txt)s)
 			{fcond} {mcond}
 		order by
 			(case when locate(%(_txt)s, name) > 0 then locate(%(_txt)s, name) else 99999 end),
@@ -59,6 +61,7 @@ def employee_query(
 			**{
 				"fields": ", ".join(fields),
 				"key": searchfield,
+				"like_op": like_operator,
 				"fcond": get_filters_cond(doctype, filters, conditions),
 				"mcond": mcond,
 			}

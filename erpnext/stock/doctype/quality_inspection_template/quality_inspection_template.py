@@ -12,7 +12,7 @@ class QualityInspectionTemplate(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.item_quality_inspection_parameter.item_quality_inspection_parameter import (

@@ -11,7 +11,7 @@ class DeliveryNoteItem(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		actual_batch_qty: DF.Float

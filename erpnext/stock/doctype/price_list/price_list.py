@@ -14,7 +14,7 @@ class PriceList(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.price_list_country.price_list_country import PriceListCountry

@@ -4,18 +4,13 @@
 import unittest
 
 import frappe
+from datetime import date
 from frappe.utils import (
-	today,
-	now_datetime,
 	add_years,
-	add_days,
 	add_months,
-	cstr,
-	flt,
 	get_first_day,
 	get_last_day,
 	getdate,
-	is_last_day_of_the_month,
 	nowdate,
 )
 
@@ -25,9 +20,19 @@ from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
 	create_sales_invoice,
 )
 from erpnext.stock.doctype.item.test_item import create_item
-
+from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+from erpnext.accounts.doctype.payment_reconciliation.test_payment_reconciliation import create_fiscal_year
+from erpnext.controllers.tests.test_accounts_controller import make_supplier
 
 class TestProcessDeferredAccounting(unittest.TestCase):
+
+	def setUp(self):
+		create_company()
+		get_or_create_fiscal_year("_Test Company")
+		backdate = getdate(add_years(nowdate(), -2))
+		create_fiscal_year("_Test Company",date(backdate.year,1,1),date(backdate.year,12,31))
+
 	def test_creation_of_ledger_entry_on_submit(self):
 		"""test creation of gl entries on submission of document"""
 		change_acc_settings(acc_frozen_upto="2023-05-31", book_deferred_entries_based_on="Months")
@@ -81,14 +86,15 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 
 	def test_auto_deferred_expense_entries_TC_ACC_092(self):
 		"""Test automatic deferred expense entries on submission and monthly write-off."""
-		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice		
+		supplier = make_supplier("_Test Supplier",currency="INR")
 
 		# Step 1: Set dynamic dates (2 years back)
 		backdate = getdate(add_years(nowdate(), -2))
 		start_date = get_first_day(add_months(backdate, 4))
 		end_date = get_last_day(add_months(backdate, 6))
 		posting_date = get_first_day(add_months(backdate, 6))
-
+		create_fiscal_year("_Test Company",date(backdate.year,1,1),date(backdate.year,12,31))
 		# Step 2: Set Accounting Settings
 		change_acc_settings(acc_frozen_upto=start_date, book_deferred_entries_based_on="Months")
 
@@ -104,7 +110,7 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		acc_settings.save()
 
 		# Step 5: Create Item with Deferred Expense
-		item = create_item("_Test Item for Deferred Accounting", is_purchase_item=True)
+		item = create_item("_Test Item for Deferred Accounting", warehouse="Stores - _TC",is_purchase_item=True)
 		item.enable_deferred_expense = 1
 		item.item_defaults[0].deferred_expense_account = deferred_account
 		if frappe.db.has_column("Item", "gst_hsn_code"):
@@ -112,13 +118,26 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		item.save()
 
 		# Step 6: Create Purchase Invoice
-		pi = make_purchase_invoice(item=item.name, qty=1, rate=100, do_not_save=True)
+		pi = make_purchase_invoice(
+			supplier=supplier,
+			item=item.name,
+			uom="Nos",
+			qty=1,
+			rate=100,
+			warehouse="Stores - _TC",
+			cost_center="Main - _TC",
+			expense_account="Cost of Goods Sold - _TC",
+			supplier_warehouse="Stores - _TC",
+			do_not_save=True
+		)
 		pi.set_posting_time = 1
 		pi.posting_date = posting_date
 		pi.items[0].enable_deferred_expense = 1
 		pi.items[0].service_start_date = start_date
 		pi.items[0].service_end_date = end_date
 		pi.items[0].deferred_expense_account = deferred_account
+		# pi.flags.ignore_validate = True
+		# pi.flags.ignore_mandatory=True
 		pi.save()
 		pi.submit()
 
@@ -182,6 +201,10 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 
 	def test_auto_deferred_revenue_TC_ACC_093(self):
 		"""Test auto deferred revenue on a monthly basis."""
+		from erpnext.controllers.tests.test_accounts_controller import make_supplier
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+
+		customer = create_customer("_Test Customer",currency="INR")
 
 		base_date = getdate(add_years(nowdate(), -2))
 		start_date = get_first_day(add_months(base_date, 4))  
@@ -210,7 +233,15 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 
 		# Step 5: Create Sales Invoice
 		si = create_sales_invoice(
-			item=item.name, rate=3000, update_stock=0, posting_date=posting_date, do_not_submit=True
+			customer=customer,
+			item=item.name, 
+			rate=3000, 
+			update_stock=0, 
+			uom="Nos",
+			warehouse="Stores - _TC",
+			cost_center="Main - _TC",
+			posting_date=posting_date, 
+			do_not_submit=True
 		)
 		si.items[0].enable_deferred_revenue = 1
 		si.items[0].service_start_date = start_date

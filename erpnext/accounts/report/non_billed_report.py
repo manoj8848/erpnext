@@ -9,7 +9,7 @@ from frappe.query_builder.functions import IfNull, Round
 from erpnext import get_default_currency
 
 
-def get_ordered_to_be_billed_data(args):
+def get_ordered_to_be_billed_data(args,filters):
 	doctype, party = args.get("doctype"), args.get("party")
 	child_tab = doctype + " Item"
 	precision = (

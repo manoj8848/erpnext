@@ -12,6 +12,12 @@ from frappe.tests.utils import if_app_installed
 from erpnext.accounts.doctype.account.test_account import get_inventory_account
 from erpnext.accounts.utils import get_balance_on
 from erpnext.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+from erpnext.setup.doctype.company.test_company import create_child_company
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
+from erpnext.stock.doctype.delivery_note.delivery_note import make_packing_slip
 from erpnext.selling.doctype.sales_order.test_sales_order import (
 	automatically_fetch_payment_terms,
 	compare_payment_schedules,
@@ -57,6 +63,627 @@ class TestDeliveryNote(FrappeTestCase):
 		# modify amount
 		si.get("items")[0].rate = 200
 		self.assertRaises(frappe.ValidationError, frappe.get_doc(si).insert)
+
+	# codecov
+	def test_onload_sets_has_unpacked_items_tc_sck_240(self):
+		# Create a test customer
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+		
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 0
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.docstatus= 0
+		dn.company = "_Test Company"
+		dn.items[0].item_code = "_Test Item"
+		dn.items[0].qty = 1
+		dn.items[0].rate = 100
+		dn.onload()
+		self.assertTrue(dn.get_onload().get("has_unpacked_items"))
+
+	# codecov
+	def test_trigger_print_without_amount_tc_sck_241(self):
+		customer = "_Test Customer"
+		# Create a test customer
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+			
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 0
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.print_without_amount =  1
+		dn.company = company
+		dn.items[0].item_code = "_Test Item"
+		dn.items[0].qty = 1
+		dn.items[0].rate = 100
+		dn.onload()
+
+		settings = type("Settings", (), {"compact_item_print": 0})()
+		
+		dn.before_print(settings=settings)
+		self.assertEqual(dn.print_without_amount, 1)
+
+	# codecov
+	def test_set_actual_qty_tc_sck_242(self):
+		customer = "_Test Customer"
+		# Create a test customer
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+			
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 0
+			item_create.is_fixed_asset = 0
+			item_create.save()
+		
+		existing_bin = frappe.db.exists("Bin", {"item_code": item_code, "warehouse": "Stores - _TC"})
+		if existing_bin:
+			bin_doc = frappe.get_doc("Bin", existing_bin)
+			bin_doc.actual_qty = 25
+			bin_doc.save(ignore_permissions=True)
+		else:
+			frappe.get_doc({
+				"doctype": "Bin",
+				"name": "TEST-BIN-001",
+				"item_code": item_code,
+				"warehouse": "Stores - _TC",
+				"actual_qty": 25
+			}).insert(ignore_permissions=True)
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.items[0].item_code = item_code
+		dn.items[0].warehouse = "Stores - _TC"
+		dn.items[0].rate = 100
+		dn.items[0].qty =1
+
+		dn.set_actual_qty()
+		self.assertEqual(dn.items[0].actual_qty, 25.0)
+
+
+	# codecov
+	def test_so_required_if_check_tc_sck_243(self):
+		frappe.db.set_value("Selling Settings", None, "so_required", "Yes")
+
+		dn = frappe.new_doc("Delivery Note")
+		dn.set("items", [])  # keep items empty to avoid inner loop
+
+		dn.so_required()
+		self.assertEqual(frappe.db.get_value("Selling Settings", None, "so_required"), "Yes")
+
+	# codecov
+	def test_so_required_second_not_against_sales_order_tc_sck_244(self):
+		frappe.db.set_value("Selling Settings", None, "so_required", "Yes")
+
+		dn = frappe.new_doc("Delivery Note")
+		dn.set("items", [{
+			"item_code": "_Test Item",
+			"warehouse": "Stores - _TC",
+			"against_sales_order": None  # Ensuring it triggers the second if statement
+		}])
+
+		with self.assertRaises(frappe.exceptions.ValidationError):
+			dn.so_required()
+	# codecov
+	def test_check_credit_limit_with_bypass_tc_sck_245(self):
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 0
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		# Create or fetch a warehouse
+		self.warehouse = frappe.get_doc({
+			'doctype': 'Warehouse',
+			'warehouse_name': 'Test Warehouse',
+			'company': company
+		})
+		self.warehouse.insert()
+
+		# Set up mock data for the Customer Credit Limit to ensure bypass_credit_limit_check is True
+		frappe.db.set_value("Customer Credit Limit", 
+							{"parent": customer, "parenttype": "Customer", "company": company},
+							"bypass_credit_limit_check", 1)  # Setting it to 1 (True) to bypass credit limit check
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.items[0].item_code = item_code
+		dn.items[0].warehouse = self.warehouse.name
+		dn.items[0].rate = 100
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].qty =1
+		dn.items[0].against_sales_invoice =None
+
+		# Create Currency Exchange record if not exists
+		if not frappe.db.exists("Currency Exchange", {"from_currency": "USD", "to_currency": "INR"}):
+			frappe.get_doc({
+				"doctype": "Currency Exchange",
+				"from_currency": "USD",
+				"to_currency": "INR",
+				"exchange_rate": 80,  # example rate
+				"date": frappe.utils.nowdate()
+			}).insert()
+		dn.insert()
+		dn.submit()
+		self.assertEqual(dn.docstatus, 1, "Delivery Note should be submitted")
+
+		# Manually set the base_grand_total for the document (or retrieve it as needed)
+		dn.base_grand_total = 500  # Set an arbitrary grand total amount
+
+		# Call the check_credit_limit method to trigger the bypass condition
+		dn.check_credit_limit()
+
+	# codecov
+	def test_validate_warehouse_without_warehouse_for_stock_item_tc_sck_246(self):
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+
+		# Create a Warehouse
+		warehouse = frappe.get_doc({
+			'doctype': 'Warehouse',
+			'warehouse_name': 'Test Warehouse',
+			'company': company
+		})
+		warehouse.insert()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.items[0].item_code = item_code
+		dn.items[0].warehouse = ''
+		dn.items[0].rate = 100
+		dn.items[0].qty =1
+
+		# Validate and check if the warehouse validation fails
+		with self.assertRaises(frappe.ValidationError):
+			dn.save()
+
+	# codecov
+	def test_check_next_docstatus_sales_invoice_submitted_tc_sck_247(self):
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.items[0].item_code = item_code
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].rate = 100
+		dn.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn.submit()
+
+		si = make_sales_invoice(dn.name)
+		si.items[0].item_code = item_code
+		si.items[0].qty = 1
+		si.items[0].rate = 100
+		si.items[0].delivery_note = dn.name
+		si.submit()
+
+	
+
+		# Step 6: Reload the Delivery Note to simulate fresh object
+		dn.reload()
+
+		# Step 7: Now check that check_next_docstatus throws error
+		with self.assertRaises(frappe.ValidationError) as context:
+			dn.check_next_docstatus()
+
+		self.assertIn("Sales Invoice", str(context.exception))
+
+	# codecov
+	def test_check_if_submitted_installation_note_submitted_tc_sck_254(self):
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.currency = "INR"
+		dn.items[0].item_code = item_code
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].rate = 100
+		dn.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn.submit()
+
+		# Step 4: Create and Submit Installation Note linked to Delivery Note
+		installation_note = frappe.get_doc({
+			"doctype": "Installation Note",
+			"customer": customer,
+			"company": "_Test Company",
+			"inst_date": frappe.utils.nowdate(),
+			"items": [{
+				"item_code": item_code,
+				"qty": 1,
+				"prevdoc_doctype": "Delivery Note",
+				"prevdoc_docname": dn.name
+			}]
+		}).insert()
+		installation_note.submit()
+
+		frappe.db.sql("DELETE FROM `tabSales Invoice Item` WHERE `delivery_note` = %s", (dn.name,))
+		frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE `name` = %s", ("non_existent_sales_invoice",))
+
+		# Step 6: Reload the Delivery Note (so it's in sync with the latest database state)
+		dn.reload()
+
+		# Step 7: Now check that check_next_docstatus throws ValidationError for Installation Note submission
+		with self.assertRaises(frappe.ValidationError) as context:
+			dn.check_next_docstatus()
+
+		# Step 8: Ensure the exception message contains 'Installation Note'
+		self.assertTrue(
+			"Installation Note" in str(context.exception),
+			"ValidationError must mention Installation Note."
+		)
+	# codecov
+	def test_issue_credit_note_for_try_block_tc_sck_255(self):
+		warehouse = "_Test Warehouse 1 - _TC"
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so1 = make_sales_order(po_no="12345")
+		dn1  = make_delivery_note(so1.name)
+		dn1.customer = customer
+		dn1.company = company
+		dn1.currency = "INR"
+		dn1.items[0].item_code = item_code
+		dn1.items[0].allow_zero_valuation_rate =1
+		dn1.items[0].rate = 100
+		dn1.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn1.submit()
+
+		so2 = make_sales_order(po_no="123456")
+		dn2  = make_delivery_note(so2.name)
+		dn2.customer = customer
+		dn2.company = company
+		dn2.currency = "INR"
+		dn2.is_return = 1
+		dn2.return_against = dn1.name
+		dn2.issue_credit_note = 1
+		dn2.items[0].item_code = item_code
+		dn2.items[0].allow_zero_valuation_rate =1
+		dn2.items[0].warehouse = warehouse
+		dn2.items[0].qty = -1
+		dn2.submit()
+		credit_note = frappe.get_all(
+			"Sales Invoice",
+			filters={"delivery_note": dn2.name, "is_return": 1},
+			fields=["name", "grand_total"]
+		)
+
+		self.assertTrue(credit_note, "Credit note was not created for the return Delivery Note.")
+
+		credit_note_doc = frappe.get_doc("Sales Invoice", credit_note[0].name)
+		self.assertLessEqual(credit_note_doc.grand_total, 0, "Credit note amount should be negative or zero.")
+
+	# codecov
+	def test_issue_credit_note_for_except_block_tc_sck_256(self):
+		warehouse = "_Test Warehouse 1 - _TC"
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so1 = make_sales_order(po_no="12345")
+		dn1  = make_delivery_note(so1.name)
+		dn1.customer = customer
+		dn1.company = company
+		dn1.currency = "INR"
+		dn1.items[0].item_code = item_code
+		dn1.items[0].allow_zero_valuation_rate =1
+		dn1.items[0].qty = 1
+		dn1.items[0].warehouse = warehouse
+		# Step 4: Submit the Delivery Note
+		dn1.submit()
+
+		so2 = make_sales_order(po_no="123456")
+		dn2  = make_delivery_note(so2.name)
+		dn2.customer = customer
+		dn2.company = company
+		dn2.currency = "INR"
+		dn2.is_return = 1
+		dn2.return_against = dn1.name
+		dn2.issue_credit_note = 0
+		dn2.items[0].item_code = item_code
+		dn2.items[0].allow_zero_valuation_rate =1
+		dn2.items[0].warehouse = warehouse
+		dn2.items[0].qty = -1
+		dn2.submit()
+		credit_note = frappe.get_all(
+		"Sales Invoice",
+		filters={"delivery_note": dn2.name, "is_return": 1},
+		fields=["name"]
+		)
+
+		self.assertFalse(credit_note, "Credit note was unexpectedly created when issue_credit_note = 0.")
+
+		dn2.reload()
+		self.assertEqual(dn2.docstatus, 1, "Return Delivery Note was not submitted successfully.")
+	# codecov
+	def test_cancel_packing_slip_tc_sck_257(self):
+		company = "_Test Company"
+		warehouse = "_Test Warehouse 1 - _TC"
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.currency = "INR"
+
+		dn.items[0].item_code = item_code
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].warehouse = warehouse
+		dn.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn.save()
+
+		
+		# Create Packing Slip while DN is still in Draft
+		packing_slip = frappe.get_doc({
+			'doctype': "Packing Slip",
+			'delivery_note': dn.name,
+			'naming_series': "MAT-PAC-.YYYY.-",
+			'from_case_no': 3,
+			'to_case_no': 4,
+			'items': [
+				{
+					'item_code': item_code,
+					'item_name': item_code,
+					'qty': 1,
+					'stock_uom': "Nos",
+					'dn_detail': dn.items[0].name
+				}
+			]
+		}).insert(ignore_permissions=True)
+
+		# Submit Packing Slip first (while DN is still in Draft)
+		packing_slip.submit()
+
+		# Now submit the Delivery Note
+		dn.submit()
+
+		# Now cancel DN — should cancel Packing Slip too
+		dn.cancel()
+
+		# Check if Packing Slip got cancelled
+		ps = frappe.get_doc("Packing Slip", packing_slip.name)
+		self.assertEqual(ps.docstatus, 2)
+
+	# codecov
+	def test_update_status_tc_sck_258(self):
+		from erpnext.stock.doctype.delivery_note.delivery_note import update_delivery_note_status
+		company = "_Test Company"
+		warehouse = "_Test Warehouse 1 - _TC"
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.currency = "INR"
+		dn.items[0].item_code = item_code
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].against_sales_order = so.name
+		dn.items[0].so_detail = so.items[0].name
+		dn.items[0].warehouse = warehouse
+		dn.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn.save()
+
+		deliver_note_status = update_delivery_note_status(dn.name, dn.status)
+		dn.reload()
+		self.assertEqual(deliver_note_status, None)
+	
+
+	# codecov
+	def test_make_shipment_tc_sck_259(self):
+		from erpnext.stock.doctype.delivery_note.delivery_note import make_shipment
+		company = "_Test Company"
+		warehouse = "_Test Warehouse 1 - _TC"
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", customer):
+			create_customer(customer,currency="INR")
+
+
+		# Create or fetch the customer and company objects
+		company = "_Test Company"
+		if not frappe.db.exists("Company", company):
+			create_child_company()
+
+		# Create the item ITEM-001 before using it in the Delivery Note
+		item_code = "_Test Item"
+		if not frappe.db.exists("Item", item_code):
+			item_create = make_test_item(item_code)
+			item_create.is_stock_item = 1
+			item_create.is_fixed_asset = 0
+			item_create.save()
+
+		
+
+		contact = frappe.get_doc({
+        "doctype": "Contact",
+        "first_name": "Test Contact",
+        "last_name": "Contact",
+        "email_id": "contact@exmple.com",
+        "phone_nos": [
+				{
+					"phone": "9999000099",
+					"is_primary_phone": 1
+				}
+			],
+			"mobile_nos": [
+				{
+					"mobile_no": "9999000099",
+					"is_primary_mobile_no": 1
+				}
+			] 
+		})
+		contact.insert()
+		so = make_sales_order(po_no="12345")
+		dn  = make_delivery_note(so.name)
+		dn.customer = customer
+		dn.company = company
+		dn.currency = "INR"
+		dn.items[0].item_code = item_code
+		dn.items[0].allow_zero_valuation_rate =1
+		dn.items[0].warehouse = warehouse
+		dn.items[0].qty =1
+		# Step 4: Submit the Delivery Note
+		dn.submit()
+		
+
+		make_shipment = make_shipment(dn.name)
 
 	def test_delivery_note_no_gl_entry(self):
 		frappe.db.get_value("Warehouse", "_Test Warehouse - _TC", "company")

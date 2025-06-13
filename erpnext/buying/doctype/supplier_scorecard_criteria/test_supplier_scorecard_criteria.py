@@ -5,6 +5,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from .supplier_scorecard_criteria import get_criteria_list, get_variables
 
 class TestSupplierScorecardCriteria(FrappeTestCase):
 	def test_variables_exist(self):
@@ -18,6 +19,22 @@ class TestSupplierScorecardCriteria(FrappeTestCase):
 		delete_test_scorecards()
 		self.assertRaises(frappe.ValidationError, frappe.get_doc(test_bad_criteria[1]).insert)
 		self.assertRaises(frappe.ValidationError, frappe.get_doc(test_bad_criteria[2]).insert)
+
+	def test_creteria_list_TC_B_179(self):
+		criteria_name = frappe.get_doc(
+			{
+				"doctype": "Supplier Scorecard Criteria",
+				"criteria_name": "test supplier cretiria" + frappe.generate_hash(length=4),
+				"max_score": 100,
+				"formula": "10",
+			}
+		).insert(ignore_permissions=True)
+
+		creteria_list = get_criteria_list()
+		self.assertTrue(creteria_list)
+
+		variables = get_variables(criteria_name.name)
+		self.assertFalse(variables)
 
 
 def delete_test_scorecards():

@@ -4052,6 +4052,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 
 	def test_purchase_order_and_receipt_TC_SCK_072(self):
 		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
+
 		item1 = make_item("ST-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011010"})
 		item2 = make_item("W-N-001", {"is_stock_item": 1, "gst_hsn_code": "01011020"})
 		warehouse1 = create_warehouse("Raw Material - Iron Building - _TC", company=company)
@@ -4266,6 +4271,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(se.get("warehouse"), pr.get("items")[0].warehouse)
 
 	def test_direct_create_purchase_return_partial_TC_SCK_039(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		pr = make_purchase_receipt(qty=10,rate=10000)
 		from erpnext.controllers.sales_and_purchase_return import make_return_doc
 		return_pr = make_return_doc("Purchase Receipt", pr.name)
@@ -4280,6 +4290,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(se.get("warehouse"), pr.get("items")[0].warehouse)
 
 	def test_direct_create_purchase_receipt_return_TC_SCK_030(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		pr = make_purchase_receipt(
 			qty=10,rate=10,
 		)
@@ -4817,6 +4832,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(warehouse_qty, 20)
 
 	def test_pr_with_additional_discount_TC_B_053(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		# Scenario : PR => PI [With Additional Discount]
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
 			make_purchase_invoice as make_pi_from_pr,
@@ -4869,6 +4889,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 		self.assertEqual(pi_total, 10080)
 
 	def test_pr_to_pi_with_additional_discount_TC_B_059(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		# Scenario : PR => PI [With Applied Additional Discount on Grand Total]
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
 			make_purchase_invoice as make_pi_from_pr,
@@ -5243,6 +5268,865 @@ class TestPurchaseReceipt(FrappeTestCase):
 		to_date = datetime.strptime(filters["to_date"], "%Y-%m-%d").date()
 		for i in date:
 			self.assertTrue(from_date <= i <= to_date)
+
+	def test_po_required_TC_SCK_260(self):
+		from frappe.exceptions import ValidationError
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+
+		# Backup and enforce PO Required setting
+		original_setting = frappe.db.get_single_value("Buying Settings", "po_required")
+		frappe.db.set_value("Buying Settings", None, "po_required", "Yes")
+
+		# Create a Purchase Receipt
+		pr = make_purchase_receipt(
+			item_code="_Test Item",
+			qty=1,
+			rate=100,
+			do_not_save=True,
+			do_not_submit=True
+		)
+
+		# Manually clear purchase_order field to simulate missing PO
+		pr.items[0].purchase_order = None
+		with self.assertRaises(ValidationError) as context:
+			pr.po_required()
+
+		self.assertIn("Purchase Order number required for Item", str(context.exception))
+
+		# Restore original setting
+		frappe.db.set_value("Buying Settings", None, "po_required", original_setting)
+
+	def test_validate_items_quality_inspection_TC_SCK_261(self):
+		from frappe.exceptions import ValidationError
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+
+		# Create PR using helper (do not submit yet)
+		pr = make_purchase_receipt(
+			supplier=supplier.name,
+			item_code = item_code,
+			qty=1,
+			rate=100,
+			uom="Nos",stock_uom = 'Nos',
+			warehouse=warehouse,
+			do_not_submit=True,
+			do_not_save=False,
+			do_not_load=False
+		)
+
+		assert frappe.db.exists("Purchase Receipt", pr.name), "PR not inserted properly"
+
+		# Ensure Stock Settings field is available
+		stock_settings_meta = frappe.get_meta("Stock Settings")
+		if not stock_settings_meta.has_field("allow_to_make_quality_inspection_after_purchase_or_delivery"):
+			print("Skipping test: 'allow_to_make_quality_inspection_after_purchase_or_delivery' field missing.")
+			return
+		else:
+			frappe.db.set_value("Stock Settings", None, "allow_to_make_quality_inspection_after_purchase_or_delivery", 1)
+
+		# Create initial Quality Inspection
+		qi = frappe.get_doc({
+			"doctype": "Quality Inspection",
+			"inspection_type": "Incoming",
+			"item_code": "_Test Item",
+			"reference_type": "Purchase Receipt",
+			"reference_name": pr.name,
+			"inspected_by": "Administrator",
+			"sample_size": 1
+		}).insert(ignore_permissions=True)
+
+		# Link wrong item in QI to trigger validation error
+		qi.item_code = "Wrong Item"
+		qi.save()
+
+		# Attach QI to PR
+		pr.reload()
+		pr.items[0].quality_inspection = qi.name
+		pr.items[0].item_code = "_Test Item"
+
+		with self.assertRaises(ValidationError) as context:
+			pr.validate_items_quality_inspection()
+		self.assertIn("Item Code", str(context.exception))
+
+		# Correct the item code and validate again
+		qi.item_code = "_Test Item"
+		qi.save()
+		pr.validate_items_quality_inspection()
+
+	def test_get_po_qty_and_warehouse_TC_SCK_262(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		# Create PO
+		po = create_purchase_order(
+			supplier=supplier.name,
+			company=company.name,
+			item_code= item_code,
+			qty=10,
+			rate=100,
+			warehouse=warehouse
+		)
+
+		po_item = po.items[0]
+		po_detail_name = po_item.name
+		expected_qty = po_item.qty
+		expected_warehouse = po_item.warehouse
+
+		# Create a new PR
+		pr = make_purchase_receipt(
+			supplier=supplier,
+			item_code= item_code,
+			qty=1,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			uom="Nos",
+			stock_uom = 'Nos',
+			do_not_submit=True,
+			do_not_save=False,
+			do_not_load=False
+		)
+
+		qty, warehouse = pr.get_po_qty_and_warehouse(po_detail_name)
+
+		# Assertions
+		self.assertEqual(qty, expected_qty)
+		self.assertEqual(warehouse, expected_warehouse)
+
+	def test_make_item_gl_entries_TC_SCK_263(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import PurchaseReceipt
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+		from erpnext.stock.doctype.landed_cost_voucher.test_landed_cost_voucher import create_landed_cost_voucher
+
+		frappe.set_user("Administrator")
+
+		# === Setup ===
+		company = setup_test_company_defaults()
+
+		self.gl_entries = []
+		# Item Code create
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		# Supplier Create
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		
+		# Warehouse Create
+		warehouse = frappe.get_all("Warehouse", filters={"company": "_Test Company"}, limit=1)[0].name
+
+		# Setup Fiscal Year GL Account & Cost center
+		fiscal_year,expense_account,cost_center = setup_fy_gls_cost_center()
+
+		# === CASE 1: Full Stock Item ===
+		pi = make_purchase_invoice(
+				item=item_code,
+				qty=5,
+				rate=100,
+				warehouse=warehouse,
+				company=company.name,
+				supplier=supplier.name,
+				do_not_submit=True,
+				uom="Nos",
+				expense_account=expense_account,
+				cost_center=cost_center,
+			)
+		pi.posting_date=today()
+		pi.due_date = today()
+		pi.set_missing_values()
+		pi.flags.ignore_validate = True
+		pi.save()
+		pi.submit()
+
+		pr1 = make_purchase_receipt(
+			supplier=supplier.name,
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			stock_uom = 'Nos',
+			warehouse=warehouse,
+			do_not_submit=True
+		)
+		pr1.items[0].valuation_rate = 100
+		pr1.items[0].purchase_invoice = pi.name
+		pr1.items[0].purchase_invoice_item = pi.items[0].name
+		pr1.items[0].billed_amt = 500
+		pr1.save()
+		pr1.submit()
+
+		PurchaseReceipt.make_item_gl_entries(pr1, self.gl_entries, warehouse_account={
+			warehouse: {"account": "Stock Asset - _TC", "account_currency": "INR"}
+		})
+		self.assertTrue(self.gl_entries)
+
+		# === CASE 2: Non-Stock Item ===
+		if not frappe.db.exists("Item", "_Test Non Stock Item"):
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": "_Test Non Stock Item",
+				"item_name": "Non Stock",
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+				"is_purchase_item": 1,
+				"gst_hsn_code": "84061000"
+			}).insert()
+
+		pr2 = make_purchase_receipt(
+			supplier=supplier.name,
+			item_code="_Test Non Stock Item",
+			qty=1,
+			rate=100,
+			stock_uom = 'Nos',
+			warehouse=warehouse,
+			do_not_submit=True
+		)
+		pr2.items[0].provisional_expense_account = expense_account
+		pr2.save()
+		pr2.submit()
+
+		PurchaseReceipt.make_item_gl_entries(pr2, self.gl_entries, warehouse_account={})
+		self.assertTrue(self.gl_entries)
+
+		# === CASE 3: Warehouse with No Account Mapping ===
+		new_warehouse = frappe.get_doc({
+			"doctype": "Warehouse",
+			"warehouse_name": "No Account Warehouse",
+			"company": company.name,
+		}).insert()
+
+		pr3 = make_purchase_receipt(
+			supplier=supplier.name,
+			item_code=item_code,
+			qty=2,
+			rate=50,
+			stock_uom = 'Nos',
+			warehouse=new_warehouse.name,
+			do_not_submit=True
+		)
+		pr3.items[0].valuation_rate = 50
+		pr3.save()
+		pr3.submit()
+
+		self.gl_entries.clear()
+		PurchaseReceipt.make_item_gl_entries(pr3, self.gl_entries, warehouse_account={
+			pr3.items[0].warehouse: {"account": "Stock Asset - _TC", "account_currency": "INR"}
+		})
+		self.assertTrue(self.gl_entries)
+
+		# === CASE 4: Landed Cost Voucher Entries ===
+		from erpnext.accounts.doctype.account.test_account import create_account
+		valuation_account = create_account(
+			account_name="Expenses Included In Valuation",
+			parent_account="Expenses - _TC",
+			company="_Test Company"
+		)
+
+		stock_account = create_account(
+			account_name="Stock Asset",
+			parent_account="Current Assets - _TC",
+			company="_Test Company",
+			account_type="Stock"
+		)
+
+		pr4 = make_purchase_receipt(
+			supplier=supplier.name,
+			item_code=item_code,
+			qty=10,
+			rate=100,
+			stock_uom='Nos',
+			warehouse=warehouse,
+			do_not_submit=True
+		)
+		pr4.save()
+		pr4.submit()
+
+		# Create Landed Cost Voucher
+		lcv = frappe.new_doc("Landed Cost Voucher")
+		lcv.company = company.name
+		lcv.distribute_charges_based_on = "Amount"
+		
+		lcv.append("purchase_receipts", {
+			"receipt_document_type": "Purchase Receipt",
+			"receipt_document": pr4.name,
+			"supplier": supplier.name,
+			"posting_date": today(),
+			"grand_total": 1000
+		})
+		
+		lcv.append("taxes", {
+			"description": "Insurance Charges",
+			"expense_account": valuation_account,
+			"amount": 100,
+			"included_in_valuation": 1
+		})
+		pr4.items[0].landed_cost_voucher_amount =100
+		lcv.insert()
+		lcv.submit()
+		
+		self.gl_entries = []
+		PurchaseReceipt.make_item_gl_entries(
+			pr4, 
+			self.gl_entries, 
+			warehouse_account={
+				warehouse: {
+					"account": stock_account,  
+					"account_currency": "INR"
+				}
+			}
+		)
+		self.assertEqual(lcv.docstatus, 1, "Landed Cost Voucher submitted properly")
+
+		for doc in [pr1, pr2, pr3, pr4, pi, lcv]:
+			if doc.docstatus == 1:
+				try:
+					doc.cancel()
+				except frappe.ValidationError:
+					pass
+	
+	def test_get_billed_qty_against_purchase_receipt_TC_SCK_264(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import get_billed_qty_against_purchase_receipt,update_billing_percentage
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+
+		#--- Setup ---
+		frappe.set_user("Administrator")
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		# Item Code create
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+
+		# Setup Fiscal Year GL Account & Cost center
+		fiscal_year,expense_account,cost_center = setup_fy_gls_cost_center()
+
+		# Create Purchase Receipt
+		pr = make_purchase_receipt(item_code = item_code, qty=5, rate=100,uom="Nos",stock_uom = 'Nos',company=company.name,warehouse=warehouse,supplier=supplier.name)
+		pr_doc = frappe.get_doc("Purchase Receipt", pr.name)
+		pr_item = pr_doc.items[0]
+
+		# Create PI
+		pi = make_purchase_invoice(
+		item_code=pr_item.item_code,
+		qty=3,
+		rate=100,
+		warehouse=pr_item.warehouse,
+		do_not_submit=True,
+		company=pr_doc.company,
+		supplier=pr_doc.supplier,
+		currency="INR",
+		conversion_rate=1,
+		uom="Nos",
+		expense_account=expense_account,
+		cost_center=cost_center,
+		)
+		# Link invoice item to Purchase Receipt
+		pi.items[0].purchase_receipt = pr_doc.name
+		pi.items[0].pr_detail = pr_item.name
+		pi.set_missing_values()
+		pi.save()
+		pi.submit()
+
+		#validate the function
+		update_billing_percentage(pr_doc,update_modified=True, adjust_incoming_rate=True)
+		billed_qty_map = get_billed_qty_against_purchase_receipt(pr_doc)
+		self.assertIn(pr_item.name, billed_qty_map)
+		self.assertEqual(billed_qty_map[pr_item.name], 3)
+
+	def test_adjust_incoming_rate_for_pr_TC_SCK_265(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import adjust_incoming_rate_for_pr
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from frappe.utils import flt
+
+		frappe.set_user("Administrator")
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		pr = make_purchase_receipt(item_code = item_code, qty=5, rate=120,uom="Nos",stock_uom = 'Nos',company=company.name,warehouse=warehouse,supplier=supplier.name,do_not_submit=True)
+		pr.reload()
+		original_valuation_rate = pr.items[0].valuation_rate
+		pr.items[0].rate = 120
+		pr.items[0].valuation_rate = 120
+		pr.items[0].save()
+		adjust_incoming_rate_for_pr(pr)
+		pr.reload()
+		item_valuation = frappe.db.get_value("Purchase Receipt Item", pr.items[0].name, "valuation_rate")
+		self.assertEqual(flt(item_valuation), 120)
+		self.assertEqual(pr.doctype, "Purchase Receipt")
+
+	def test_update_billed_amount_based_on_po_TC_SCK_266(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import update_billed_amount_based_on_po
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+
+		frappe.set_user("Administrator")
+		item_code = make_item("_Test Item225", {'item_name':"_Test Item225", "valuation_rate":500, "is_stock_item":1}).name
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		fiscal_year, expense_account, cost_center = setup_fy_gls_cost_center()
+
+		# Create PO for 10 qty
+		po = create_purchase_order(item_code=item_code, qty=10, rate=100, company=company.name,
+								supplier=supplier.name, warehouse=warehouse, do_not_submit=False)
+		po_item = po.items[0]
+
+		# Create 2 PRs: one for 6, one for 4
+		pr1 = make_purchase_receipt(purchase_order=po.name, item_code=item_code, qty=6, rate=100,
+								uom="Nos", stock_uom='Nos', company=company.name, warehouse=warehouse,
+								supplier=supplier.name, do_not_submit=False)
+		pr2 = make_purchase_receipt(purchase_order=po.name, item_code=item_code, qty=4, rate=100,
+								uom="Nos", stock_uom='Nos', company=company.name, warehouse=warehouse,
+								supplier=supplier.name, do_not_submit=False)
+
+		# Explicitly set purchase_order_item in PR items
+		for pr in [pr1, pr2]:
+			for item in pr.items:
+				frappe.db.set_value("Purchase Receipt Item", item.name, "purchase_order_item", po_item.name)
+
+		settings = frappe.get_doc("Repost Accounting Ledger Settings")
+		# Check if Purchase Invoice is already allowed
+		already_allowed = any(
+			d.document_type == "Purchase Invoice" and d.allowed for d in settings.allowed_types
+		)
+		if not already_allowed:
+			# Remove existing row for Purchase Invoice
+			settings.allowed_types = [
+				d for d in settings.allowed_types if d.document_type != "Purchase Invoice"
+			]
+			settings.append("allowed_types", {"document_type": "Purchase Invoice", "allowed": 1})
+			settings.save()
+			
+		pi1 = make_purchase_invoice(
+			purchase_order=po.name,
+			purchase_receipt=pr1.name,
+			pr_detail=pr1.items[0].name,
+			item_code=item_code,
+			qty=3,
+			rate=100,
+			uom="Nos",
+			stock_uom='Nos',
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			expense_account=expense_account,
+			cost_center=cost_center,
+			do_not_submit=True)
+		
+		for item in pi1.items:
+			item.po_detail = po_item.name
+		pi1.save()
+		pi1.submit()
+		pi1.submit() 
+		
+		pi2 = make_purchase_invoice(
+			purchase_order=po.name,
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			uom="Nos",
+			stock_uom='Nos',
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			expense_account=expense_account,
+			cost_center=cost_center,
+			do_not_submit=True)
+		
+		for item in pi2.items:
+			item.po_detail = po_item.name
+		pi2.save()
+		pi2.submit()
+
+		po.reload()
+		pr1.reload()
+		pr2.reload()
+
+		# Verify initial billed amounts
+		self.assertEqual(po.items[0].billed_amt, 800.0)
+
+		# Force update PO billed amount
+		frappe.db.set_value("Purchase Order Item", po_item.name, "billed_amt", 800)
+
+		# Debug: Check PR items linked to PO
+		pr_items = frappe.get_all("Purchase Receipt Item",
+								filters={"purchase_order_item": po_item.name},
+								fields=["name", "parent", "purchase_order_item"])
+		print("PR Items linked to PO:", pr_items)
+
+		po_details = [po_item.name]
+		
+		# Trigger update logic
+		update_billed_amount_based_on_po(po_details, update_modified=True)
+		pr1.reload()
+		pr2.reload()
+
+		# Verify billed amounts
+		self.assertEqual(pr1.items[0].billed_amt, 600.0)
+		self.assertEqual(pr2.items[0].billed_amt, 200.0)
+
+		# Reset billed amounts for second test
+		frappe.db.set_value("Purchase Receipt Item", pr1.items[0].name, "billed_amt", 0)
+		frappe.db.set_value("Purchase Receipt Item", pr2.items[0].name, "billed_amt", 0)
+
+		# Test 2: Update with pr_doc
+		pr1_doc = frappe.get_doc("Purchase Receipt", pr1.name)
+		updated = update_billed_amount_based_on_po(po_details, update_modified=True, pr_doc=pr1_doc)
+		
+		# Verify only pr1 was updated (since we passed pr_doc)
+		self.assertIn(pr1.name, updated)
+
+		# Verify billed amounts
+		pr1.reload()
+		pr2.reload()
+		self.assertEqual(pr1.items[0].billed_amt, 600.0)
+
+		# Finally update pr2 separately
+		pr2_doc = frappe.get_doc("Purchase Receipt", pr2.name)
+		update_billed_amount_based_on_po(po_details, update_modified=True, pr_doc=pr2_doc)
+		pr2.reload()
+		self.assertEqual(pr2.items[0].billed_amt, 200.0)
+
+	def test_make_stock_entry_TC_SCK_267(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import make_stock_entry
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		"""Test basic stock entry creation from purchase receipt"""
+		self.item = make_item("_Test Stock Entry Item", {
+			"is_stock_item": 1,
+			"valuation_rate": 100,
+			"stock_uom": "Nos"
+		}).name
+		
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 1",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR",
+		)
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		fiscal_year, expense_account, cost_center = setup_fy_gls_cost_center()
+		
+		# Create Purchase Order
+		self.po = create_purchase_order(item_code=self.item, qty=10, rate=100, supplier=supplier.name, warehouse=warehouse,
+							company=company.name,do_not_submit=False)
+		
+		# Create Purchase Receipt
+		self.pr = make_purchase_receipt(purchase_order=self.po.name,item_code=self.item, qty=10, rate=100,
+								uom="Nos", stock_uom='Nos', company=company.name, warehouse=warehouse,
+								supplier=supplier.name, do_not_submit=False)
+		
+		stock_entry = make_stock_entry(self.pr.name)
+    
+		# Verify Stock Entry fields
+		self.assertEqual(stock_entry.stock_entry_type, "Material Transfer")
+		self.assertEqual(stock_entry.purpose, "Material Transfer")
+		self.assertEqual(len(stock_entry.items), 1)
+		self.assertEqual(len(stock_entry.items), 1)
+		
+		# Verify item details
+		item = stock_entry.items[0]
+		self.assertEqual(item.item_code, self.item)
+		self.assertEqual(item.qty, 10)
+		self.assertEqual(item.s_warehouse,warehouse)
+		self.assertEqual(item.reference_purchase_receipt, self.pr.name)
+		
+		# Verify docstatus
+		self.assertEqual(stock_entry.docstatus, 0)
+
+		# Cleanup
+		if hasattr(self, 'pr') and frappe.db.exists("Purchase Receipt", self.pr.name):
+			self.pr.cancel()
+		if hasattr(self, 'po') and frappe.db.exists("Purchase Order", self.po.name):
+			self.po.cancel()
+
+	def test_get_invoiced_qty_map_TC_SCK_268(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import get_invoiced_qty_map
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+
+		# Setup Item and Entities
+		item_code = make_item("_Test Item_501", {
+			"is_stock_item": 1,
+			"valuation_rate": 100,
+			"stock_uom": "Nos"
+		}).name
+
+		company = setup_test_company_defaults()
+		supplier = create_supplier(
+			supplier_name="Test Supplier 501",
+			supplier_group="All Supplier Groups",
+			supplier_type="Company",
+			default_currency="INR"
+		)
+
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+		fiscal_year, expense_account, cost_center = setup_fy_gls_cost_center()
+
+		# Create PO and PR
+		po = create_purchase_order(
+			item_code=item_code, 
+			qty=10, 
+			rate=100, 
+			supplier=supplier.name,
+			warehouse=warehouse, 
+			company=company.name, 
+			do_not_submit=False
+		)
+
+		pr = make_purchase_receipt(
+			purchase_order=po.name, 
+			item_code=item_code, 
+			qty=10, 
+			rate=100,
+			uom="Nos", 
+			stock_uom="Nos", 
+			company=company.name, 
+			warehouse=warehouse,
+			supplier=supplier.name, 
+			do_not_submit=False
+		)
+
+		# Get Purchase Receipt Item reference (child table)
+		pr_item = pr.items[0]
+
+		# Create 2 Purchase Invoices for the same PR item
+		pi1 = make_purchase_invoice(
+			purchase_receipt=pr.name,
+			qty=4, 
+			rate=100, 
+			item_code=item_code, 
+			uom="Nos", 
+			stock_uom='Nos', 
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name, 
+			expense_account=expense_account,
+			cost_center=cost_center, 
+			do_not_submit=True
+		)
+		
+		# Explicitly set pr_detail in PI items
+		for item in pi1.items:
+			item.pr_detail = pr_item.name
+			item.purchase_receipt = pr.name
+		pi1.save().submit()
+
+		pi2 = make_purchase_invoice(
+			purchase_receipt=pr.name,
+			qty=6, 
+			rate=100, 
+			item_code=item_code, 
+			uom="Nos", 
+			stock_uom='Nos', 
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name, 
+			expense_account=expense_account,
+			cost_center=cost_center, 
+			do_not_submit=True
+		)
+		
+		# Explicitly set pr_detail in PI items
+		for item in pi2.items:
+			item.pr_detail = pr_item.name
+			item.purchase_receipt = pr.name
+		pi2.save().submit()
+
+		# Debug: Check PI items linked to PR
+		pi_items = frappe.get_all("Purchase Invoice Item", 
+								filters={"pr_detail": pr_item.name},
+								fields=["name", "qty", "parent"])
+		print("PI Items linked to PR:", pi_items)
+
+		# Run the method under test
+		invoiced_qty_map = get_invoiced_qty_map(pr.name)
+		print("Invoiced Qty Map:", invoiced_qty_map)
+
+		# Assert the PR detail was added and quantity was aggregated (4 + 6 = 10)
+		self.assertIn(pr_item.name, invoiced_qty_map)
+		self.assertEqual(invoiced_qty_map[pr_item.name], 10)
+
+		# Cleanup
+		pi2.cancel()
+		pi1.cancel()
+		pr.reload()
+		pr.cancel()
+		po.reload()
+		po.cancel()
+
+def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"):
+	from frappe.defaults import set_default
+
+	# Create Company if it doesn't exist
+	if not frappe.db.exists("Company", company_name):
+		frappe.get_doc({
+			"doctype": "Company",
+			"company_name": company_name,
+			"abbr": abbreviation,
+			"default_currency": "INR",
+			"country": "India",
+			"chart_of_accounts": "Standard"
+		}).insert()
+
+	company = frappe.get_doc("Company", company_name)
+
+	# Create root account group if needed
+	if not frappe.db.exists("Account", f"Application of Funds - {abbreviation}"):
+		account = frappe.get_doc({
+		"doctype": "Account",
+		"account_name": "Application of Funds",
+		"company": company_name,
+		"root_type": "Asset",
+		"is_group": 1
+		})
+		account.insert(ignore_mandatory=True)
+
+	# Account helper
+	def ensure_account(name, root_type="Asset"):
+		full_name = f"{name} - {abbreviation}"
+		if not frappe.db.exists("Account", full_name):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": name,
+				"company": company_name,
+				"root_type": root_type,
+				"parent_account": f"Application of Funds - {abbreviation}",
+				"is_group": 0
+			}).insert()
+		return full_name
+
+	# Required Accounts
+	accounts = {
+		"default_receivable_account": ensure_account("Debtors", "Asset"),
+		"default_payable_account": ensure_account("Creditors", "Liability"),
+		"default_income_account": ensure_account("Sales", "Income"),
+		"default_expense_account": ensure_account("Cost of Goods Sold", "Expense"),
+		"stock_received_but_not_billed": ensure_account("Stock Received But Not Billed", "Liability"),
+		"default_cash_account": ensure_account("Cash", "Asset"),
+		"default_bank_account": ensure_account("Bank", "Asset"),
+		"default_inventory_account": ensure_account("Stock Asset", "Asset"),
+		"default_provisional_account": ensure_account("Cost of Goods Sold", "Expense"),
+	}
+
+	# Default Cost Center
+	if not frappe.db.exists("Cost Center", f"Main - {abbreviation}"):
+		frappe.get_doc({
+			"doctype": "Cost Center",
+			"cost_center_name": "Main",
+			"is_group": 0,
+			"company": company_name
+		}).insert()
+
+	accounts["default_cost_center"] = f"Main - {abbreviation}"
+
+	for field, value in accounts.items():
+		company.set(field, value)
+
+	company.enable_perpetual_inventory = 1
+	company.enable_provisional_accounting_for_non_stock_items = 1
+	company.save()
+
+	set_default("company", company_name, "__default")
+
+	return company
+
+def setup_fy_gls_cost_center():
+	company = setup_test_company_defaults()
+	company_abbr ="_TC"
+	# Setup GL Account COGS & Cost Center
+	if not frappe.db.exists("Account", f"T Cost of Goods Sold - {company_abbr}"):
+		frappe.get_doc({
+			"doctype": "Account",
+			"account_name": "T Cost of Goods Sold",
+			"parent_account": f"Expenses - {company_abbr}",
+			"company": company,
+			"is_group": 0
+		}).insert()
+	if not frappe.db.exists("Cost Center", f"T Main - {company_abbr}"):
+		frappe.get_doc({
+			"doctype": "Cost Center",
+			"cost_center_name": "T Main",
+			"parent_cost_center": f"{company.name} - {company_abbr}",
+			"company": company,
+			"is_group": 1
+		}).insert()
+	if not frappe.db.exists("Cost Center", f"_Test Cost Center - {company_abbr}"):
+		frappe.get_doc({
+			"doctype": "Cost Center",
+			"cost_center_name": "_Test Cost Center",
+			"parent_cost_center": f"T Main - {company_abbr}",
+			"company": company.name,
+			"is_group": 0
+		}).insert()
+	
+	# Setup Fiscal Year
+	fiscal_year = frappe.get_all("Fiscal Year", filters={
+			"year_start_date": ["<=", today()],
+			"year_end_date": [">=", today()],
+			"disabled": 0
+		}, fields=["name"], limit=1)
+
+	if fiscal_year:
+		fy_doc = frappe.get_doc("Fiscal Year", fiscal_year[0]["name"])
+		linked_companies = [d.company for d in fy_doc.companies]
+
+		if company.name not in linked_companies:
+			fy_doc.append("companies", {
+				"company": company.name
+			})
+			fy_doc.save()
+	else:
+		# If not exists create new FY
+		fy_doc = frappe.get_doc({
+			"doctype": "Fiscal Year",
+			"year": f"FY {today()[:4]}",
+			"year_start_date": today(),
+			"year_end_date": add_days(today(), 364),
+			"disabled": 0
+		})
+		fy_doc.append("fiscal_year_company", {
+			"company": company.name
+		})
+		fy_doc.insert()
+	expense_account = f"T Cost of Goods Sold - {company_abbr}"
+	cost_center = f"_Test Cost Center - {company_abbr}"
+	return fiscal_year,expense_account,cost_center
 
 def prepare_data_for_internal_transfer():
 	from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_internal_supplier

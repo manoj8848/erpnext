@@ -321,6 +321,11 @@ class TestTaxRule(unittest.TestCase):
 		)
 	
 	def test_create_tax_rule_and_apply_to_purchase_invoice_TC_ACC_102(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		# Step 1: Create a tax rule for a supplier with a sales tax template
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
 		get_or_create_fiscal_year("_Test Company")

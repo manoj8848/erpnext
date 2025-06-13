@@ -1634,6 +1634,12 @@ def create_job_card(work_order, row, enable_capacity_planning=False, auto_create
 			"wip_warehouse": work_order.wip_warehouse,
 			"hour_rate": row.get("hour_rate"),
 			"serial_no": row.get("serial_no"),
+			"time_required": row.get("time_in_mins"),
+ 			"source_warehouse": row.get("source_warehouse"),
+ 			"target_warehouse": row.get("fg_warehouse"),
+			"wip_warehouse": work_order.wip_warehouse or row.get("wip_warehouse")
+ 			if not work_order.skip_transfer or work_order.from_wip_warehouse
+ 			else work_order.source_warehouse or row.get("source_warehouse"),
 		}
 	)
 

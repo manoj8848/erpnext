@@ -47,6 +47,7 @@ class PricingRule(Document):
 		disable: DF.Check
 		discount_amount: DF.Currency
 		discount_percentage: DF.Float
+		enforce_free_item_qty: DF.Check
 		dont_enforce_free_item_qty: DF.Check
 		for_price_list: DF.Link | None
 		free_item: DF.Link | None
@@ -610,10 +611,10 @@ def remove_pricing_rule_for_item(pricing_rules, item_details, item_code=None, ra
 			if pricing_rule.margin_type in ["Percentage", "Amount"]:
 				item_details.margin_rate_or_amount = 0.0
 				item_details.margin_type = None
-		elif pricing_rule.get("free_item") and not pricing_rule.get("dont_enforce_free_item_qty"):
-			item_details.remove_free_item = (
-				item_code if pricing_rule.get("same_item") else pricing_rule.get("free_item")
-			)
+		elif pricing_rule.get("free_item") and pricing_rule.get("enforce_free_item_qty"):
+ 			item_details.remove_free_item = (
+ 				item_code if pricing_rule.get("same_item") else pricing_rule.get("free_item")
+ 			)
 
 		if pricing_rule.get("mixed_conditions") or pricing_rule.get("apply_rule_on_other"):
 			items = get_pricing_rule_items(pricing_rule, other_items=True)

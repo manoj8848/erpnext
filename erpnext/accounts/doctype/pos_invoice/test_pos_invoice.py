@@ -6,6 +6,7 @@ import unittest
 
 import frappe
 from frappe import _
+from frappe.tests.utils import change_settings
 from frappe.utils import cint, flt, getdate, today
 from erpnext.accounts.doctype.pos_invoice.pos_invoice import PartialPaymentValidationError, make_sales_return
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
@@ -743,6 +744,7 @@ class TestPOSInvoice(unittest.TestCase):
 		rounded_total = frappe.db.get_value("Sales Invoice", pos_inv.consolidated_invoice, "rounded_total")
 		self.assertEqual(rounded_total, 840)
 
+
 	def test_merging_with_validate_selling_price(self):
 		from erpnext.accounts.doctype.pos_closing_entry.test_pos_closing_entry import (
 			init_user_and_profile,
@@ -753,7 +755,6 @@ class TestPOSInvoice(unittest.TestCase):
 
 		if not frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
 			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 1)
-
 		item = "Test Selling Price Validation"
 		make_item(item, {"is_stock_item": 1})
 		make_purchase_receipt(item_code=item, warehouse="_Test Warehouse - _TC", qty=1, rate=300)
@@ -789,6 +790,8 @@ class TestPOSInvoice(unittest.TestCase):
 		)
 		pos_inv2.save()
 		pos_inv2.submit()
+
+		frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 		consolidate_pos_invoices()
 

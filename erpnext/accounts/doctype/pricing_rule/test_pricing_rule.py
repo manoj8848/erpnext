@@ -2,8 +2,6 @@
 # License: GNU General Public License v3. See license.txt
 
 
-import unittest
-
 import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
 from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
@@ -12,18 +10,28 @@ from erpnext.controllers.sales_and_purchase_return import make_return_doc
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.get_item_details import get_item_details
-from frappe.tests.utils import FrappeTestCase, change_settings
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 
 
 class TestPricingRule(FrappeTestCase):
 	def setUp(self):
+		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 		delete_existing_pricing_rules()
 		if "custom_crm" in frappe.get_installed_apps():
 			setup_pricing_rule_data()
+		
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		
+		create_company()
+		get_or_create_fiscal_year("_Test Company")
+		get_or_create_customer(customer_name="_Test Customer")
 
 	def tearDown(self):
 		delete_existing_pricing_rules()
+		if frappe.db.get_single_value("Selling Settings", "validate_selling_price"):
+			frappe.db.set_single_value("Selling Settings", "validate_selling_price", 0)
 
 	def test_pricing_rule_for_discount(self):
 		from frappe import MandatoryError
@@ -429,6 +437,54 @@ class TestPricingRule(FrappeTestCase):
 		so.load_from_db()
 		self.assertEqual(so.items[1].is_free_item, 1)
 		self.assertEqual(so.items[1].item_code, "_Test Item 2")
+
+	def test_enforce_free_item_qty(self):
+		# this test is only for testing non-enforcement as all other tests in this file already test with enforcement
+		frappe.delete_doc_if_exists("Pricing Rule", "_Test Pricing Rule")
+		test_record = {
+			"doctype": "Pricing Rule",
+			"title": "_Test Pricing Rule",
+			"apply_on": "Item Code",
+			"currency": "USD",
+			"items": [
+				{
+					"item_code": "_Test Item",
+				}
+			],
+			"selling": 1,
+			"rate_or_discount": "Discount Percentage",
+			"rate": 0,
+			"min_qty": 0,
+			"max_qty": 7,
+			"discount_percentage": 17.5,
+			"price_or_product_discount": "Product",
+			"same_item": 0,
+			"free_item": "_Test Item 2",
+			"free_qty": 1,
+			"company": "_Test Company",
+		}
+		pricing_rule = frappe.get_doc(test_record.copy()).insert()
+
+		# With enforcement
+		so = make_sales_order(item_code="_Test Item", qty=1, do_not_submit=True)
+		self.assertEqual(so.items[1].is_free_item, 1)
+		self.assertEqual(so.items[1].item_code, "_Test Item 2")
+
+		# Test 1 : Saving a document with an item with pricing list without it's corresponding free item will cause it the free item to be refetched on save
+		so.items.pop(1)
+		so.save()
+		so.reload()
+		self.assertEqual(len(so.items), 2)
+
+		# Without enforcement
+		pricing_rule.enforce_free_item_qty = 0
+		pricing_rule.save()
+
+		# Test 2 : Deleted free item will not be fetched again on save without enfrocement
+		so.items.pop(1)
+		so.save()
+		so.reload()
+		self.assertEqual(len(so.items), 1)
 
 	def test_dont_enforce_free_item_qty(self):
 		# this test is only for testing non-enforcement as all other tests in this file already test with enforcement
@@ -1519,8 +1575,14 @@ class TestPricingRule(FrappeTestCase):
 
 	def test_pr_to_so_with_applied_on_transaction_TC_S_142(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
-		
-		make_test_item("_Test Item 1")
+
+		frappe.set_user("Administrator")
+		item = make_test_item("_Test Item")
+		item.save()
+
+		item1 = make_test_item("_Test Item 1")
+		item1.save()
+
 		make_stock_entry(item_code="_Test Item 1", qty=5, rate=500, target="Stores - _TC")
 		make_stock_entry(item_code="_Test Item", qty=5, rate=500, target="Stores - _TC")
 		frappe.delete_doc_if_exists("Pricing Rule", "_Test Pricing Rule")
@@ -1543,37 +1605,60 @@ class TestPricingRule(FrappeTestCase):
 	
 	def test_pr_to_so_with_applied_on_item_code_TC_S_143(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order as make_so
 		
-		make_test_item("_Test Item 1")
-		make_stock_entry(item_code="_Test Item 1", qty=5, rate=500, target="Stores - _TC")
-		make_stock_entry(item_code="_Test Item", qty=5, rate=500, target="Stores - _TC")
+		frappe.set_user("Administrator")
+		item = make_test_item("_Test Item")
+		item.save()
+
+		item1 = make_test_item("_Test Item 1")
+		item1.save()
+
+		sle = make_stock_entry(item_code="_Test Item 1", qty=5, rate=500, target="_Test Warehouse - _TC")
+		sle2 = make_stock_entry(item_code="_Test Item", qty=5, rate=500, target="_Test Warehouse - _TC")
+		sle.save()
+		sle2.save()
 		frappe.delete_doc_if_exists("Pricing Rule", "_Test Pricing Rule")
-		make_pricing_rule(
-			selling=1,
-			min_qty=0,
-			price_or_product_discount="Product",
-			apply_on= "Item Code",
-			warehouse = "Stores - _TC",
-			items=[{"item_code": "_Test Item 1"}],
-			free_item="_Test Item 1",
-			free_qty=1,
-			free_item_rate=10,
-			condition="customer=='_Test Customer'",
-			company = "_Test Company"
-		)
-		so = make_sales_order(qty=5, warehouse="Stores - _TC",do_not_save=True)
-		so.set_warehouse = "Stores - _TC"
+
+		pricing_rule_doc = frappe.new_doc('Pricing Rule')
+		pricing_rule_data = {
+			"title": 'Free',
+			"apply_on": 'Item Code',
+			"price_or_product_discount": 'Product',
+			"selling": 1,
+			"min_qty": 0,
+			"max_qty": 5,
+			"company": '_Test Company',
+			"items":[ {"item_code": "_Test Item", "uom": '_Test UOM'}],
+			"free_item": "_Test Item 1",
+			"free_qty": 1,
+			"free_item_rate" : 10,
+		}
+		
+		pricing_rule_doc.update(pricing_rule_data)
+		pricing_rule_doc.save()
+
+		so = make_so(item_code="_Test Item", qty=5, warehouse="_Test Warehouse - _TC", customer="_Test Customer", company = "_Test Company", do_not_save=True)
+		so.set_warehouse = "_Test Warehouse - _TC"
 		so.save()
 		so.submit()
-		print(so.items[0].item_code)
-		print(so.items[1].item_code)
 		self.assertEqual(len(so.items), 2)
 		self.assertEqual(so.items[1].rate, 10)
 
 	def test_pr_to_so_with_applied_on_item_group_TC_S_144(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 		
-		make_test_item("_Test Item 1")
+		frappe.set_user("Administrator")
+		create_item_group("_Test Item Group")
+
+		item = make_test_item("_Test Item")
+		item.item_group = "_Test Item Group"
+		item.save()
+
+		item1 = make_test_item("_Test Item 1")
+		item1.item_group = "_Test Item Group"
+		item1.save()
+
 		make_stock_entry(item_code="_Test Item 1", qty=5, rate=500, target="Stores - _TC")
 		make_stock_entry(item_code="_Test Item", qty=5, rate=500, target="Stores - _TC")
 		frappe.delete_doc_if_exists("Pricing Rule", "_Test Pricing Rule")
@@ -1592,7 +1677,13 @@ class TestPricingRule(FrappeTestCase):
 			"item_groups": [{"item_group": "_Test Item Group"}]
 		})
 		pricing_rule.insert(ignore_permissions=True)
-		so = make_sales_order(qty=5, warehouse="Stores - _TC",do_not_save=True)
+		item_list = [{
+				"item_code": item.name,
+				"warehouse": "Stores - _TC",
+				"qty": 1
+			},
+			]
+		so = make_sales_order(qty=5, warehouse="Stores - _TC", do_not_save=True, item_list=item_list)
 		so.set_warehouse = "Stores - _TC"
 		so.save()
 		so.submit()
@@ -1602,11 +1693,20 @@ class TestPricingRule(FrappeTestCase):
 	def test_pr_to_so_with_applied_on_brand_TC_S_145(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 		
-		make_test_item("_Test Item 1")
+		frappe.set_user("Administrator")
+		create_brand("_Test Brand 1")
+		create_brand("_Test Brand")
+
+		item = make_test_item("_Test Item")
+		item.brand = "_Test Brand"
+		item.save()
+
+		item1 = make_test_item("_Test Item 1")
+		item1.brand = "_Test Brand 1"
+		item1.save()
+		
 		make_stock_entry(item_code="_Test Item 1", qty=5, rate=500, target="Stores - _TC")
 		make_stock_entry(item_code="_Test Item", qty=5, rate=500, target="Stores - _TC")
-		frappe.delete_doc_if_exists("Pricing Rule", "_Test Pricing Rule")
-		frappe.db.set_value('Item', '_Test Item', 'brand', '_Test Brand')
 		pricing_rule = frappe.get_doc({
 			"doctype": "Pricing Rule",
 			"title": "_Test Pricing Rule",
@@ -1622,7 +1722,14 @@ class TestPricingRule(FrappeTestCase):
 			"brands": [{"brand": "_Test Brand"}]
 		})
 		pricing_rule.insert(ignore_permissions=True)
-		so = make_sales_order(qty=5, warehouse="Stores - _TC",do_not_save=True)
+		item_list = [{
+				"item_code": item.name,
+				"warehouse": "Stores - _TC",
+				"qty": 1
+			},
+			]
+
+		so = make_sales_order(warehouse="Stores - _TC", do_not_save=True, item_list=item_list)
 		so.set_warehouse = "Stores - _TC"
 		so.save()
 		so.submit()
@@ -1795,3 +1902,25 @@ def make_item_price(item, price_list_name, item_price):
 			"price_list_rate": item_price,
 		}
 	).insert(ignore_permissions=True, ignore_mandatory=True)
+
+def create_brand(brand_name):
+	if not frappe.db.exists("Brand",brand_name):
+		doc = frappe.new_doc("Brand")
+		doc.brand = brand_name
+		doc.insert(ignore_permissions=True)
+
+def create_item_group(group_name, is_group=False, parent_item_group="All Item Groups"):
+	if not frappe.db.exists("Item Group",group_name):
+		doc = frappe.new_doc("Item Group")
+		doc.item_group_name = group_name
+		doc.is_group = is_group
+		doc.parent_item_group=parent_item_group
+		doc.insert(ignore_permissions=True)
+
+def get_or_create_customer(**kwargs):
+	if not frappe.db.exists("Customer", kwargs.get("customer_name")):
+		doc = frappe.new_doc("Customer")
+		doc.update(kwargs)
+		return doc.insert().name
+	else:
+		return kwargs.get("customer_name")
