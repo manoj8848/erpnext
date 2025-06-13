@@ -33,7 +33,7 @@ class StockReconciliation(StockController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.stock_reconciliation_item.stock_reconciliation_item import (
@@ -1156,7 +1156,6 @@ def get_items(warehouse, posting_date, posting_time, company, item_code=None, ig
 
 def get_item_and_warehouses(item_code, warehouse):
 	from frappe.utils.nestedset import get_descendants_of
-
 	items = []
 	if frappe.get_cached_value("Warehouse", warehouse, "is_group"):
 		childrens = get_descendants_of("Warehouse", warehouse, ignore_permissions=True, order_by="lft")
