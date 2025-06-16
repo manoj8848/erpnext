@@ -26,11 +26,31 @@ class TestDeliveryTrip(FrappeTestCase):
 
 		self.delivery_trip = create_delivery_trip(driver, address)
 
-	# codecov
 	def test_on_save_and_cancel_TC_SCK_306(self):
 		from erpnext.stock.doctype.delivery_trip.delivery_trip import get_contact_display, get_driver_email
 
-		driver = create_driver()
+		employee = frappe.get_doc(
+			{
+				"doctype": "Employee",
+				"first_name": "Newton Scmander",
+				"middle_name": "Scmander",
+				"date_of_birth": "21-04-1981",
+				"gender": "Male",
+				"date_of_joining": frappe.utils.now(),
+				"status": "Active",
+				"company": "_Test Company",
+				"prefered_email": "Test@example.com",
+			}
+		).insert()
+		driver = frappe.get_doc(
+			{
+				"doctype": "Driver",
+				"full_name": employee.name,
+				"cell_number": "98343424242",
+				"license_number": "B809",
+				"employee": employee.name,
+			}
+		).insert(ignore_permissions=True)
 		address = create_address(driver)
 		delivery_trip_doc = create_delivery_trip(driver, address)
 		delivery_trip_doc.submit()
@@ -42,11 +62,8 @@ class TestDeliveryTrip(FrappeTestCase):
 		get_contact_display(contact)
 		self.assertEqual(delivery_trip_doc.docstatus, 2)
 		# get_driver_email
-		driver = create_driver()
-		driver.email = "newtonscamnder@gmail.com"
-		driver.save()
 		driver_email = get_driver_email(driver)
-		self.assertEqual(driver_email, driver.email)
+		self.assertEqual(driver_email["email"], employee.prefered_email)
 
 	# codecov
 	def test_process_route_TC_SCK_307(self):
