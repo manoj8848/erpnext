@@ -1030,7 +1030,194 @@ class TestLandedCostVoucher(FrappeTestCase):
 				row.valuation_rate,
 				frappe.db.get_value("Serial and Batch Bundle", row.serial_and_batch_bundle, "avg_rate"),
 			)
+	def test_invalid_purchase_receipt_item_reference(self):
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		
+		create_company()
+		warehouse = create_warehouse(warehouse_name="_Test Warehouse 1 - _TC")
+		
+		item =make_item("_Test Item landed cost voucher", {"is_stock_item": 1})
+		item1 =make_item("_Test Item landed cost voucher1", {"is_stock_item": 1})
+		
+		pr = frappe.get_doc({
+			"doctype": "Purchase Receipt",
+			"supplier": "_Test Supplier",
+			"company": "_Test Company",
+			"set_warehouse": warehouse,
+			"items": [{"item_code": item.name, "qty": 1}]
+		}).insert(ignore_permissions=True).submit()
 
+		lcv = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [{
+				"item_code": item1.name,
+				"purchase_receipt_item": item1.name,
+				"description": "Purchase Receipt",
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"cost_center": "_Test Company - _TC",
+				"docstatus": 0
+			}],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"supplier": pr.supplier,
+				"posting_date": pr.posting_date,
+				"grand_total": pr.grand_total
+			}]
+		})
+
+		lcv.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e:
+			lcv.insert()
+
+	def test_receipt_document_and_item_validations(self):
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
+		create_company()
+		warehouse = create_warehouse(warehouse_name="_Test Warehouse LCV")
+		item = make_item("_Test Item LCV", {"is_stock_item": 1})
+
+		
+		pr = frappe.get_doc({
+			"doctype": "Purchase Receipt",
+			"supplier": "_Test Supplier",
+			"company": "_Test Company",
+			"set_warehouse": warehouse,
+			"items": [{"item_code": item.name, "qty": 1}]
+		}).insert(ignore_permissions=True)
+		
+		pr1 = frappe.get_doc({
+			"doctype": "Purchase Receipt",
+			"supplier": "_Test Supplier",
+			"company": "_Test Company",
+			"set_warehouse": warehouse,
+			"items": [{"item_code": item.name, "qty": 1}]
+		}).insert(ignore_permissions=True)
+		pr1.submit()
+		
+		pi = frappe.get_doc({
+			"doctype": "Purchase Invoice",
+			"supplier": "_Test Supplier",
+			"company": "_Test Company",
+			"update_stock": 0,
+			"items": [{"item_code": item.name, "qty": 1}]
+		}).insert(ignore_permissions=True).submit()
+
+
+		lcv1 = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"supplier": pr.supplier,
+				"posting_date": pr.posting_date,
+				"grand_total": pr.grand_total,
+				"idx": 1
+			}]
+		})
+		lcv1.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e1:
+			lcv1.insert()
+		self.assertIn("must be submitted", str(e1.exception))
+
+	
+		lcv2 = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Invoice",
+				"receipt_document": pi.name,
+				"supplier": pi.supplier,
+				"posting_date": pi.posting_date,
+				"grand_total": pi.grand_total,
+				"idx": 1
+			}]
+		})
+		lcv2.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e2:
+			lcv2.insert()
+		
+		pr.submit()
+		lcv3 = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [{
+				"item_code": item.name,
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": None,
+				"cost_center": "_Test Company - _TC",
+				"idx": 1
+			}],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"supplier": pr.supplier,
+				"posting_date": pr.posting_date,
+				"grand_total": pr.grand_total,
+				"idx": 1
+			}]
+		})
+		lcv3.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e3:
+			lcv3.insert()
+		
+
+		lcv4 = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [{
+				"item_code": item.name,
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr1.name,
+				"cost_center": "_Test Company - _TC",
+				"idx": 1
+			}],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"supplier": pr.supplier,
+				"posting_date": pr.posting_date,
+				"grand_total": pr.grand_total,
+				"idx": 1
+			}]
+		})
+		lcv4.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e4:
+			lcv4.insert()
+
+		lcv5 = frappe.get_doc({
+			"doctype": "Landed Cost Voucher",
+			"distribute_charges_based_on": "Qty",
+			"items": [{
+				"item_code": item.name,
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"cost_center": None,
+				"idx": 1
+			}],
+			"purchase_receipts": [{
+				"receipt_document_type": "Purchase Receipt",
+				"receipt_document": pr.name,
+				"supplier": pr.supplier,
+				"posting_date": pr.posting_date,
+				"grand_total": pr.grand_total,
+				"idx": 1
+			}]
+		})
+		lcv5.flags.ignore_mandatory = True
+		with self.assertRaises(frappe.ValidationError) as e5:
+			lcv5.insert()
+	
 
 def make_landed_cost_voucher(**args):
 	args = frappe._dict(args)

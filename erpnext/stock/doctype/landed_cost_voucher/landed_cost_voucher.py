@@ -20,7 +20,7 @@ class LandedCostVoucher(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.landed_cost_item.landed_cost_item import LandedCostItem
@@ -105,6 +105,7 @@ class LandedCostVoucher(Document):
 			docstatus = frappe.db.get_value(d.receipt_document_type, d.receipt_document, "docstatus")
 			if docstatus != 1:
 				msg = f"Row {d.idx}: {d.receipt_document_type} {frappe.bold(d.receipt_document)} must be submitted"
+				print("msg1", msg)
 				frappe.throw(_(msg), title=_("Invalid Document"))
 
 			if d.receipt_document_type == "Purchase Invoice":
@@ -118,15 +119,21 @@ class LandedCostVoucher(Document):
 					msg += "<br>" + _(
 						"Please create Landed Cost Vouchers against Invoices that have 'Update Stock' enabled."
 					)
+					print("msg2", msg)
 					frappe.throw(msg, title=_("Incorrect Invoice"))
 
 			receipt_documents.append(d.receipt_document)
 
 		for item in self.get("items"):
+			print("item", item.receipt_document_type, item.receipt_document)
 			if not item.receipt_document:
+				print("msg3", "Item must be added using 'Get Items from Purchase Receipts' button")
 				frappe.throw(_("Item must be added using 'Get Items from Purchase Receipts' button"))
 
 			elif item.receipt_document not in receipt_documents:
+				print("msg4", _("Item Row {0}: {1} {2} does not exist in above '{1}' table").format(
+						item.idx, item.receipt_document_type, item.receipt_document
+					))
 				frappe.throw(
 					_("Item Row {0}: {1} {2} does not exist in above '{1}' table").format(
 						item.idx, item.receipt_document_type, item.receipt_document
@@ -134,6 +141,7 @@ class LandedCostVoucher(Document):
 				)
 
 			if not item.cost_center:
+				print("msg5", _("Row {0}: Cost center is required for an item {1}").format(item.idx, item.item_code))
 				frappe.throw(
 					_("Row {0}: Cost center is required for an item {1}").format(item.idx, item.item_code)
 				)
