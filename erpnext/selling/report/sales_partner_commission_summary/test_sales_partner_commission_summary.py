@@ -1,5 +1,5 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests.utils import FrappeTestCase, if_app_installed
 from frappe.utils import add_days, today
 
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
@@ -15,20 +15,20 @@ class TestSalesPartnerCommissionSummary(FrappeTestCase):
 		customer = frappe.get_doc(get_customer_dict("__Test Sales Partner Customer")).insert(
 			ignore_permissions=True
 		)
-		sales_partner = setup_sales_partner()
 
 		self.item_code = item.item_code
 		self.customer = customer.name
-		self.selling_partner = sales_partner.get("sales_partner")
-		self.sales_person = sales_partner.get("sales_person")
 
 	def tearDown(self):
 		frappe.db.rollback()
 
+	@if_app_installed("sales_commission")
 	def test_sales_partner_commission_summary_TC_S_217(self):
+		sales_partner = setup_sales_partner()
+		self.selling_partner = sales_partner.get("sales_partner")
+		self.sales_person = sales_partner.get("sales_person")
 		so = make_sales_order(
 			item_code=self.item_code,
-			customer=self.customer,
 			transaction_date=add_days(today(), 2),
 			rate=50,
 			do_not_save=True,
@@ -39,7 +39,6 @@ class TestSalesPartnerCommissionSummary(FrappeTestCase):
 		so.append("sales_team", {"sales_person": self.sales_person, "allocated_percentage": 100})
 		so.insert(ignore_permissions=True)
 		so.submit()
-		print(so.name)
 		filters = {
 			"sales_partner": self.selling_partner,
 			"doctype": "Sales Order",

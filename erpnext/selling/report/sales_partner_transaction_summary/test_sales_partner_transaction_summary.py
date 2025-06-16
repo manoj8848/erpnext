@@ -1,13 +1,10 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests.utils import FrappeTestCase, if_app_installed
 from frappe.utils import add_days, today
 
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 from erpnext.selling.doctype.customer.test_customer import get_customer_dict
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
-from erpnext.selling.report.sales_partner_commission_summary.test_sales_partner_commission_summary import (
-	setup_sales_partner,
-)
 
 from .sales_partner_transaction_summary import execute
 
@@ -18,17 +15,22 @@ class TestSalesPartnerCommissionSummary(FrappeTestCase):
 		customer = frappe.get_doc(get_customer_dict("__Test Sales Partner Transaction Customer")).insert(
 			ignore_permissions=True
 		)
-		sales_partner = setup_sales_partner()
 
 		self.item_code = item.item_code
 		self.customer = customer.name
-		self.selling_partner = sales_partner.get("sales_partner")
-		self.sales_person = sales_partner.get("sales_person")
 
 	def tearDown(self):
 		frappe.db.rollback()
 
+	@if_app_installed("sales_commission")
 	def test_sales_partner_transaction_summary_TC_S_218(self):
+		from erpnext.selling.report.sales_partner_commission_summary.test_sales_partner_commission_summary import (
+			setup_sales_partner,
+		)
+
+		sales_partner = setup_sales_partner()
+		self.selling_partner = sales_partner.get("sales_partner")
+		self.sales_person = sales_partner.get("sales_person")
 		so = make_sales_order(
 			item_code=self.item_code,
 			customer=self.customer,
