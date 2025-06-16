@@ -13,6 +13,39 @@ from erpnext.stock.doctype.delivery_note.delivery_note import make_shipment
 
 
 class TestShipment(FrappeTestCase):
+	def setUp(self):
+		self.company = "_Test Indian Registered Company"
+		if not frappe.db.exists("Company", self.company):
+			make_company(self.company)
+
+		self.args1 = {
+			"address_title": "Test Address1",
+			"address_type": "Permanent",
+			"address_line1": "Test Address1",
+			"is_primary_address": 1,
+			"state": "Karnataka",
+			"country": "India",
+			"pincode": "581115",
+			"company": self.company,
+			"is_your_company_address": 1,
+			"doctype": "Company",
+			"docname": self.company,
+		}
+
+		self.args2 = {
+			"address_title": "Test Address2",
+			"address_type": "Permanent",
+			"address_line1": "Test Address1",
+			"is_primary_address": 1,
+			"state": "Karnataka",
+			"country": "India",
+			"pincode": "581115",
+			"company": self.company,
+			"is_your_company_address": 1,
+			"doctype": "Company",
+			"docname": self.company,
+		}
+
 	def test_shipment_from_delivery_note(self):
 		delivery_note = create_test_delivery_note()
 		delivery_note.submit()
@@ -28,38 +61,9 @@ class TestShipment(FrappeTestCase):
 
 	# codecov
 	def test_validate_weight_TC_SCK_353(self):
-		company = "_Test Indian Registered Company"
-		if not frappe.db.exists("Company", company):
-			make_company(company)
-		args1 = {
-			"address_title": "Test Address1",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address1 = create_address(**args1)
+		address1 = create_address(**self.args1)
 
-		args2 = {
-			"address_title": "Test Address2",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",  # lowercase corrected
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address2 = create_address(**args2)
+		address2 = create_address(**self.args2)
 
 		shipment = frappe.get_doc(
 			{
@@ -80,38 +84,8 @@ class TestShipment(FrappeTestCase):
 
 	# codecov
 	def test_on_submit_TC_SCK_354(self):
-		company = "_Test Indian Registered Company"
-		if not frappe.db.exists("Company", company):
-			make_company(company)
-		args1 = {
-			"address_title": "Test Address1",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address1 = create_address(**args1)
-
-		args2 = {
-			"address_title": "Test Address2",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",  # lowercase corrected
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address2 = create_address(**args2)
+		address1 = create_address(**self.args1)
+		address2 = create_address(**self.args2)
 
 		shipment = frappe.get_doc(
 			{
@@ -134,38 +108,8 @@ class TestShipment(FrappeTestCase):
 
 	# codecov
 	def test_on_submit_no_shipment_parcel_TC_SCK_355(self):
-		company = "_Test Indian Registered Company"
-		if not frappe.db.exists("Company", company):
-			make_company(company)
-		args1 = {
-			"address_title": "Test Address1",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address1 = create_address(**args1)
-
-		args2 = {
-			"address_title": "Test Address2",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",  # lowercase corrected
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address2 = create_address(**args2)
+		address1 = create_address(**self.args1)
+		address2 = create_address(**self.args2)
 
 		shipment = frappe.get_doc(
 			{
@@ -189,38 +133,8 @@ class TestShipment(FrappeTestCase):
 
 	# codecov
 	def test_validate_pickup_time_TC_SCK_356(self):
-		company = "_Test Indian Registered Company"
-		if not frappe.db.exists("Company", company):
-			make_company(company)
-		args1 = {
-			"address_title": "Test Address1",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address1 = create_address(**args1)
-
-		args2 = {
-			"address_title": "Test Address2",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address2 = create_address(**args2)
+		address1 = create_address(**self.args1)
+		address2 = create_address(**self.args2)
 
 		shipment = frappe.get_doc(
 			{
@@ -249,38 +163,9 @@ class TestShipment(FrappeTestCase):
 			get_contact_name,
 		)
 
-		company = "_Test Indian Registered Company"
-		if not frappe.db.exists("Company", company):
-			make_company(company)
-		args1 = {
-			"address_title": "Test Address1",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address1 = create_address(**args1)
+		address1 = create_address(**self.args1)
 
-		args2 = {
-			"address_title": "Test Address2",
-			"address_type": "Permanent",
-			"address_line1": "Test Address1",
-			"is_primary_address": 1,
-			"state": "Karnataka",
-			"country": "India",
-			"pincode": "581115",
-			"company": company,
-			"is_your_company_address": 1,
-			"doctype": "Company",
-			"docname": company,
-		}
-		address2 = create_address(**args2)
+		address2 = create_address(**self.args2)
 
 		shipment = frappe.get_doc(
 			{
