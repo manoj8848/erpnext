@@ -4,6 +4,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_months, nowdate
 
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+from erpnext.selling.doctype.customer.test_customer import get_customer_dict
 from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
 from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.selling.report.payment_terms_status_for_sales_order.payment_terms_status_for_sales_order import (
@@ -17,6 +19,11 @@ test_dependencies = ["Sales Order", "Item", "Sales Invoice", "Payment Terms Temp
 class TestPaymentTermsStatusForSalesOrder(FrappeTestCase):
 	def setUp(self):
 		self.cleanup_old_entries()
+
+		self.item = make_test_item("_Test Payment Term Status Item")
+		self.customer = frappe.get_doc(get_customer_dict("_Test Payment Term Customer")).insert(
+			ignore_permissions=True
+		)
 
 	def tearDown(self):
 		frappe.db.rollback()
@@ -408,3 +415,33 @@ class TestPaymentTermsStatusForSalesOrder(FrappeTestCase):
 		# Only the first term should be pulled
 		self.assertEqual(len(data), 1)
 		self.assertEqual(data, expected_value)
+
+	def test_get_customer_or_item_TC_S_214(self):
+		from .payment_terms_status_for_sales_order import get_customers_or_items
+
+		filters = [
+			["Customer", "disabled", "=", "0"],
+			["Customer Group", "name", "=", self.customer.customer_group],
+		]
+		customer_result = get_customers_or_items(
+			doctype="Customer", txt="", searchfield="", start=0, page_len=10, filters=filters
+		)
+		if customer_result:
+			for row in customer_result:
+				if row[0] == self.customer.name:
+					self.assertEqual(row[0], "_Test Payment Term Customer")
+					self.assertEqual(row[1], "_Test Customer Group")
+
+		filters_1 = [
+			["Item", "disabled", "=", "0"],
+			["Item Group", "name", "=", self.item.item_group],
+		]
+
+		item_result = get_customers_or_items(
+			doctype="Item", txt="", searchfield="", start=0, page_len=10, filters=filters_1
+		)
+		if item_result:
+			for item in item_result:
+				if item[0] == self.item.item_code:
+					self.assertEqual(item[0], "_Test Payment Term Status Item")
+					self.assertEqual(item[1], "Products")
