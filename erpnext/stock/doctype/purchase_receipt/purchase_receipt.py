@@ -377,7 +377,7 @@ class PurchaseReceipt(BuyingController):
 			(self.name),
 		)
 		if submit_rv:
-			frappe.throw(_("Purchase Invoice {0} is already submitted").format(self.submit_rv[0][0]))
+			frappe.throw(_("Purchase Invoice {0} is already submitted").format(submit_rv[0][0]))
 
 	def on_cancel(self):
 		super().on_cancel()
@@ -422,7 +422,6 @@ class PurchaseReceipt(BuyingController):
 		from erpnext.accounts.general_ledger import process_gl_map
 
 		gl_entries = []
-
 		self.make_item_gl_entries(gl_entries, warehouse_account=warehouse_account)
 		self.make_tax_gl_entries(gl_entries, via_landed_cost_voucher)
 		update_regional_gl_entries(gl_entries, self)
@@ -433,7 +432,6 @@ class PurchaseReceipt(BuyingController):
 		from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import (
 			get_purchase_document_details,
 		)
-
 		provisional_accounting_for_non_stock_items = cint(
 			frappe.db.get_value("Company", self.company, "enable_provisional_accounting_for_non_stock_items")
 		)
@@ -445,10 +443,8 @@ class PurchaseReceipt(BuyingController):
 
 		def make_item_asset_inward_gl_entry(item, stock_value_diff, stock_asset_account_name):
 			account_currency = get_account_currency(stock_asset_account_name)
-
 			if not stock_asset_account_name:
 				validate_account("Asset or warehouse account")
-
 			self.add_gl_entry(
 				gl_entries=gl_entries,
 				account=stock_asset_account_name,
@@ -460,13 +456,12 @@ class PurchaseReceipt(BuyingController):
 				account_currency=account_currency,
 				item=item,
 			)
-
+	
 		def make_stock_received_but_not_billed_entry(item):
 			account = (
 				warehouse_account[item.from_warehouse]["account"] if item.from_warehouse else stock_asset_rbnb
 			)
 			account_currency = get_account_currency(account)
-
 			# GL Entry for from warehouse or Stock Received but not billed
 			# Intentionally passed negative debit amount to avoid incorrect GL Entry validation
 			credit_amount = (
@@ -754,7 +749,6 @@ class PurchaseReceipt(BuyingController):
 		for x in self.items:
 			if x.landed_cost_voucher_amount != 0:
 				return True
-
 		return False
 
 	def make_tax_gl_entries(self, gl_entries, via_landed_cost_voucher=False):
@@ -1079,7 +1073,6 @@ def get_billed_qty_against_purchase_receipt(pr_doc):
 	)
 
 	invoice_data = query.run(as_list=1)
-
 	if not invoice_data:
 		return frappe._dict()
 	return frappe._dict(invoice_data)
@@ -1410,5 +1403,4 @@ def get_wbs_amount(self, wbs):
 		for i in self.items:
 			if i.work_breakdown_structure == wbs:
 				wbs_amount += i.amount
-
 	return wbs_amount

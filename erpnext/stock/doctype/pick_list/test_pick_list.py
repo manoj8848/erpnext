@@ -20,7 +20,7 @@ from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
 from erpnext.stock.doctype.stock_reconciliation.stock_reconciliation import (
 	EmptyStockReconciliationItemsError,
 )
-from frappe.utils import add_days, add_months, flt, getdate, nowdate
+from frappe.utils import add_days, add_months, flt, getdate, nowdate,nowtime
 
 test_dependencies = ["Item", "Sales Invoice", "Stock Entry", "Batch"]
 
@@ -1484,6 +1484,235 @@ class TestPickList(FrappeTestCase):
 		delivery_note.reload()
 		self.assertEqual(sales_order.status, "Completed")  
 		self.assertEqual(delivery_note.status, "Completed") 
+
+	def test_update_stock_entry_items_with_no_reference_TC_SCK_PL(self):
+		from erpnext.stock.doctype.pick_list.pick_list import update_stock_entry_items_with_no_reference
+		from erpnext.stock.doctype.stock_entry.stock_entry import StockEntry
+		from erpnext.stock.doctype.pick_list.pick_list import update_common_item_properties
+
+		# Create dummy Pick List with multiple locations
+		pick_list = frappe.new_doc("Pick List")
+		pick_list.company = "_Test Company"
+
+		# Add fake location entries
+		pick_list.locations = [
+			frappe._dict({
+				"item_code": "_Test Item",
+				"qty": 2,
+				"uom": "Nos",
+				"warehouse": "_Test Warehouse",
+				"batch_no": None,
+				"serial_no": None,
+				"picked_qty": 2,
+			}),
+			frappe._dict({
+				"item_code": "_Test Item 2",
+				"qty": 3,
+				"uom": "Nos",
+				"warehouse": "_Test Warehouse",
+				"batch_no": "BATCH-001",
+				"serial_no": None,
+				"picked_qty": 3,
+			}),
+		]
+
+		# Mock a blank Stock Entry
+		stock_entry = frappe.new_doc("Stock Entry")
+		stock_entry.company = "_Test Company"
+		stock_entry.stock_entry_type = "Material Transfer"
+
+		# Patch `update_common_item_properties` to track if it runs
+		called_items = []
+
+		def mock_update_common_item_properties(item, location):
+			called_items.append(location.item_code)
+			item.item_code = location.item_code
+			item.qty = location.picked_qty
+			item.uom = location.uom
+			item.s_warehouse = location.warehouse
+
+		# Replace real function with mock
+		import erpnext.stock.doctype.pick_list.pick_list as pl_module
+		pl_module.update_common_item_properties = mock_update_common_item_properties
+
+		# Run the function
+		updated_entry = update_stock_entry_items_with_no_reference(pick_list, stock_entry)
+
+		# Validate the result
+		self.assertEqual(len(updated_entry.items), 2)
+		self.assertEqual(updated_entry.items[0].item_code, "_Test Item")
+		self.assertEqual(updated_entry.items[1].item_code, "_Test Item 2")
+		self.assertListEqual(called_items, ["_Test Item", "_Test Item 2"])
+	
+	def test_update_stock_entry_based_on_work_order_TC_SCK_PL(self):
+		from erpnext.stock.doctype.pick_list.pick_list import update_stock_entry_based_on_work_order
+		from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom 
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
+
+		# Setup item and BOM
+		item_code = make_item(
+			"_Test FG Item WO", {"is_stock_item": 1, "stock_uom": "Nos", "valuation_rate": 100}
+		).name
+
+		raw_item = make_item(
+			"_Test Raw Item WO", {"is_stock_item": 1, "stock_uom": "Nos", "valuation_rate": 50}
+		).name
+		# Create required warehouses
+		wip_w=create_warehouse("_Test WIP Warehouse", {"company": "_Test Company"})
+		fg_w=create_warehouse("_Test FG Warehouse", {"company": "_Test Company"})
+		t_w=create_warehouse("_Test Warehouse", {"company": "_Test Company"})  # used in Pick List locations
+
+		bom = make_bom(item=item_code, raw_materials=[raw_item])
+
+		# Create Work Order
+		work_order = frappe.get_doc({
+			"doctype": "Work Order",
+			"production_item": item_code,
+			"qty": 5,
+			"fg_warehouse": fg_w,
+			"wip_warehouse": wip_w,
+			"bom_no": bom.name,
+			"company": "_Test Company",
+			"use_multi_level_bom": 0,
+		})
+		work_order.insert()
+		work_order.submit()
+
+		# Set WIP warehouse is_group = 0
+		frappe.db.set_value("Warehouse", work_order.wip_warehouse, "is_group", 0)
+
+		# Create dummy Pick List
+		pick_list = frappe.new_doc("Pick List")
+		pick_list.work_order = work_order.name
+		pick_list.for_qty = 5
+		pick_list.locations = [
+			frappe._dict({
+				"item_code": raw_item,
+				"picked_qty": 2,
+				"uom": "Nos",
+				"warehouse": t_w,
+			})
+		]
+
+		# Mock Stock Entry
+		stock_entry = frappe.new_doc("Stock Entry")
+
+		# Patch update_common_item_properties to simulate field assignment
+		called_items = []
+
+		def mock_update_common_item_properties(item, location):
+			called_items.append(location.item_code)
+			item.item_code = location.item_code
+			item.qty = location.picked_qty
+			item.uom = location.uom
+			item.s_warehouse = location.warehouse
+
+		import erpnext.stock.doctype.pick_list.pick_list as pl_module
+		pl_module.update_common_item_properties = mock_update_common_item_properties
+
+		# Run function
+		updated_entry = update_stock_entry_based_on_work_order(pick_list, stock_entry)
+
+		# Assertions
+		self.assertEqual(updated_entry.work_order, work_order.name)
+		self.assertEqual(updated_entry.company, work_order.company)
+		self.assertEqual(updated_entry.bom_no, bom.name)
+		self.assertEqual(updated_entry.fg_completed_qty, 5)
+		self.assertEqual(updated_entry.to_warehouse, work_order.wip_warehouse)
+		self.assertEqual(updated_entry.items[0].item_code, raw_item)
+		self.assertEqual(updated_entry.items[0].t_warehouse, work_order.wip_warehouse)
+		self.assertIn(raw_item, called_items)
+
+
+	def test_get_item_details_TC_SCK_ITEM_DETAILS(self):
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.pick_list.pick_list import get_item_details
+
+		# Setup
+		item_code = "_Test Item UOM"
+		uom = "Box"
+
+		if not frappe.db.exists("UOM", uom):
+			create_uom(uom)
+
+		# Create Item
+		item = make_item(item_code, {
+			"stock_uom": "Nos",
+			"is_stock_item": 1
+		})
+
+		# Add UOM Conversion
+		if not frappe.db.exists("UOM Conversion Detail", {"uom": uom, "parent": item.name}):
+			item.append("uoms", {"uom": uom, "conversion_factor": 10})
+			item.save()
+
+		# Case 1: Without passing UOM
+		result = get_item_details(item_code)
+		self.assertEqual(result.name, item_code)
+		self.assertEqual(result.uom, "Nos")
+
+		# Case 2: With valid UOM
+		result_with_uom = get_item_details(item_code, uom=uom)
+		self.assertEqual(result_with_uom.uom, uom)
+		self.assertIn("conversion_factor", result_with_uom)
+		self.assertEqual(result_with_uom.conversion_factor, 10)
+
+	def test_update_picked_item_from_current_pick_list_TC_SCK_PICKED(self):
+		from frappe.utils import nowdate
+
+		# Setup dummy Pick List with 2 locations
+		pick_list = frappe.new_doc("Pick List")
+		pick_list.customer = "_Test Customer"
+		pick_list.company = "_Test Company"
+		pick_list.purpose = "Delivery"
+		pick_list.set_posting_time = 1
+		pick_list.posting_date = nowdate()
+
+		pick_list.append("locations", {
+			"item_code": "_Test Item",
+			"warehouse": "_Test Warehouse",
+			"picked_qty": 2,
+			"stock_qty": 2,
+			"batch_no": None,
+			"serial_no": "SN001\nSN002"
+		})
+		pick_list.append("locations", {
+			"item_code": "_Test Item",
+			"warehouse": "_Test Warehouse",
+			"picked_qty": 3,
+			"stock_qty": 3,
+			"batch_no": "BATCH-001",
+			"serial_no": ""
+		})
+
+		# Target structure to update
+		picked_items = {}
+
+		# Call method
+		pick_list.update_picked_item_from_current_pick_list(picked_items)
+
+		# Assertions
+		self.assertIn("_Test Item", picked_items)
+
+		# For serial-tracked row
+		serial_key = "_Test Warehouse"
+		self.assertEqual(picked_items["_Test Item"][serial_key]["picked_qty"], 2)
+		self.assertListEqual(
+			picked_items["_Test Item"][serial_key]["serial_no"], ["SN001", "SN002"]
+		)
+
+		# For batch-tracked row
+		batch_key = ("_Test Warehouse", "BATCH-001")
+		self.assertEqual(
+			picked_items["_Test Item"][batch_key]["picked_qty"], 3
+		)
+		self.assertEqual(
+			picked_items["_Test Item"][batch_key]["batch_no"], "BATCH-001"
+		)
+
+
 
 def stock_check(self,voucher,qty):
 	stock_entries = frappe.get_all(

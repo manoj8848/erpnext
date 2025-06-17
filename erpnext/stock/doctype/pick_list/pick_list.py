@@ -38,7 +38,7 @@ class PickList(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.pick_list_item.pick_list_item import PickListItem
@@ -1416,7 +1416,6 @@ def stock_entry_exists(pick_list_name):
 
 def update_stock_entry_based_on_work_order(pick_list, stock_entry):
 	work_order = frappe.get_doc("Work Order", pick_list.get("work_order"))
-
 	stock_entry.work_order = work_order.name
 	stock_entry.company = work_order.company
 	stock_entry.from_bom = 1
@@ -1464,7 +1463,6 @@ def update_stock_entry_items_with_no_reference(pick_list, stock_entry):
 	for location in pick_list.locations:
 		item = frappe._dict()
 		update_common_item_properties(item, location)
-
 		stock_entry.append("items", item)
 
 	return stock_entry

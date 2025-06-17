@@ -34,14 +34,20 @@ from erpnext.stock.utils import get_incoming_rate, get_stock_balance
 class TestPurchaseReceipt(FrappeTestCase):
 	def setUp(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+
 
 		create_company()
+		all_warehouse=create_warehouse("All Warehouses", {"company":"_Test Company", "is_group":1})
 		create_warehouse(
 			warehouse_name="_Test Warehouse 1 - _TC",
-			properties={"parent_warehouse": "All Warehouses - _TC"},
+			properties={"parent_warehouse": all_warehouse},
 			company="_Test Company",
 		)
 		frappe.db.set_single_value("Buying Settings", "allow_multiple_items", 1)
+		create_uom("_Test UOM")
+
+
 
 	def test_purchase_receipt_received_qty(self):
 		"""
@@ -6132,8 +6138,536 @@ class TestPurchaseReceipt(FrappeTestCase):
 		po.reload()
 		po.cancel()
 
+	def test_get_already_received_qty_TC_SCK_455(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
 
-def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"):
+
+		# Setup
+		item_code = make_item(
+			"_Test Item_502", {"is_stock_item": 1, "valuation_rate": 100, "stock_uom": "Nos"}
+		).name
+		company = setup_test_company_defaults()
+		supplier = create_supplier()	
+		create_uom("_Test UOM")
+		create_warehouse("All Warehouses", {"company":company.name,"is_group":1})
+		suppiler_warehouse=create_warehouse("_Test Warehouse 1", {"company":company.name})
+
+		warehouse = frappe.get_all("Warehouse", filters={"company": company.name}, limit=1)[0].name
+
+		# Create PO with 10 qty
+		po = create_purchase_order(
+			item_code=item_code,
+			qty=10,
+			rate=100,
+			supplier=supplier.name,
+			warehouse=warehouse,
+			company=company.name,
+			do_not_submit=False,
+		)
+		po_item = po.items[0]
+
+		# Create first PR with qty 4
+		pr1 = make_purchase_receipt(
+			purchase_order=po.name,
+			item_code=item_code,
+			qty=4,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=False,
+			rate=100,
+			supplier_warehouse=suppiler_warehouse
+		)
+
+		# Create second PR with qty 6 (this is where we'll call the method)
+		pr2 = make_purchase_receipt(
+			purchase_order=po.name,
+			item_code=item_code,
+			qty=6,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=True,
+			rate=100,
+			supplier_warehouse=suppiler_warehouse
+		)
+		pr2_item = pr2.items[0]
+
+		# Ensure it's linked to the same PO item
+		pr2_item.purchase_order_item = po_item.name
+		pr2_item.purchase_order = po.name
+		pr2.save()
+
+		# Call method from pr2
+		for item in pr1.items:
+			frappe.db.set_value("Purchase Receipt Item", item.name, "purchase_order_item", po_item.name)
+			frappe.db.set_value("Purchase Receipt Item", item.name, "purchase_order", po.name)
+
+		already_received = pr2.get_already_received_qty(po.name, po_item.name)
+
+		# Should only count pr1's qty, not pr2
+		self.assertEqual(already_received, 4.0)
+
+
+	def test_check_next_docstatus_TC_SCK_456(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+
+
+		# Setup
+		item_code = make_item(
+			"_Test Item CheckNextDocStatus", {"is_stock_item": 1, "valuation_rate": 100, "stock_uom": "Nos"}
+		).name
+
+		company = setup_test_company_defaults()
+		supplier = create_supplier()
+		create_uom("_Test UOM")
+		supplier_warehouse=create_warehouse("_Test Warehouse 1", {"company":company.name})
+		warehouse = create_warehouse("_Test Warehouse DocStatus", {"company": company.name})
+
+		# Create PO
+		po = create_purchase_order(
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			supplier=supplier.name,
+			warehouse=warehouse,
+			company=company.name,
+			do_not_submit=False,
+		)
+
+		# Create PR
+		pr = make_purchase_receipt(
+			purchase_order=po.name,
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=False,
+			supplier_warehouse=supplier_warehouse
+		)
+
+		# Create and submit Purchase Invoice against PR
+		pi = make_purchase_invoice(
+			purchase_receipt=pr.name,
+			qty=5,
+			rate=100,
+			item_code=item_code,
+			uom="Nos",
+			stock_uom="Nos",
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			expense_account="Cost of Goods Sold - " + company.abbr,
+			cost_center="Main - " + company.abbr,
+			do_not_submit=True,
+			supplier_warehouse=supplier_warehouse
+		)
+
+		# Explicitly link PI to PR
+		for item in pi.items:
+			item.purchase_receipt = pr.name
+			item.pr_detail = pr.items[0].name
+		pi.save().submit()
+
+		# This should now raise ValidationError due to linked submitted PI
+		with self.assertRaises(frappe.ValidationError,msg="already submitted") :
+			pr.check_next_docstatus()
+
+
+	def test_make_item_gl_entries_creates_valid_gl_entries_TC_SCK_457(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+
+		company = setup_test_company_defaults()
+		company.enable_perpetual_inventory = 1
+		company.save()
+		supplier = create_supplier()
+		create_uom("_Test UOM")
+		supplier_warehouse=create_warehouse("_Test Warehouse 1", {"company":company.name})
+		item = make_item(
+			"_Test GL Item",
+			{"is_stock_item": 1, "valuation_rate": 100, "stock_uom": "Nos"},
+		).name
+		warehouse = create_warehouse("_Test GL Entry WH", company=company.name)
+
+		po = create_purchase_order(
+			item_code=item,
+			qty=10,
+			rate=100,
+			supplier=supplier.name,
+			warehouse=warehouse,
+			company=company.name,
+			do_not_submit=False,
+		)
+
+		pr = make_purchase_receipt(
+			purchase_order=po.name,
+			item_code=item,
+			qty=10,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=False,
+			rate=100,
+			supplier_warehouse=supplier_warehouse
+		)
+
+		pr.company = company.name
+		pr.currency = "INR"
+		pr.conversion_rate = 1.0
+		pr.supplier = supplier.name
+		pr.supplier_name = supplier.name
+		pr.set_missing_values()
+		pr.is_return = 0
+
+		# Set explicit valuation rate on item
+		for item in pr.items:
+			item.valuation_rate = 100
+			item.cost_center = company.default_cost_center
+
+		pr.save()
+
+		# Initialize
+		gl_entries = []
+		warehouse_account_map = {
+			pr.items[0].warehouse: {
+				"account": frappe.get_cached_value("Company", pr.company, "default_inventory_account"),
+				"account_currency": frappe.get_cached_value("Account", frappe.get_cached_value("Company", pr.company, "default_inventory_account"), "account_currency"),
+			}
+		}
+
+		gl_entries = pr.get_gl_entries(
+		    warehouse_account=get_warehouse_account_map(company.name),
+		    via_landed_cost_voucher=False
+		)
+		self.assertTrue(gl_entries, msg="Expected GL entries to be generated by make_item_gl_entries")
+
+	def test_is_landed_cost_booked_for_any_item_TC_SCK_458(self):
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.regional.doctype.import_supplier_invoice.import_supplier_invoice import create_uom
+
+		item_code = make_item(
+			"_Test Item_LCV_001", {"is_stock_item": 1, "stock_uom": "Nos", "valuation_rate": 100}
+		).name
+		create_uom("_Test UOM")
+		company = setup_test_company_defaults()
+		supplier_warehouse = create_warehouse("_Test Warehouse 1", {"company": company.name})
+		supplier = create_supplier()
+		warehouse = create_warehouse("_Test LCV Warehouse", company=company.name)
+
+		# PR without landed cost
+		pr_no_lcv = make_purchase_receipt(
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=False,
+			supplier_warehouse=supplier_warehouse
+		)
+		self.assertFalse(pr_no_lcv.is_landed_cost_booked_for_any_item())
+
+		# PR with landed cost
+		pr_with_lcv = make_purchase_receipt(
+			item_code=item_code,
+			qty=5,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=True,
+			supplier_warehouse=supplier_warehouse
+		)
+
+		# Set and persist landed cost properly
+		pr_with_lcv.items[0].landed_cost_voucher_amount = 500
+		pr_with_lcv.save()
+		frappe.db.set_value("Purchase Receipt Item", pr_with_lcv.items[0].name, "landed_cost_voucher_amount", 500)
+		pr_with_lcv.reload()
+
+		self.assertTrue(pr_with_lcv.is_landed_cost_booked_for_any_item())
+
+
+	def test_get_billed_qty_against_purchase_receipt_TC_SCK_459(self):
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import get_billed_qty_against_purchase_receipt
+
+		company = setup_test_company_defaults()
+		item_code = make_item("_Test Item BRQ", {"is_stock_item": 1, "valuation_rate": 100, "stock_uom": "Nos"}).name
+		supplier = create_supplier()
+		supplier_warehouse = create_warehouse("_Test Warehouse 1", {"company": company.name})
+		warehouse = create_warehouse("_Test PR Warehouse", company=company.name)
+		# Create parent account if missing
+		if not frappe.db.exists("Account", f"Expenses - {company.abbr}"):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Expenses",
+				"company": company,
+				"root_type": "Expense",
+				"is_group": 1
+			}).insert(ignore_mandatory=True)
+
+		parent_name = f"Main - {company.abbr}"
+
+		# If it exists, ensure it's marked as group
+		if frappe.db.exists("Cost Center", parent_name):
+			frappe.db.set_value("Cost Center", parent_name, "is_group", 1)
+		else:
+			# Create new group cost center
+			frappe.get_doc({
+				"doctype": "Cost Center",
+				"cost_center_name": "Main",
+				"company": company,
+				"is_group": 1
+			}).insert()
+
+		expense_account_name = f"_Test Account Cost for Goods Sold - {company.abbr}"
+		if not frappe.db.exists("Account", expense_account_name):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "_Test Account Cost for Goods Sold",
+				"company": company,
+				"root_type": "Expense",
+				"parent_account": f"Expenses - {company.abbr}",  # Adjust if parent doesn't exist
+				"is_group": 0,
+			}).insert(ignore_mandatory=True)
+
+		# Ensure Cost Center
+		cost_center_name = f"_Test Cost Center - {company.abbr}"
+		if not frappe.db.exists("Cost Center", cost_center_name):
+			frappe.get_doc({
+				"doctype": "Cost Center",
+				"cost_center_name": "_Test Cost Center",
+				"company": company,
+				"is_group": 0,
+				"parent_cost_center": f"Main - {company.abbr}"
+			}).insert(ignore_mandatory=True)
+		# Step 1: Create and Submit PR with 10 qty
+		pr = make_purchase_receipt(
+			item_code=item_code,
+			qty=10,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=False,
+			supplier_warehouse=supplier_warehouse,
+			cost_center=cost_center_name
+		)
+
+		pr_item_name = pr.items[0].name
+
+		# Step 2: Create and Submit PI against 6 qty
+		pi = make_purchase_invoice(
+			purchase_receipt=pr.name,
+			qty=6,
+			rate=100,
+			item_code=item_code,
+			uom="Nos",
+			stock_uom="Nos",
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=True,
+			supplier_warehouse=supplier_warehouse,
+			expense_account=expense_account_name,
+			cost_center=cost_center_name
+		)
+		for item in pi.items:
+			item.pr_detail = pr_item_name
+			item.purchase_receipt = pr.name
+		pi.save().submit()
+
+		# Step 3: Call the function and assert billed qty
+		billed_qty_map = get_billed_qty_against_purchase_receipt(pr)
+
+		assert pr_item_name in billed_qty_map
+		assert billed_qty_map[pr_item_name] == 6.0
+
+
+	def test_get_wbs_amount_TC_SCK_WBS_TC_SCK_460(self):
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import get_wbs_amount
+
+		# Setup data
+		item_code = make_item(
+			"_Test Item WBS", {"is_stock_item": 1, "stock_uom": "Nos", "valuation_rate": 100}
+		).name
+
+		company = setup_test_company_defaults()
+		warehouse = create_warehouse("_Test WBS Warehouse", company=company.name)
+		supplier = create_supplier()
+		supplier_warehouse = create_warehouse("_Test Warehouse 1", {"company": company.name})
+
+		# Create PR with WBS-tagged items
+		pr = make_purchase_receipt(
+			item_code=item_code,
+			qty=2,
+			rate=100,
+			company=company.name,
+			warehouse=warehouse,
+			supplier=supplier.name,
+			do_not_submit=True,
+			supplier_warehouse=supplier_warehouse
+		)
+		
+		def create_wbs_structure(wbs_name, company):
+			if not frappe.db.exists("Work Breakdown Structure", wbs_name):
+				# Create a dummy project first (WBS requires one)
+				project_name = f"Test Project for {wbs_name}"
+				if not frappe.db.exists("Project", project_name):
+					frappe.get_doc({
+						"doctype": "Project",
+						"project_name": project_name,
+						"company": company,
+						"expected_start_date": frappe.utils.nowdate(),
+					}).insert()
+
+				wbs_doc = frappe.get_doc({
+					"doctype": "Work Breakdown Structure",
+					"wbs_name": wbs_name,
+					"project": project_name,
+					"company": company,
+					"is_group": 0,
+				}).insert()
+				return wbs_doc.name
+
+			return wbs_name
+
+
+
+		wbs_name1=create_wbs_structure("WBS-001", company.name)
+		wbs_name2=create_wbs_structure("WBS-002", company.name)
+
+		# Inject WBS into the PR items manually
+		pr.items[0].work_breakdown_structure = wbs_name1
+		pr.items[0].amount = 200
+		pr.append("items", {
+			"item_code": item_code,
+			"qty": 1,
+			"rate": 100,
+			"amount": 100,
+			"warehouse": warehouse,
+			"work_breakdown_structure": wbs_name1
+		})
+		pr.append("items", {
+			"item_code": item_code,
+			"qty": 3,
+			"rate": 100,
+			"amount": 300,
+			"warehouse": warehouse,
+			"work_breakdown_structure": wbs_name2
+		})
+		pr.save()
+
+		# Call real method on real Purchase Receipt
+		self.assertEqual(get_wbs_amount(pr,wbs_name1), 300)
+		self.assertEqual(get_wbs_amount(pr,wbs_name2), 300)
+		self.assertEqual(get_wbs_amount(pr,"WBS-XYZ"), 0)
+
+	def test_validate_available_budget_paths_TC_SCK_461(self):
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import PurchaseReceipt
+		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import validate_available_budget
+		company = setup_test_company_defaults().name
+
+		def create_wbs_structure(wbs_name, company):
+			if not frappe.db.exists("Work Breakdown Structure", wbs_name):
+				# Create a dummy project first (WBS requires one)
+				project_name = f"Test Project for {wbs_name}"
+				if not frappe.db.exists("Project", project_name):
+					frappe.get_doc({
+						"doctype": "Project",
+						"project_name": project_name,
+						"company": company,
+						"expected_start_date": frappe.utils.nowdate(),
+					}).insert()
+
+				wbs_doc = frappe.get_doc({
+					"doctype": "Work Breakdown Structure",
+					"wbs_name": wbs_name,
+					"project": project_name,
+					"company": company,
+					"is_group": 0,
+				}).insert()
+				return wbs_doc.name
+
+			return wbs_name
+		# Setup 3 WBS structures for different paths
+		wbs_ok = create_wbs_structure("WBS-OK", company)
+		wbs_stop = create_wbs_structure("WBS-STOP", company)
+		wbs_warn = create_wbs_structure("WBS-WARN", company)
+
+		# Mock helper functions
+		def fake_check_budget(wbs, amt, doctype, posting_date):
+			if "STOP" in wbs:
+				return {"available_bgt": -500, "action": "Stop", "wbs": wbs}
+			elif "WARN" in wbs:
+				return {"available_bgt": -300, "action": "Warn", "wbs": wbs}
+			else:
+				return {"available_bgt": 1000, "action": "Stop", "wbs": wbs}
+
+		def fake_get_wbs_amount(self, wbs):
+			return sum(i.amount for i in self.items if i.work_breakdown_structure == wbs)
+
+		# Patch the functions
+		PurchaseReceipt.get_wbs_amount = fake_get_wbs_amount
+		import erpnext.stock.doctype.purchase_receipt.purchase_receipt as pr_module
+		pr_module.check_available_budget = fake_check_budget
+
+		def make_doc(wbs_list):
+			doc = frappe.new_doc("Purchase Receipt")
+			doc.company = company
+			doc.posting_date = frappe.utils.today()
+			for wbs in wbs_list:
+				doc.append("items", {
+					"item_code": "_Test Item",
+					"qty": 1,
+					"rate": 100,
+					"amount": 100,
+					"work_breakdown_structure": wbs
+				})
+			return doc
+
+		# Case 1: Single WBS, budget OK → no error
+		doc = make_doc([wbs_ok])
+		validate_available_budget(doc)
+
+		# Case 2: Single WBS, budget exceeded, action = Stop → should throw
+		doc = make_doc([wbs_stop])
+		with self.assertRaises(frappe.ValidationError):
+			validate_available_budget(doc)
+
+		# Case 3: Single WBS, budget exceeded, action = Warn → should not throw
+		doc = make_doc([wbs_warn])
+		validate_available_budget(doc)
+
+		# Case 4: Multiple WBS, one STOP → should throw
+		doc = make_doc([wbs_ok, wbs_stop])
+		with self.assertRaises(frappe.ValidationError):
+			validate_available_budget(doc)
+
+		# Case 5: Multiple WBS, all OK/WARN → should pass
+		doc = make_doc([wbs_ok, wbs_warn])
+		validate_available_budget(doc)
+
+		# Case 6: No WBS → should pass
+		doc = frappe.new_doc("Purchase Receipt")
+		doc.company = company
+		doc.append("items", {"item_code": "_Test Item", "qty": 1, "rate": 100, "amount": 100})
+		validate_available_budget(doc)
+
+
+
+def setup_test_company_defaults(company_name="_Test Company"):
 	from frappe.defaults import set_default
 
 	# Create Company if it doesn't exist
@@ -6150,6 +6684,7 @@ def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"
 		).insert()
 
 	company = frappe.get_doc("Company", company_name)
+	abbreviation=company.abbr
 
 	# Create root account group if needed
 	if not frappe.db.exists("Account", f"Application of Funds - {abbreviation}"):
@@ -6163,7 +6698,6 @@ def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"
 			}
 		)
 		account.insert(ignore_mandatory=True)
-
 	# Account helper
 	def ensure_account(name, root_type="Asset"):
 		full_name = f"{name} - {abbreviation}"
@@ -6174,7 +6708,7 @@ def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"
 					"account_name": name,
 					"company": company_name,
 					"root_type": root_type,
-					"parent_account": f"Application of Funds - {abbreviation}",
+					"parent_account":  f"Application of Funds - {abbreviation}",
 					"is_group": 0,
 				}
 			).insert()
