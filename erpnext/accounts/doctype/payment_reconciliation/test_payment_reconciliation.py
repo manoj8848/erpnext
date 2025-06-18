@@ -19,6 +19,7 @@ from erpnext.accounts.party import get_party_account
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
 from erpnext.stock.doctype.item.test_item import create_item
+from erpnext.accounts.doctype.payment_reconciliation.payment_reconciliation import PaymentReconciliation
 
 test_dependencies = ["Item"]
 
@@ -2980,6 +2981,71 @@ class TestPaymentReconciliation(FrappeTestCase):
 			self.assertEqual(data.get("invoice_number"), invoices[0].get("invoice_number"))
 			self.assertEqual(data.get("reference_name"), payments[0].get("reference_name"))
 
+	def test_custom_save_TC_ACC_205(self):
+		doc = frappe.get_doc({
+            "doctype": "Payment Reconciliation",
+            "title": "Test Save"
+        })
+		doc.save() # no assert required
+
+	def test_db_insert_override_TC_ACC_206(self):
+		doc = frappe.get_doc({
+            "doctype": "Payment Reconciliation",
+            "title": "Test Insert"
+        })
+		doc.db_insert() # no assert required
+
+	def test_db_update_override_TC_ACC_207(self):
+		doc = frappe.get_doc({
+            "doctype": "Payment Reconciliation",
+            "title": "Test Update"
+        })
+		doc.db_update() # no assert required
+
+	def test_static_get_list_TC_ACC_208(self):
+		result = PaymentReconciliation.get_list(args={})
+		self.assertIsNone(result)	
+
+	def test_static_get_count_TC_ACC_209(self):
+		result = PaymentReconciliation.get_count(args={})
+		self.assertIsNone(result)	
+
+	def test_static_get_stats_TC_ACC_210(self):
+		result = PaymentReconciliation.get_stats(args={})
+		self.assertIsNone(result)
+
+	@patch("erpnext.accounts.doctype.payment_reconciliation.payment_reconciliation.get_dimensions")
+	def test_get_queries_for_dimension_filters_TC_ACC_211(self, mock_get_dimensions):
+        # Create a fake dimension with required properties
+		class DummyDimension:
+			fieldname = "test_dimension"
+			document_type = "Test Tree Doctype"
+
+		mock_get_dimensions.return_value = [[DummyDimension()]]
+
+        # Create a test tree doctype with 'company' field
+		if not frappe.db.table_exists("Test Tree Doctype"):
+			frappe.get_doc({
+                "doctype": "DocType",
+                "name": "Test Tree Doctype",
+                "module": "Custom",
+                "custom": 1,
+                "is_tree": 1,
+                "fields": [
+                    {"fieldname": "company", "fieldtype": "Link", "options": "Company"}
+                ]
+            }).insert()
+
+		result = frappe.call(
+            "erpnext.accounts.doctype.payment_reconciliation.payment_reconciliation.get_queries_for_dimension_filters",
+            company="_Test Company"
+        )
+
+        # Assertions
+		self.assertEqual(len(result), 1)
+		filters = result[0]["filters"]
+		self.assertEqual(filters.get("company"), "_Test Company")
+		self.assertEqual(filters.get("is_group"), 0)
 
 def make_customer(customer_name, currency=None):
 	if not frappe.db.exists("Customer", customer_name):
