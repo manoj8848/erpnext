@@ -7,10 +7,10 @@ from frappe.utils import today
 
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
-from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
-from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 from erpnext.accounts.party import get_party_account
+from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
 from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 
 
 class TestUnreconcilePayment(AccountsTestMixin, FrappeTestCase):
@@ -418,7 +418,6 @@ class TestUnreconcilePayment(AccountsTestMixin, FrappeTestCase):
 		self.assertEqual(pe.unallocated_amount, 110)
 		self.disable_advance_as_liability()
 
-
 	def test_07_adv_from_so_to_invoice(self):
 		self.enable_advance_as_liability()
 		so = self.create_sales_order()
@@ -458,3 +457,50 @@ class TestUnreconcilePayment(AccountsTestMixin, FrappeTestCase):
 		so.reload()
 		self.assertEqual(so.advance_paid, 1000)
 		self.disable_advance_as_liability()
+
+	def test_doc_has_references_codecov(self):
+		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.selling.doctype.customer.test_customer import get_customer_dict
+
+		from .unreconcile_payment import doc_has_references, get_linked_payments_for_doc
+
+		customer = frappe.get_doc(get_customer_dict("_Test Unreconcile Payment Customer")).insert(
+			ignore_permissions=True
+		)
+		item = make_test_item("__Test Unreconcile Item")
+		si = create_sales_invoice(item_code=item.item_code, customer=customer.name, do_not_save=True)
+		si.insert(ignore_permissions=True)
+		si.submit()
+		self.assertEqual(si.docstatus, 1)
+
+		pe = get_payment_entry(si.doctype, si.name)
+		pe.insert(ignore_permissions=True)
+		pe.submit()
+		self.assertEqual(pe.docstatus, 1)
+
+		# payment entry reference
+		per = doc_has_references(pe.doctype, pe.name)
+		self.assertEqual(per, 1)
+
+		# sales invoice reference
+		sir = doc_has_references(si.doctype, si.name)
+		self.assertEqual(sir, 1)
+
+		linked_pe_doc = get_linked_payments_for_doc(pe.company, pe.doctype, pe.name)
+		if linked_pe_doc:
+			for row in linked_pe_doc:
+				self.assertEqual(row.get("company"), "_Test Company")
+				self.assertEqual(row.get("voucher_type"), "Sales Invoice")
+				self.assertEqual(row.get("voucher_no"), si.name)
+				self.assertEqual(row.get("allocated_amount"), 100)
+
+		linked_si_doc = get_linked_payments_for_doc(si.company, si.doctype, si.name)
+		if linked_si_doc:
+			for row in linked_si_doc:
+				self.assertEqual(row.get("company"), "_Test Company")
+				self.assertEqual(row.get("voucher_type"), "Payment Entry")
+				self.assertEqual(row.get("voucher_no"), pe.name)
+				self.assertEqual(row.get("allocated_amount"), 100)
+
+		self.assertFalse(get_linked_payments_for_doc(si.doctype, si.name))

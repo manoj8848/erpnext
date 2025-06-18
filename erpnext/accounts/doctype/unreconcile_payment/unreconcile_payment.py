@@ -23,7 +23,7 @@ class UnreconcilePayment(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.unreconcile_payment_entries.unreconcile_payment_entries import (
