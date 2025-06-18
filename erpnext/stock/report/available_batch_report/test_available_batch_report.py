@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today
-
+from erpnext.stock.doctype.stock_entry.test_stock_entry import get_or_create_fiscal_year
 from erpnext.stock.report.available_batch_report import available_batch_report
 
 
@@ -307,36 +307,36 @@ def create_stock_entry(item, warehouse, batch, qty):
 	stock_entry.submit()
 
 
-def get_or_create_fiscal_year(company):
-	from datetime import datetime
+# def get_or_create_fiscal_year(company):
+# 	from datetime import datetime
 
-	current_date = datetime.today()
-	formatted_date = current_date.strftime("%d-%m-%Y")
-	existing_fy = frappe.get_all(
-		"Fiscal Year",
-		filters={
-			"year_start_date": ["<=", formatted_date],
-			"year_end_date": [">=", formatted_date],
-			"disabled": 0,
-		},
-		fields=["name"],
-	)
+# 	current_date = datetime.today()
+# 	formatted_date = current_date.strftime("%d-%m-%Y")
+# 	existing_fy = frappe.get_all(
+# 		"Fiscal Year",
+# 		filters={
+# 			"year_start_date": ["<=", formatted_date],
+# 			"year_end_date": [">=", formatted_date],
+# 			"disabled": 0,
+# 		},
+# 		fields=["name"],
+# 	)
 
-	if existing_fy:
-		fiscal_year = frappe.get_doc("Fiscal Year", existing_fy[0].name)
-		for years in fiscal_year.companies:
-			if years.company == company:
-				pass
-			else:
-				fiscal_year.append("companies", {"company": company})
-				fiscal_year.save()
-	else:
-		current_year = datetime.now().year
-		first_date = f"01-01-{current_year}"
-		last_date = f"31-12-{current_year}"
-		fiscal_year = frappe.new_doc("Fiscal Year")
-		fiscal_year.year = f"{current_year}"
-		fiscal_year.year_start_date = first_date
-		fiscal_year.year_end_date = last_date
-		fiscal_year.append("companies", {"company": company})
-		fiscal_year.save()
+# 	if existing_fy:
+# 		fiscal_year = frappe.get_doc("Fiscal Year", existing_fy[0].name)
+# 		for years in fiscal_year.companies:
+# 			if years.company == company:
+# 				pass
+# 			else:
+# 				fiscal_year.append("companies", {"company": company})
+# 				fiscal_year.save()
+# 	else:
+# 		current_year = datetime.now().year
+# 		first_date = f"01-01-{current_year}"
+# 		last_date = f"31-12-{current_year}"
+# 		fiscal_year = frappe.new_doc("Fiscal Year")
+# 		fiscal_year.year = f"{current_year}"
+# 		fiscal_year.year_start_date = first_date
+# 		fiscal_year.year_end_date = last_date
+# 		fiscal_year.append("companies", {"company": company})
+# 		fiscal_year.save()
