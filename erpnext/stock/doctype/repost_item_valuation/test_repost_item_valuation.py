@@ -222,6 +222,186 @@ class TestRepostItemValuation(FrappeTestCase, StockTestMixin):
 		with self.assertRaises(Exception,msg=msg):
 			repost(repost_item_valuation)
 		riv.repost_sl_entries = original_fn
+
+	# codecov
+	def test_recreate_stock_ledger_entries_TC_SCK_451(self):
+		from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import repost
+		import erpnext.stock.doctype.repost_item_valuation.repost_item_valuation as riv
+
+		company = "_Test Company"
+		warehouse = "Stores - _TC"
+		if not frappe.db.exists("Company", company):
+			create_child_company().company
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+
+		item = make_item("Repost item")
+		warehouse = "_Test Warehouse - _TC"
+		stock_entry = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Receipt",
+		"company": company,
+		"items": [{
+			"item_code": item.name,
+			"qty": 1,
+			"t_warehouse": warehouse,
+			"basic_rate": 100
+			}]
+		})
+		stock_entry.insert(ignore_permissions=True)
+		stock_entry.submit()
+		
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		repost_item_valuation = frappe.get_doc({
+			"doctype": "Repost Item Valuation",
+			"based_on": "Transaction",
+			"status": "",
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"recreate_stock_ledgers":1,
+			"company": company,
+			"update_stock_ledger":1,
+			"allow_negative_stock": 1
+		})
+		repost_item_valuation.insert()
+		frappe.flags.in_test = False
+		repost(repost_item_valuation)
+
+	# codecov
+	def test_recreate_stock_ledger_entries_TC_SCK_468(self):
+		from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import repost
+		import erpnext.stock.doctype.repost_item_valuation.repost_item_valuation as riv
+
+		company = "_Test Company"
+		warehouse = "Stores - _TC"
+		if not frappe.db.exists("Company", company):
+			create_child_company().company
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+
+		item = make_item("Repost item")
+		warehouse = "_Test Warehouse - _TC"
+		stock_entry = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Receipt",
+		"company": company,
+		"items": [{
+			"item_code": item.name,
+			"qty": 1,
+			"t_warehouse": warehouse,
+			"basic_rate": 100
+			}]
+		})
+		stock_entry.insert(ignore_permissions=True)
+		stock_entry.submit()
+		
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		repost_item_valuation = frappe.get_doc({
+			"doctype": "Repost Item Valuation",
+			"based_on": "Transaction",
+			"status": "",
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"recreate_stock_ledgers":1,
+			"company": company,
+			"update_stock_ledger":1,
+			"allow_negative_stock": 1
+		})
+		repost_item_valuation.insert()
+		frappe.flags.in_test = False
+		repost(repost_item_valuation)
+
+		# codecov
+	def test_remove_attached_file_TC_SCK_470(self):
+		from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import repost
+		import erpnext.stock.doctype.repost_item_valuation.repost_item_valuation as riv
+
+		company = "_Test Company"
+		warehouse = "Stores - _TC"
+		if not frappe.db.exists("Company", company):
+			create_child_company().company
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+
+		item = make_item("Repost item")
+		warehouse = "_Test Warehouse - _TC"
+		stock_entry = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Receipt",
+		"company": company,
+		"items": [{
+			"item_code": item.name,
+			"qty": 1,
+			"t_warehouse": warehouse,
+			"basic_rate": 100
+			}]
+		})
+		stock_entry.insert(ignore_permissions=True)
+		stock_entry.submit()
+		
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+
+		repost_item_valuation = frappe.get_doc({
+			"doctype": "Repost Item Valuation",
+			"based_on": "Transaction",
+			"status": "",
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"recreate_stock_ledgers":0,
+			"company": company,
+			"update_stock_ledger":1,
+			"allow_negative_stock": 1
+		})
+		repost_item_valuation.insert()
+		frappe.flags.in_test = False
+		repost(repost_item_valuation)
 		
 	def test_repost_time_slot(self):
 		repost_settings = frappe.get_doc("Stock Reposting Settings")
