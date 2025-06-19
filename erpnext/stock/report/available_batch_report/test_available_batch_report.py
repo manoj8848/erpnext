@@ -12,12 +12,12 @@ class TestAvailableBatchReport(FrappeTestCase):
 		self.company = create_company("_Test Company")
 		get_or_create_fiscal_year("_Test Company")
 
-		if not frappe.db.exists("Warehouse", "Stores - W1 - _TC"):
+		if not frappe.db.exists("Warehouse", "Stores - _TC"):
 			self.warehouse = frappe.get_doc(
 				{"doctype": "Warehouse", "warehouse_name": "Stores - W1", "company": "_Test Company"}
 			).insert()
 		else:
-			self.warehouse = frappe.get_doc("Warehouse", "Stores - W1 - _TC")
+			self.warehouse = frappe.get_doc("Warehouse", "Stores - _TC")
 
 		self.item = create_item("TEST-ITEM-100")
 		self.batch = create_batch("BATCH-001", self.item, self.warehouse)
