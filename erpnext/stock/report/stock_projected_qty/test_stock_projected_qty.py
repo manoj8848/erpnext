@@ -32,6 +32,16 @@ class TestStockReorderReportExecute(FrappeTestCase):
 		if not frappe.db.exists("UOM", self.uom_name):
 			frappe.get_doc({"doctype": "UOM", "uom_name": self.uom_name}).insert()
 
+		# Create stock entry for projected_qty
+		frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"stock_entry_type": "Material Receipt",
+				"company": self.company,
+				"items": [{"item_code": self.item_code.name, "qty": 5, "t_warehouse": self.warehouse}],
+			}
+		).insert().submit()
+
 	def test_execute_with_item_code_filter_T_SPQ_001(self):
 		"""Ensure only filtered item_code is returned in execute()"""
 		columns, data = execute({"item_code": "TEST-STOCK-ITEM"})
