@@ -1276,6 +1276,7 @@ def get_serial_batch_from_data(item_code, kwargs):
 	serial_nos = []
 	batch_nos = []
 	if kwargs.get("serial_nos"):
+		
 		data = parse_serial_nos(kwargs.get("serial_nos"))
 		for serial_no in data:
 			if not serial_no:
@@ -1283,10 +1284,8 @@ def get_serial_batch_from_data(item_code, kwargs):
 			serial_nos.append({"serial_no": serial_no, "qty": 1})
 
 		make_serial_nos(item_code, serial_nos)
-
 	if kwargs.get("_has_serial_nos"):
 		return serial_nos
-
 	return serial_nos, batch_nos
 
 
@@ -1299,7 +1298,6 @@ def create_serial_nos(item_code, serial_nos):
 			"_has_serial_nos": True,
 		},
 	)
-
 	return serial_nos
 
 
@@ -1692,7 +1690,6 @@ def get_serial_and_batch_ledger(**kwargs):
 
 	sle_table = frappe.qb.DocType("Stock Ledger Entry")
 	serial_batch_table = frappe.qb.DocType("Serial and Batch Entry")
-
 	query = (
 		frappe.qb.from_(sle_table)
 		.inner_join(serial_batch_table)
@@ -2387,7 +2384,6 @@ def get_picked_serial_nos(item_code, warehouse=None) -> list[str]:
 			query = query.where(table.warehouse.isin(warehouse))
 		else:
 			query = query.where(table.warehouse == warehouse)
-
 	data = query.run(as_dict=True)
 	if not data:
 		return []
@@ -2566,7 +2562,7 @@ def is_serial_batch_no_exists(item_code, type_of_transaction, serial_no=None, ba
 	if serial_no and not frappe.db.exists("Serial No", serial_no):
 		if type_of_transaction != "Inward":
 			frappe.throw(_("Serial No {0} does not exists").format(serial_no))
-
+		
 		make_serial_no(serial_no, item_code)
 
 	if batch_no and not frappe.db.exists("Batch", batch_no):
