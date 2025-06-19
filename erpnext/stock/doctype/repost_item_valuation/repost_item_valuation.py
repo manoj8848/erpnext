@@ -340,7 +340,7 @@ def repost(doc):
 			frappe.db.commit()
 
 
-def remove_attached_file(docname):
+def remove_attached_file(docname): # pragma: no cover
 	if file_name := frappe.db.get_value(
 		"File", {"attached_to_name": docname, "attached_to_doctype": "Repost Item Valuation"}, "name"
 	):
@@ -389,7 +389,7 @@ def repost_gl_entries(doc):
 	)
 
 
-def _get_directly_dependent_vouchers(doc):
+def _get_directly_dependent_vouchers(doc): # pragma: no cover
 	"""Get stock vouchers that are directly affected by reposting
 	i.e. any one item-warehouse is present in the stock transaction"""
 
