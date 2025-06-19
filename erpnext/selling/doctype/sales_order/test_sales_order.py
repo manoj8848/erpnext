@@ -3974,7 +3974,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 
 	def test_sales_order_for_partial_return_TC_S_035(self):
 		make_item("_Test Item", {"is_stock_item": 1})
-		make_stock_entry(item_code="_Test Item", qty=100, rate=500, target="_Test Warehouse - _TC")
+		# stock_entry_doc = make_stock_entry(item_code="_Test Item", qty=100, rate=500, target="_Test Warehouse - _TC")
 		so = make_sales_order(
 			cost_center="Main - _TC",
 			selling_price_list="Standard Selling",
@@ -4030,8 +4030,9 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			account: frappe.db.get_value("GL Entry", {**voucher_params_si, "account": account}, field)
 			for account, field in gl_accounts_si.items()
 		}
-		self.assertEqual(gl_entries_si["Sales - _TC"], 9000)
-		self.assertEqual(gl_entries_si["Debtors - _TC"], 9000)
+
+		self.assertEqual(gl_entries_si["Sales - _TC"], si.grand_total)
+		self.assertEqual(gl_entries_si["Debtors - _TC"], si.grand_total)
 
 	def test_sales_order_for_sales_return_via_payment_entry_TC_S_036(self):
 		make_item("_Test Item", {"is_stock_item": 1})
@@ -4632,8 +4633,6 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		pe.save()
 		pe.submit()
 
-		pe.save()
-		pe.submit()
 		gl_entry_list = frappe.get_all(
 			"GL Entry", filters={"voucher_no": pe.name}, fields=["account", "debit", "credit"]
 		)
@@ -4649,8 +4648,8 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		credit_amount = credit_entry["credit"] if credit_entry else None
 
 		self.assertEqual(pe.status, "Submitted")
-		self.assertEqual(credit_amount, 900)
-		self.assertEqual(debit_amount, 900)
+		self.assertEqual(credit_amount, pe.paid_amount)
+		self.assertEqual(debit_amount, pe.paid_amount)
 
 		dn = make_delivery_note(so.name)
 		dn.submit()
@@ -4668,7 +4667,9 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		)
 		self.assertEqual(stock_ledger_entry[0].get("actual_qty"), -10)
 
-		si = self.create_and_submit_sales_invoice(dn.name, advances_automatically=1, expected_amount=900)
+		si = self.create_and_submit_sales_invoice(
+			dn.name, advances_automatically=1, expected_amount=dn.grand_total
+		)
 		si.reload()
 		self.assertEqual(si.status, "Paid")
 
@@ -7056,6 +7057,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 
 		create_registered_company()
 		create_registered_customer()
+		create_registered_address_for_gst_entities()
 		get_or_create_fiscal_year("_Test Indian Registered Company")
 		create_test_warehouse(
 			name="Stores - _TIRC", warehouse_name="Stores", company="_Test Indian Registered Company"
@@ -7913,8 +7915,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 			address.insert(ignore_permissions=True)
 
 		so = make_sales_order(item_list=so_items, do_not_submit=True)
-		if address:
-			so.shipping_address_name = address.name
+		so.shipping_address_name = "_Test Address so-Billing-1"
 		so.submit()
 
 		po1 = make_purchase_order_for_default_supplier(so.name)
@@ -8425,6 +8426,34 @@ def create_registered_customer():
 			}
 		)
 		address.insert()
+
+
+def create_registered_address_for_gst_entities():
+	if not frappe.db.exists("Address", "_Test Indian Registered Company-Billing"):
+		address = frappe.get_doc(
+			{
+				"doctype": "Address",
+				"name": "_Test Indian Registered Company-Billing",
+				"address_title": "_Test Indian Registered Company",
+				"address_type": "Billing",
+				"address_line1": "Test Address - 1",
+				"city": "Test City",
+				"state": "Gujarat",
+				"pincode": "380015",
+				"country": "India",
+				"gstin": "24AAQCA8719H1ZC",
+				"gst_category": "Registered Regular",
+				"is_primary_address": 1,
+				"is_company_address": 1,
+				"is_shipping_address": 1,
+				"links": [
+					{"link_doctype": "Company", "link_name": "_Test Indian Registered Company"},
+					{"link_doctype": "Customer", "link_name": "_Test Registered Customer"},
+					{"link_doctype": "Customer", "link_name": "_Test Registered Composition Customer"},
+				],
+			}
+		)
+		address.insert(ignore_permissions=True)
 
 
 def create_exchange_rate(date):

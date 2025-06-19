@@ -4,9 +4,6 @@ from frappe.utils import nowdate
 
 from erpnext.selling.doctype.product_bundle.test_product_bundle import make_product_bundle
 from erpnext.stock.doctype.item.test_item import create_item
-
-# from erpnext.accounts.doctype.company.test_company import create_company
-# from erpnext.stock.doctype.product_bundle.product_bundle import make_product_bundle
 from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.report.product_bundle_balance.product_bundle_balance import execute
@@ -28,10 +25,10 @@ class TestProductBundleBalance(FrappeTestCase):
 
 		# Parent (bundle) item
 		self.parent_item = create_item(
-			item_code="_Test Product Bundle Item New", is_stock_item=0, company=self.company
+			item_code="_Test Product Bundle Item New -Test", is_stock_item=0, company=self.company
 		)
 
-		make_product_bundle("_Test Product Bundle Item New", ["BUNDLE-CHILD-1", "BUNDLE-CHILD-2"], 2)
+		make_product_bundle("_Test Product Bundle Item New -Test", ["BUNDLE-CHILD-1", "BUNDLE-CHILD-2"], 2)
 
 		# Add stock for child items: 5 units of child 1, 9 units of child 2
 		make_stock_entry(

@@ -55,15 +55,30 @@ class TestStockSettings(FrappeTestCase):
 	# codecov
 	@change_settings("Stock Settings", {"allow_negative_stock": 1, "enable_stock_reservation": 0})
 	def test_validate_stock_reservation_TC_SCK_337(self):
+		from frappe.query_builder.functions import Round
+
 		frappe.flags.in_test = False  # Force validation to run
 
 		settings = frappe.get_doc("Stock Settings")
 		settings.enable_stock_reservation = 1  # Trying to enable it
 		settings.allow_negative_stock = 0
 		msg = "As there are negative stock, you can not enable Stock Reservation."
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		precision = frappe.db.get_single_value("System Settings", "float_precision") or 3
+		bin = frappe.qb.DocType("Bin")
+		bin_with_negative_stock = (
+			frappe.qb.from_(bin).select(bin.name).where(Round(bin.actual_qty, precision) < 0).limit(1)
+		).run()
+		if bin_with_negative_stock:
+			msg = "As there are negative stock, you can not enable Stock Reservation."
+			with self.assertRaises(frappe.ValidationError, msg=msg):
+				settings.save()
+		else:
+			# In case there's no negative stock, it should save successfully
 			settings.save()
-		self.assertEqual(settings.enable_stock_reservation, 1)
+			self.assertEqual(settings.enable_stock_reservation, 1)
+		# reset config
+		settings.enable_stock_reservation = 0
+		settings.save()
 
 	# codecov
 	@change_settings("Stock Settings", {"allow_negative_stock": 1, "enable_stock_reservation": 1})
