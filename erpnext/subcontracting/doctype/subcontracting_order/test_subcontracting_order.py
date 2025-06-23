@@ -7,7 +7,7 @@ from collections import defaultdict
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import flt
-from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
+
 from erpnext.buying.doctype.purchase_order.purchase_order import get_mapped_subcontracting_order
 from erpnext.controllers.subcontracting_controller import (
 	get_materials_from_supplier,
@@ -25,6 +25,7 @@ from erpnext.controllers.tests.test_subcontracting_controller import (
 	make_subcontracted_items,
 	set_backflush_based_on,
 )
+from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
 from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 from erpnext.subcontracting.doctype.subcontracting_order.subcontracting_order import (
@@ -676,7 +677,7 @@ class TestSubcontractingOrder(FrappeTestCase):
 		new_requested_qty = flt(new_requested_qty)
 
 		self.assertEqual(requested_qty, new_requested_qty)
-	
+
 	def test_subcontracting_order_rm_required_items_for_precision(self):
 		item_code = "Subcontracted Item SA9"
 		raw_materials = ["Subcontracted SRM Item 9"]
@@ -727,6 +728,10 @@ def create_subcontracting_order(**args):
 
 	if len(warehouses) == 1:
 		sco.set_warehouse = next(iter(warehouses))
+
+	# Set supplier_warehouse if provided , it is mandatory field
+	if args.get("supplier_warehouse"):
+		sco.supplier_warehouse = args.supplier_warehouse
 
 	if not args.do_not_save:
 		sco.insert()
