@@ -26,7 +26,8 @@ from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.stock_ledger import get_previous_sle, update_entries_after
 from erpnext.stock.tests.test_utils import StockTestMixin
 from erpnext.stock.utils import get_incoming_rate, get_stock_value_on, get_valuation_method
-
+from erpnext.accounts.doctype.account.test_account import create_account
+from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import ensure_parent_account
 
 class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 	@classmethod
@@ -37,41 +38,6 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 
 		if not frappe.db.exists("Company", "_Test Company"):
 			create_company("_Test Company")
-		
-		company = "_Test Company"
-		company_doc = frappe.get_doc("Company","_Test Company")
-		company_abbr=company_doc.abbr
-		currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
-
-		# Ensure root and stock asset accounts exist
-		root_account = frappe.db.exists("Account", f"Assets - {company_abbr}")
-		if not root_account:
-			root_account = frappe.get_doc({
-		        "doctype": "Account",
-		        "account_name": "Test Assets",
-		        "company": company,
-		        "is_group": 1,
-		        "root_type": "Asset",
-		        "parent_account": frappe.get_all("Account", filters={
-		            "company": company, "is_group": 1, "root_type": "Asset"
-		        }, pluck="name", limit=1)[0],
-		        "account_currency": currency,	
-		    }).insert().name
-
-		stock_account = f"Stock Asset - {company_abbr}"
-		if not frappe.db.exists("Account", stock_account):
-			frappe.get_doc({
-		        "doctype": "Account",
-		        "account_name": "Test Stock Asset",
-		        "company": company,
-		        "parent_account": root_account,
-		        "root_type": "Asset",
-		        "is_group": 0,
-		        "account_currency": currency
-		    }).insert()
-
-		frappe.db.set_value("Company", company, "default_inventory_account", stock_account)
-
 		
 		create_warehouse(warehouse_name="_Test Warehouse",company="_Test Company",)
 
@@ -1732,9 +1698,23 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 				"maintain_stock": 1
 			})		
 		# Step 2: Create warehouse
-		warehouse = create_warehouse("_Test WH", company="_Test Company")		
+		warehouse = create_warehouse("_Test WH", company="_Test Company")	
+
+		company=frappe.get_doc("Company","_Test Company")
+		company_abbr=company.abbr
+		parent_account = ensure_parent_account("Parent Stock Account", "_Test Company",company_abbr)
+		w_account=create_account(
+			account_name="Sub Stock Account",
+			parent_account=parent_account,
+			company="_Test Company",
+			account_type="Stock",
+			account_currency="INR"
+		)
+
+		frappe.db.set_value("Warehouse", warehouse, "account", w_account)
+			
 		# Step 3: Create Material Receipt to generate serial numbers
-		se = make_stock_entry(
+		make_stock_entry(
 			item_code="_Test Item Serial",
 			qty=2,
 			target=warehouse,
@@ -1795,9 +1775,20 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 			})
 	
 		warehouse = create_warehouse("_Test WH SBB", company="_Test Company")
-	
+		company=frappe.get_doc("Company","_Test Company")
+		company_abbr=company.abbr
+		parent_account = ensure_parent_account("Parent Stock Account", "_Test Company",company_abbr)
+		w_account=create_account(
+			account_name="Sub Stock Account",
+			parent_account=parent_account,
+			company="_Test Company",
+			account_type="Stock",
+			account_currency="INR"
+		)
+
+		frappe.db.set_value("Warehouse", warehouse, "account", w_account)
 		# Create Stock Entry to generate serials
-		se = make_stock_entry(
+		make_stock_entry(
 			item_code="_Test Item SBB",
 			qty=2,
 			target=warehouse,
@@ -1955,7 +1946,18 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 			})
 
 		warehouse = create_warehouse("_Test WH UVRSN", company="_Test Company")
+		company=frappe.get_doc("Company","_Test Company")
+		company_abbr=company.abbr
+		parent_account = ensure_parent_account("Parent Stock Account", "_Test Company",company_abbr)
+		w_account=create_account(
+			account_name="Sub Stock Account",
+			parent_account=parent_account,
+			company="_Test Company",
+			account_type="Stock",
+			account_currency="INR"
+		)
 
+		frappe.db.set_value("Warehouse", warehouse, "account", w_account)
 		# Material Receipt to create Serial Nos
 		make_stock_entry(
 			item_code="_Test Item UVRSN",
@@ -1993,6 +1995,19 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 		from erpnext.stock.doctype.stock_entry.test_stock_entry import make_stock_entry
 
 		frappe.set_user("Administrator")
+		warehouse = create_warehouse("_Test WH UVRSN2", company="_Test Company")
+		company=frappe.get_doc("Company","_Test Company")
+		company_abbr=company.abbr
+		parent_account = ensure_parent_account("Parent Stock Account", "_Test Company",company_abbr)
+		w_account=create_account(
+			account_name="Sub Stock Account",
+			parent_account=parent_account,
+			company="_Test Company",
+			account_type="Stock",
+			account_currency="INR"
+		)
+
+		frappe.db.set_value("Warehouse", warehouse, "account", w_account)
 
 		# Create item with serial numbers
 		if not frappe.db.exists("Item", "_Test Item UVRSN2"):
@@ -2003,8 +2018,6 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 				"stock_uom": "Nos",
 				"serial_no_series": "SRLUVR2-.#####"
 			})
-
-		warehouse = create_warehouse("_Test WH UVRSN2", company="_Test Company")
 
 		# Material Receipt to generate serial numbers
 		make_stock_entry(
@@ -2111,6 +2124,18 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 
 		item_code = "_Test Item GetItems"
 		warehouse = create_warehouse("_Test Warehouse GI", company="_Test Company")
+		company=frappe.get_doc("Company","_Test Company")
+		company_abbr=company.abbr
+		parent_account = ensure_parent_account("Parent Stock Account", "_Test Company",company_abbr)
+		w_account=create_account(
+			account_name="Sub Stock Account",
+			parent_account=parent_account,
+			company="_Test Company",
+			account_type="Stock",
+			account_currency="INR"
+		)
+
+		frappe.db.set_value("Warehouse", warehouse, "account", w_account)
 
 		if not frappe.db.exists("Item", item_code):
 			make_item(item_code, {"is_stock_item": 1, "valuation_rate": 50})
@@ -2174,23 +2199,18 @@ class TestStockReconciliation(FrappeTestCase, StockTestMixin):
 		doc2.cancel()
 		self.assertTrue(getattr(doc2, "__queued__", False))  # Confirm queue was triggered
 
+	@change_settings("Stock Settings", {"enable_stock_reservation":0,"allow_negative_stock": 1,})
 	def test_has_negative_stock_allowed_behavior(self):
 
 		frappe.set_user("Administrator")
-
-		# Ensure Stock Settings exists
-		settings = frappe.get_single("Stock Settings")
-
-		# --- Case 1: Global negative stock allowed
-		settings.allow_negative_stock = 1
-		settings.save()
 
 		doc = frappe.new_doc("Stock Reconciliation")
 		doc.company = "_Test Company"
 		doc.set("items", [])
 		self.assertTrue(doc.has_negative_stock_allowed())
 
-		# --- Case 2: Global disabled, but item condition met (bundle/batch present and qty == current_qty)
+		# Temporarily disable negative stock
+		settings = frappe.get_single("Stock Settings")
 		settings.allow_negative_stock = 0
 		settings.save()
 

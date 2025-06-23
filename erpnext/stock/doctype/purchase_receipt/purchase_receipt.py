@@ -422,6 +422,7 @@ class PurchaseReceipt(BuyingController):
 		from erpnext.accounts.general_ledger import process_gl_map
 
 		gl_entries = []
+		print(warehouse_account)
 		self.make_item_gl_entries(gl_entries, warehouse_account=warehouse_account)
 		self.make_tax_gl_entries(gl_entries, via_landed_cost_voucher)
 		update_regional_gl_entries(gl_entries, self)
