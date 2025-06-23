@@ -5058,8 +5058,10 @@ class TestStockEntry(FrappeTestCase):
 		source_warehouse = create_warehouse("_Test Source WH", company="_Test Company")
 
 		# Step 3: Create item
-		if not frappe.db.exists("Item", "Test Item"):
-			make_item("Test Item", {"stock_uom": "Nos", "is_stock_item": 1, "has_batch_no": 1})
+		item = make_item("Test Item", {"stock_uom": "Nos", "is_stock_item": 1})
+		if not item.has_batch_no:
+			item.has_batch_no = 1
+			item.save()
 
 		# Also insert the corresponding batch
 		if not frappe.db.exists("Batch", "TEST-BATCH-001"):
@@ -5953,6 +5955,26 @@ class TestStockEntry(FrappeTestCase):
 		# Step 2: Create item
 		item_code = "Test Stock Transfer Item"
 		make_item(item_code, {"is_stock_item": 1, "valuation_rate": 100})
+
+		# Step 2.5: Add stock to source warehouse
+		frappe.get_doc(
+			{
+				"doctype": "Stock Entry",
+				"stock_entry_type": "Material Receipt",
+				"company": "_Test Company",
+				"items": [
+					{
+						"item_code": item_code,
+						"t_warehouse": source_warehouse,
+						"qty": 10,
+						"uom": "Nos",
+						"stock_uom": "Nos",
+						"conversion_factor": 1.0,
+						"rate": 100,
+					}
+				],
+			}
+		).insert().submit()
 
 		# Step 3: Create outgoing stock entry (Material Transfer)
 		outgoing_entry = frappe.get_doc(

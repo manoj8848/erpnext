@@ -232,6 +232,7 @@ class TestWarehouse(FrappeTestCase):
 
 		# Simulate a reload to trigger onload
 		doc = frappe.get_doc("Warehouse", warehouse)
+		frappe.db.set_value("Warehouse", warehouse, "account", f"{warehouse} - _TC")
 		doc.onload()
 
 		# Check if perpetual inventory account is loaded

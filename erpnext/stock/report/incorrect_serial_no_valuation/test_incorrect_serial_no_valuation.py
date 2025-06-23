@@ -145,14 +145,14 @@ class TestIncorrectSerialNoValuationReport(unittest.TestCase):
 		sle.insert()
 		sle.submit()
 
-	def test_empty_filters_returns_balance_row_only_TC_SCK_418(self):
+	def test_empty_filters_returns_balance_row_only_TC_SCK_479(self):
 		columns, data = report_execute({})
 		self.assertEqual(len(data), 1)
 		self.assertEqual(data[0].get("serial_no"), frappe.bold(_("Balance")))
 		self.assertEqual(data[0].get("qty"), 0)
 		self.assertEqual(data[0].get("valuation_rate"), 0)
 
-	def test_balanced_serial_no_excluded_TC_SCK_419(self):
+	def test_balanced_serial_no_excluded_TC_SCK_480(self):
 		serial_no = "SN-BAL-001"
 		self._make_stock_entry(serial_no, qty=1, rate=100, voucher_no="TEST-SN-BAL-IN")
 		out_entry = frappe.get_doc(
@@ -183,7 +183,7 @@ class TestIncorrectSerialNoValuationReport(unittest.TestCase):
 		self.assertNotIn(serial_no, serials[:-1])
 		self.assertEqual(data[-1].get("serial_no"), frappe.bold(_("Balance")))
 
-	def test_negative_qty_triggers_incorrect_TC_SCK_420(self):
+	def test_negative_qty_triggers_incorrect_TC_SCK_481(self):
 		from frappe.utils import add_days
 
 		serial_no = "SN-NEG-QTY-NEW"
@@ -236,7 +236,7 @@ class TestIncorrectSerialNoValuationReport(unittest.TestCase):
 		self.assertTrue(len(total_indexes) > 0)
 		self.assertEqual(data[-1].get("serial_no"), frappe.bold(_("Balance")))
 
-	def test_multiple_serial_nos_TC_SCK_421(self):
+	def test_multiple_serial_nos_TC_SCK_482(self):
 		serial_no_1, _ = self._make_serial_no(rate=100)
 		serial_no_2, _ = self._make_serial_no(rate=150)
 		serial_no_2, stock_entry_2 = self._make_serial_no(rate=150)
@@ -255,13 +255,13 @@ class TestIncorrectSerialNoValuationReport(unittest.TestCase):
 		self.assertEqual(result[0]["serial_no"], serial_no_2)
 		self.assertEqual(result[0]["valuation_rate"], 0)
 
-	def test_missing_serial_no_is_ignored_TC_SCK_422(self):
+	def test_missing_serial_no_is_ignored_TC_SCK_483(self):
 		self._make_stock_entry(serial_no="", qty=1, rate=100, voucher_no="TEST-SN-MISSING")
 		columns, data = report_execute({"item_code": self.item.name})
 		serials = [row.get("serial_no") for row in data]
 		self.assertNotIn("", serials)
 
-	def test_unsubmitted_stock_entry_is_ignored_TC_SCK_423(self):
+	def test_unsubmitted_stock_entry_is_ignored_TC_SCK_484(self):
 		serial_no = "SN-UNSUB"
 		se = frappe.get_doc(
 			{

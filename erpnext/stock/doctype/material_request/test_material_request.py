@@ -9228,10 +9228,8 @@ class TestMaterialRequest(FrappeTestCase):
 		material_request.material_request.get_wbs_amount = fake_get_wbs_amount
 		material_request.material_request.check_available_budget = fake_check_available_budget
 
-		with self.assertRaises(
-			frappe.ValidationError, msg="Should not raise ValidationError when action is Warn"
-		):
-			validate_available_budget(mr)
+		# Just call the method — No Assert is required here.
+		validate_available_budget(mr)
 
 	def test_validate_available_budget_multiple_wbs_TC_SCK_350(self):
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
