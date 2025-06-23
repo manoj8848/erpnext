@@ -1042,7 +1042,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		}
 	}
 
-	due_date(doc) {
+	due_date(doc, cdt) {
 		// due_date is to be changed, payment terms template and/or payment schedule must
 		// be removed as due_date is automatically changed based on payment terms
 
@@ -1937,7 +1937,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 					row_to_modify["cost_center"] = r.message.cost_center;
 				}
 			}
-			
+
 			this.frm.script_manager.copy_from_first_row("items", row_to_modify, ["expense_account", "income_account"]);
 		});
 
