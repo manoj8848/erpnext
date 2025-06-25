@@ -12,7 +12,7 @@ class DunningType(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.dunning_letter_text.dunning_letter_text import DunningLetterText
