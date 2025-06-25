@@ -333,9 +333,12 @@ class TestSerialNo(FrappeTestCase):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
 		from erpnext.stock.doctype.item.test_item import (make_item, get_hsn)
 		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import validate_fiscal_year
 		create_company()
+		validate_fiscal_year("_Test Company")
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
 		create_cost_center(cost_center_name="_Test Cost Center", company="_Test Company")
+
 		item_code = "_Test Item POS"
 
 		item = make_item(
@@ -363,7 +366,7 @@ class TestSerialNo(FrappeTestCase):
 		"payments": [{
 				"default": 1,
 				"mode_of_payment": "Cash",  
-				"account": "_Test Cash - _TC"
+				"account": "Cash - _TC"
 			}],
 		"warehouses": [{
 			"warehouse": warehouse
@@ -412,7 +415,7 @@ class TestSerialNo(FrappeTestCase):
 			"cash_denominations": [
 				{
 					"mode_of_payment": "Cash",
-					"account": "_Test Cash - _TC",
+					"account": "Cash - _TC",
 					"opening_amount": 1000
 				}
 			]
@@ -436,7 +439,7 @@ class TestSerialNo(FrappeTestCase):
 			"payments": [
 				{
 					"mode_of_payment": "Cash",
-					"account": "_Test Cash - _TC",
+					"account": "Cash - _TC",
 					"amount": 1000
 				}
 			]
@@ -455,11 +458,25 @@ class TestSerialNo(FrappeTestCase):
 	def test_auto_fetch_serial_number_basic_TC_SCK_438(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
-		from erpnext.stock.doctype.item.test_item import (make_item, get_hsn)
+		from erpnext.stock.doctype.item.test_item import make_item
 		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import validate_fiscal_year
+
 		create_company("_Test Company")
+		validate_fiscal_year("_Test Company")
 
 		warehouse = create_warehouse("_Test Warehouse Auto Fetch", company="_Test Company")
+
+		account = frappe.get_doc({
+			"doctype": "Account",
+			"account_name": "_Test Inventory Account",
+			"parent_account": "Stock Assets - _TC",
+			"company": "_Test Company",
+			"is_group": 0,
+			"account_type": "Stock"
+		})
+		account.insert()
+		frappe.db.set_value("Warehouse", warehouse, "account", account.name)
 
 		item = make_item("_Test Serial Item Auto", {
 			"has_serial_no": 1,
@@ -467,18 +484,24 @@ class TestSerialNo(FrappeTestCase):
 			"is_stock_item": 1,
 			"has_batch_no": 1,
 			"create_new_batch": 1,
-			"batch_no_series":"AUTO-BATCH-.###",
+			"batch_no_series": "AUTO-BATCH-.###",
 			"valuation_rate": 100
 		})
+
 		se = make_stock_entry(
 			item_code=item.name,
 			qty=2,
-			to_warehouse=warehouse
+			to_warehouse=warehouse,
+			company="_Test Company",
+			purpose="Material Receipt"
 		)
 		se.submit()
+
 		batch = frappe.get_all("Batch", {"item": item.name, "reference_name": se.name})
 		exclude_sr_nos = ["AUTO-SERIAL-001", "AUTO-SERIAL-002"]
 		batch_nos = [d.name for d in batch]
+
+		from erpnext.stock.doctype.serial_no.serial_no import auto_fetch_serial_number
 		sr_nos = auto_fetch_serial_number(
 			qty=2,
 			item_code=item.name,
@@ -488,6 +511,7 @@ class TestSerialNo(FrappeTestCase):
 		)
 
 		assert isinstance(sr_nos, list)
+
   
 def get_auto_serial_nos(kwargs):
 	from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
