@@ -464,7 +464,6 @@ class TestSerialNo(FrappeTestCase):
 
 		create_company("_Test Company")
 		validate_fiscal_year("_Test Company")
-
 		warehouse = create_warehouse("_Test Warehouse Auto Fetch", company="_Test Company")
 
 		account = frappe.get_doc({
@@ -475,9 +474,8 @@ class TestSerialNo(FrappeTestCase):
 			"is_group": 0,
 			"account_type": "Stock"
 		})
-		account.insert()
+		account.insert(ignore_permissions=True)
 		frappe.db.set_value("Warehouse", warehouse, "account", account.name)
-
 		item = make_item("_Test Serial Item Auto", {
 			"has_serial_no": 1,
 			"serial_no_series": "AUTO-SERIAL-.###",
@@ -493,10 +491,10 @@ class TestSerialNo(FrappeTestCase):
 			qty=2,
 			to_warehouse=warehouse,
 			company="_Test Company",
-			purpose="Material Receipt"
+			purpose="Material Receipt",
+			expense_account=account.name
 		)
 		se.submit()
-
 		batch = frappe.get_all("Batch", {"item": item.name, "reference_name": se.name})
 		exclude_sr_nos = ["AUTO-SERIAL-001", "AUTO-SERIAL-002"]
 		batch_nos = [d.name for d in batch]
@@ -511,6 +509,147 @@ class TestSerialNo(FrappeTestCase):
 		)
 
 		assert isinstance(sr_nos, list)
+  
+	def test_validate_warehouse_all_cases_TC_SCK_439(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+
+		create_company("_Test Company")
+		warehouse1 = create_warehouse("Stores", company="_Test Company")
+		warehouse2 = create_warehouse("Finished Goods", company="_Test Company")
+		item = make_item("_Test Item Auto", {
+			"has_serial_no": 1,
+			"serial_no_series": "AUTO-SERIAL-.###"
+		})
+		
+		pr = make_purchase_receipt(
+			item_code=item.name,
+			warehouse=warehouse1,
+			qty=1,
+			rate=100,
+			do_not_submit=True
+		)
+		pr.submit()
+
+		serial_no = frappe.db.get_value("Serial No", {"purchase_document_no": pr.name}, "name")
+		sn = frappe.get_doc("Serial No", serial_no)  
+
+		local_sn = frappe.new_doc("Serial No")
+		local_sn.__islocal = True
+		local_sn.validate_warehouse() 
+
+		sn.__islocal = False
+		sn.item_code = "WRONG-ITEM"
+		sn.via_stock_ledger = False
+		with self.assertRaises(frappe.ValidationError) as e1:
+			sn.validate_warehouse()
+		self.assertIn("Item Code cannot be changed", str(e1.exception))
+
+		sn = frappe.get_doc("Serial No", serial_no)
+		sn.__islocal = False
+		sn.item_code = item.name
+		sn.warehouse = warehouse2
+		sn.via_stock_ledger = False
+		with self.assertRaises(frappe.ValidationError) as e2:
+			sn.validate_warehouse()
+		self.assertIn("Warehouse cannot be changed", str(e2.exception))
+
+	def test_set_maintenance_status_all_cases_TC_SCK_440(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from frappe.utils import add_days, nowdate
+
+		create_company("_Test Company")
+		warehouse = create_warehouse("Stores", company="_Test Company")
+		item = make_item("_Test Item Auto 1", {"is_stock_item": 1, "has_serial_no": 1, "serial_no_series": "AUTO-SERIAL-.###"})
+		pr = make_purchase_receipt(
+			item_code=item.name,
+			warehouse=warehouse,
+			qty=1,
+			rate=100,
+		)
+		pr.submit()
+
+		serial_no = frappe.db.get_value("Serial No", {"purchase_document_no": pr.name}, "name")
+		sn = frappe.get_doc("Serial No", serial_no)
+
+		sn.warranty_expiry_date = None
+		sn.amc_expiry_date = None
+		sn.set_maintenance_status()
+		self.assertIsNone(sn.maintenance_status)
+
+		sn.warranty_expiry_date = add_days(nowdate(), -1)
+		sn.amc_expiry_date = None
+		sn.set_maintenance_status()
+		self.assertEqual(sn.maintenance_status, "Out of Warranty")
+
+		sn.warranty_expiry_date = None
+		sn.amc_expiry_date = add_days(nowdate(), -1)
+		sn.set_maintenance_status()
+		self.assertEqual(sn.maintenance_status, "Out of AMC")
+
+		sn.amc_expiry_date = add_days(nowdate(), 5)
+		sn.set_maintenance_status()
+		self.assertEqual(sn.maintenance_status, "Under AMC")
+
+		sn.warranty_expiry_date = add_days(nowdate(), 5)
+		sn.set_maintenance_status()
+		self.assertEqual(sn.maintenance_status, "Under Warranty")
+
+	def test_serial_generation_and_html_via_purchase_receipt_TC_SCK_441(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.stock.doctype.serial_no.serial_no import (
+			get_available_serial_nos,
+			get_items_html,
+		)
+		import frappe
+
+		create_company("_Test Company")
+		warehouse = create_warehouse("Stores", company="_Test Company")
+		item = make_item("_Test Item Auto 2", {
+			"is_stock_item": 1,
+			"has_serial_no": 1,
+			"serial_no_series": "AUTO-SERIAL-.###"
+		})
+
+		pr = make_purchase_receipt(
+			item_code=item.name,
+			warehouse=warehouse,
+			qty=2,
+			rate=100,
+			do_not_submit=True  
+		)
+		pr.submit()
+
+		serial_nos = frappe.get_all("Serial No", filters={"purchase_document_no": pr.name}, pluck="name")
+		self.assertEqual(len(serial_nos), 2)
+		
+		html = get_items_html(serial_nos, item.name)
+		self.assertIn(item.name, html)
+		self.assertIn("Serial Numbers", html)
+		for sn in serial_nos:
+			self.assertIn(sn, html)
+
+		new_serials = get_available_serial_nos("AUTO-SERIAL-.###", 2)
+		self.assertEqual(len(new_serials), 2)
+		for sn in new_serials:
+			self.assertTrue(sn.startswith("AUTO-SERIAL-"))
+			frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": sn,
+				"item_code": item.name
+			}).insert()
+
+		extra_html = get_items_html(new_serials, item.name)
+		for sn in new_serials:
+			self.assertIn(sn, extra_html)
 
   
 def get_auto_serial_nos(kwargs):
