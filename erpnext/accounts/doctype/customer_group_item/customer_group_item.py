@@ -11,7 +11,7 @@ class CustomerGroupItem(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		customer_group: DF.Link | None

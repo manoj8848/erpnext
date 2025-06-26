@@ -11,12 +11,26 @@ class DistributionPercentage(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		allocation: DF.Percent
 		budget: DF.Currency
-		month: DF.Literal["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+		month: DF.Literal[
+			"",
+			"January",
+			"February",
+			"March",
+			"April",
+			"May",
+			"June",
+			"July",
+			"August",
+			"September",
+			"October",
+			"November",
+			"December",
+		]
 		parent: DF.Data
 		parentfield: DF.Data
 		parenttype: DF.Data
