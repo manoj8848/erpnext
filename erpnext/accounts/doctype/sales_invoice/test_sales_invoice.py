@@ -8077,14 +8077,16 @@ def create_fiscal_year(company):
 	import frappe
 
 	current_date = datetime.today().date()
-	# Fetch all enabled fiscal years
-	existing_fy = frappe.get_all(
-		"Fiscal Year", filters={"disabled": 0}, fields=["name", "year_start_date", "year_end_date"]
+
+	matching_fy_list = frappe.get_all(
+		"Fiscal Year",
+		filters={
+			"disabled": 0,
+			"year_start_date": ["<=", current_date],
+			"year_end_date": [">=", current_date],
+		},
+		fields=["name", "year_start_date", "year_end_date"],
 	)
-
-	# Filter fiscal years where current date falls between start and end
-	matching_fy_list = [fy for fy in existing_fy if fy.year_start_date <= current_date <= fy.year_end_date]
-
 	is_company = False
 	if len(matching_fy_list) > 0:
 		for fy in matching_fy_list:
@@ -8097,9 +8099,15 @@ def create_fiscal_year(company):
 				break
 
 		if not is_company:
-			fiscal_year = frappe.get_doc("Fiscal Year", matching_fy_list[0]["name"])
-			fiscal_year.append("companies", {"company": company})
-			fiscal_year.save()
+			for rows in matching_fy_list:
+				try:
+					fiscal_year = frappe.get_doc("Fiscal Year", rows.name)
+					fiscal_year.append("companies", {"company": company})
+					fiscal_year.save()
+					break
+				except Exception as e:
+					print(f"Failed to get Fiscal Year {fy['name']}: {e}")
+					continue
 
 	else:
 		# No fiscal year includes current date — create a new one

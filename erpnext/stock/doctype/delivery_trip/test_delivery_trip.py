@@ -2,6 +2,8 @@
 # See license.txt
 
 
+from datetime import datetime
+
 import frappe
 from frappe.contacts.doctype.contact.test_contact import create_contact
 from frappe.tests.utils import FrappeTestCase
@@ -34,7 +36,7 @@ class TestDeliveryTrip(FrappeTestCase):
 				"doctype": "Employee",
 				"first_name": "Newton Scmander",
 				"middle_name": "Scmander",
-				"date_of_birth": "1981-04-21",  # fixed format
+				"date_of_birth": datetime.strptime("21-04-1981", "%d-%m-%Y").strftime("%Y-%m-%d"),
 				"gender": "Male",
 				"date_of_joining": frappe.utils.now(),
 				"status": "Active",
