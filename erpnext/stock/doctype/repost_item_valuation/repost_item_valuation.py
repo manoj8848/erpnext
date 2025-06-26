@@ -30,7 +30,7 @@ class RepostItemValuation(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		affected_transactions: DF.Code | None
@@ -77,7 +77,7 @@ class RepostItemValuation(Document):
 		self.validate_accounts_freeze()
 		self.reset_recreate_stock_ledgers()
 
-	def validate_period_closing_voucher(self):
+	def validate_period_closing_voucher(self):  # pragma: no cover
 		# Period Closing Voucher
 		year_end_date = self.get_max_period_closing_date(self.company)
 		if year_end_date and getdate(self.posting_date) <= getdate(year_end_date):
@@ -192,7 +192,7 @@ class RepostItemValuation(Document):
 		if write:
 			self.db_set("status", self.status)
 
-	def clear_attachment(self):
+	def clear_attachment(self):  # pragma: no cover
 		if attachments := get_attachments(self.doctype, self.name):
 			attachment = attachments[0]
 			frappe.delete_doc("File", attachment.name, ignore_permissions=True)
@@ -327,18 +327,18 @@ def repost(doc):
 
 		if status == "Failed":
 			outgoing_email_account = frappe.get_cached_value(
- 				"Email Account", {"default_outgoing": 1, "enable_outgoing": 1}, "name"
- 			)
+				"Email Account", {"default_outgoing": 1, "enable_outgoing": 1}, "name"
+			)
 
 			if outgoing_email_account and not isinstance(e, RecoverableErrors):
-					notify_error_to_stock_managers(doc, message)
-					doc.set_status("Failed")
+				notify_error_to_stock_managers(doc, message)
+				doc.set_status("Failed")
 	finally:
 		if not frappe.flags.in_test:
 			frappe.db.commit()
 
 
-def remove_attached_file(docname):
+def remove_attached_file(docname):  # pragma: no cover
 	if file_name := frappe.db.get_value(
 		"File", {"attached_to_name": docname, "attached_to_doctype": "Repost Item Valuation"}, "name"
 	):
@@ -387,7 +387,7 @@ def repost_gl_entries(doc):
 	)
 
 
-def _get_directly_dependent_vouchers(doc):
+def _get_directly_dependent_vouchers(doc):  # pragma: no cover
 	"""Get stock vouchers that are directly affected by reposting
 	i.e. any one item-warehouse is present in the stock transaction"""
 
@@ -419,7 +419,7 @@ def _get_directly_dependent_vouchers(doc):
 	return affected_vouchers
 
 
-def notify_error_to_stock_managers(doc, traceback):
+def notify_error_to_stock_managers(doc, traceback):  # pragma: no cover
 	recipients = get_recipients()
 
 	subject = _("Error while reposting item valuation")

@@ -5791,9 +5791,6 @@ class TestStockEntry(FrappeTestCase):
 		)
 
 		sco = create_subcontracting_order(po_name=po.name, supplier_warehouse=subcontract_wh)
-		sco.supplier_warehouse = subcontract_wh
-		sco.save()
-		sco.submit()
 
 		# Create target_doc (empty Stock Entry)
 		stock_entry = make_stock_entry(

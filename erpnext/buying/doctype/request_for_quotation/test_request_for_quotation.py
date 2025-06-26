@@ -196,14 +196,14 @@ class TestRequestforQuotation(FrappeTestCase):
 
 	def test_get_supplier_email_preview_TC_B_194(self):
 		item_code = "_Test Item"
-		supplier_name = "Test Supplier for RFQ"
+		supplier_name = "_Test Supplier"
 		if not frappe.db.exists("Item", item_code):
 			make_item(item_code, {"stock_uom": "Nos"})
 		if not frappe.db.exists({"doctype": "Supplier", "supplier_name": supplier_name}):
 			supplier_doc = frappe.get_doc(
 				{
 					"doctype": "Supplier",
-					"supplier_name": "Test Supplier for RFQ",
+					"supplier_name": "_Test Supplier",
 					"supplier_group": "_Test Supplier Group",
 				}
 			).insert()

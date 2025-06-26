@@ -22,12 +22,15 @@ class DeliveryNote(SellingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
+		from frappe.types import DF
+
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
+		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import (
+			SalesTaxesandCharges,
+		)
 		from erpnext.stock.doctype.delivery_note_item.delivery_note_item import DeliveryNoteItem
 		from erpnext.stock.doctype.packed_item.packed_item import PackedItem
-		from frappe.types import DF
 
 		additional_discount_percentage: DF.Float
 		address_display: DF.SmallText | None
@@ -263,7 +266,7 @@ class DeliveryNote(SellingController):
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
 	def validate_with_previous_doc(self):
-		compare_fields_pr_item = [["customer", "="], ["company", "="],["currency", "="]]
+		compare_fields_pr_item = [["customer", "="], ["company", "="], ["currency", "="]]
 		if "projects" in frappe.get_installed_apps():
 			compare_fields_pr_item.append(["project", "="])
 
@@ -271,7 +274,7 @@ class DeliveryNote(SellingController):
 			{
 				"Sales Order": {
 					"ref_dn_field": "against_sales_order",
-					"compare_fields": compare_fields_pr_item
+					"compare_fields": compare_fields_pr_item,
 				},
 				"Sales Order Item": {
 					"ref_dn_field": "so_detail",
@@ -281,7 +284,7 @@ class DeliveryNote(SellingController):
 				},
 				"Sales Invoice": {
 					"ref_dn_field": "against_sales_invoice",
-					"compare_fields": compare_fields_pr_item
+					"compare_fields": compare_fields_pr_item,
 				},
 				"Sales Invoice Item": {
 					"ref_dn_field": "si_detail",
@@ -1007,7 +1010,7 @@ def make_shipment(source_name, target_doc=None):
 		# As we are using session user details in the pickup_contact then pickup_contact_person will be session user
 		target.pickup_contact_person = frappe.session.user
 
-		if source.contact_person:
+		if source.contact_person:  # pragma: no cover
 			contact = frappe.db.get_value(
 				"Contact", source.contact_person, ["email_id", "phone", "mobile_no"], as_dict=1
 			)

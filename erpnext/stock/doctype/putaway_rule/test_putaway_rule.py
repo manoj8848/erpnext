@@ -119,7 +119,7 @@ class TestPutawayRule(FrappeTestCase):
 		]
 
 		apply_putaway_rule("Putaway Rule", items, company, purpose="Stock Entry")
-		self.assertEqual(items[0]["item_code"], item_code)
+		self.assertEqual(items[0]["item_code"].name, item_code.name)
 		self.assertEqual(items[0]["qty"], 1)
 
 	def assertUnchangedItemsOnResave(self, doc):

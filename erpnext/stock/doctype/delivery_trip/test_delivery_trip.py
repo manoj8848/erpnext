@@ -34,7 +34,7 @@ class TestDeliveryTrip(FrappeTestCase):
 				"doctype": "Employee",
 				"first_name": "Newton Scmander",
 				"middle_name": "Scmander",
-				"date_of_birth": "21-04-1981",
+				"date_of_birth": "1981-04-21",  # fixed format
 				"gender": "Male",
 				"date_of_joining": frappe.utils.now(),
 				"status": "Active",

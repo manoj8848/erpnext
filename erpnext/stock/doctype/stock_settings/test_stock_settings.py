@@ -76,9 +76,7 @@ class TestStockSettings(FrappeTestCase):
 			# In case there's no negative stock, it should save successfully
 			settings.save()
 			self.assertEqual(settings.enable_stock_reservation, 1)
-		# reset config
-		settings.enable_stock_reservation = 0
-		settings.save()
+		frappe.flags.in_test = True  # Reset after test
 
 	# codecov
 	@change_settings("Stock Settings", {"allow_negative_stock": 1, "enable_stock_reservation": 1})
