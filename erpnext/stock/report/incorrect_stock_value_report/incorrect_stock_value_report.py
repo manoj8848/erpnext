@@ -70,7 +70,7 @@ def get_data(report_filters):
 		)
 		.where(
 			(sle.posting_date == from_date)
-			& (sle.company == report_filters.company)
+			& (sle.company == report_filters.get("company"))
 			& (sle.is_cancelled == 0)
 		)
 		.orderby(sle.posting_datetime, sle.creation)
