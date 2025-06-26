@@ -178,33 +178,48 @@ class TestSerialNoLedger(FrappeTestCase):
         self.assertEqual(sum(row.get("qty", 0) for row in data), 1)
 
     def test_real_get_serial_nos_logic(self):
-        def mocked_get_all(doctype, fields, filters, order_by):
-            if filters == {"parent": ["in", ["BND-123", "BND-456"]]}:
+        # Save original frappe.get_all to restore later
+        original_get_all = frappe.get_all
+
+        try:
+            # Define a mock version of frappe.get_all
+            def mock_get_all(doctype, fields=None, filters=None, order_by=None):
+                self.assertEqual(doctype, "Serial and Batch Entry")
+                self.assertEqual(
+                    filters,
+                    {"parent": ["in", ["BND-123", "BND-456"]]}
+                )
+                self.assertEqual(order_by, "idx asc")
+
                 return [
                     {"serial_no": "SN-A", "parent": "BND-123", "valuation_rate": 50},
                     {"serial_no": "SN-B", "parent": "BND-123", "valuation_rate": -25},
                     {"serial_no": "SN-C", "parent": "BND-456", "valuation_rate": 0},
                 ]
-            return []
 
-        frappe.get_all = mocked_get_all
+            # Replace frappe.get_all with mock
+            frappe.get_all = mock_get_all
 
-        from erpnext.stock.report.serial_no_ledger.serial_no_ledger import get_serial_nos
+            # Import and call the function under test
+            from erpnext.stock.report.serial_no_ledger.serial_no_ledger import get_serial_nos
 
-        filters = {}
-        bundle_ids = ["BND-123", "BND-456"]
+            filters = {}
+            bundle_ids = ["BND-123", "BND-456"]
+            result = get_serial_nos(filters, bundle_ids)
 
-        result = get_serial_nos(filters, bundle_ids)
-        print("result",result)
+            expected = {
+                "BND-123": [
+                    {"serial_no": "SN-A", "valuation_rate": 50},
+                    {"serial_no": "SN-B", "valuation_rate": 25},
+                ],
+                "BND-456": [
+                    {"serial_no": "SN-C", "valuation_rate": 0}
+                ]
+            }
+            print("result",result)
 
-        expected = {
-            "BND-123": [
-                {"serial_no": "SN-A", "valuation_rate": 50},
-                {"serial_no": "SN-B", "valuation_rate": 25},
-            ],
-            "BND-456": [
-                {"serial_no": "SN-C", "valuation_rate": 0}
-            ]
-        }
+            self.assertEqual(result, expected)
 
-        # self.assertEqual(result, expected)
+        finally:
+            # Always restore original frappe.get_all
+            frappe.get_all = original_get_all

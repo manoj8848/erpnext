@@ -26,7 +26,7 @@ def execute(filters=None):
 
 
 def get_unsync_date(filters):
-	date = filters.from_date
+	date = filters.get("from_date")
 	if not date:
 		date = (frappe.qb.from_("Stock Ledger Entry").select(Min(Field("posting_date")))).run()
 		date = date[0][0]
@@ -36,7 +36,7 @@ def get_unsync_date(filters):
 
 	while getdate(date) < getdate(today()):
 		account_bal, stock_bal, warehouse_list = get_stock_and_account_balance(
-			posting_date=date, company=filters.company, account=filters.account
+			posting_date=date, company=filters.get("company"), account=filters.get("account")
 		)
 
 		if abs(account_bal - stock_bal) > 0.1:
