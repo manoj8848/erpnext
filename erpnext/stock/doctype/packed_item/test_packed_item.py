@@ -73,6 +73,30 @@ class TestPackedItem(FrappeTestCase):
 		item.save()
 
 		assert frappe.db.exists("Item", "test packed item")
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": "_Test Indian Registered Company",
+				"address_type": "Billing",
+				"address_line1": "Test",
+				"city": "Bengaluru",
+				"state": "Karnataka",
+				"country": "India",
+				"pincode": "581115",
+				"gstin": "29AAECS8690M1ZF",
+				"gst_category": "Registered Regular",
+				"gst_state": "Karnataka",
+				"gst_state_number": 29,
+				"is_your_company_address": 1,
+				"links": [
+					{
+						"link_doctype": "Company",
+						"link_name": "_Test Indian Registered Company",
+						"link_title": "_Test Indian Registered Company",
+					}
+				],
+			}
+		).insert()
 
 		dn = frappe.get_doc(
 			{
@@ -143,6 +167,32 @@ class TestPackedItem(FrappeTestCase):
 				"items": [{"item_code": item1.item_code, "qty": 2}],
 			}
 		).insert()
+
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": "_Test Indian Registered Company",
+				"address_type": "Billing",
+				"address_line1": "Test",
+				"city": "Bengaluru",
+				"state": "Karnataka",
+				"country": "India",
+				"pincode": "581115",
+				"gstin": "29AAECS8690M1ZF",
+				"gst_category": "Registered Regular",
+				"gst_state": "Karnataka",
+				"gst_state_number": 29,
+				"is_your_company_address": 1,
+				"links": [
+					{
+						"link_doctype": "Company",
+						"link_name": "_Test Indian Registered Company",
+						"link_title": "_Test Indian Registered Company",
+					}
+				],
+			}
+		).insert()
+
 		dn = frappe.get_doc(
 			{
 				"doctype": "Delivery Note",
