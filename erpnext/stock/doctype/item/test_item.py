@@ -1229,8 +1229,10 @@ class TestItem(FrappeTestCase):
 			"valuation_rate": 100
 		}
 		msg = '"Customer Provided Item" cannot have Valuation Rate'
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		with self.assertRaises(frappe.ValidationError) as e:
 			item = make_item("_test_valuation_rate_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
 	
 	def test_validate_customer_provided_part_is_purchase_item_TC_SCK_392(self):
 		item_fields = {
@@ -1239,8 +1241,10 @@ class TestItem(FrappeTestCase):
 			"is_purchase_item": 1,
 		}
 		msg = '"Customer Provided Item" cannot be Purchase Item also'
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		with self.assertRaises(frappe.ValidationError) as e:
 			item = make_item("_test_purchase_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
 
 	def test_validate_set_opening_stock_TC_SCK_393(self):
 		item_fields = {
@@ -1253,8 +1257,10 @@ class TestItem(FrappeTestCase):
 			"opening_stock":1
 		}
 		msg = frappe._("Valuation Rate is mandatory if Opening Stock entered")
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		with self.assertRaises(frappe.ValidationError) as e:
 			item = make_item("_test_opening_stock_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
 		
 	def test_validate_naming_series_for_dot_TC_SCK_394(self):
 		item_fields = {
@@ -1263,8 +1269,10 @@ class TestItem(FrappeTestCase):
 		}
 
 		msg = frappe._("Invalid naming series (. missing) for Serial Number Series")
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		with self.assertRaises(frappe.ValidationError) as e:
 			make_item("_test_naming_series_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
 	
 	def test_validate_naming_series_for_hash_TC_SCK_395(self):
 		item_fields = {
@@ -1272,8 +1280,10 @@ class TestItem(FrappeTestCase):
 			"serial_no_series": "SRS. ###", 
 		}
 		msg = (frappe._("Invalid naming series (avoid spaces between '.' and '#') for Serial Number Series."))
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		with self.assertRaises(frappe.ValidationError) as e:
 			make_item("_test_naming_series_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
 	
 	def test_update_bom_item_description_TC_SCK_396(self):
 		item = make_item("_test-item-for-bom", {"is_stock_item": 1})
@@ -1346,14 +1356,10 @@ class TestItem(FrappeTestCase):
 			"attribute": "Color",
 			"attribute_values": ["Red", "Blue"]
 		})
-		msg = frappe._(
-			"The following deleted attributes exist in Variants but not in the Template. "
-			"You can either delete the Variants or keep the attribute(s) in template.\n\n"
-			"Variant Items        Attributes\n"
-			"_test_variant_attr1  Size"
-		)
-		with self.assertRaises(frappe.ValidationError, msg=msg):
+		msg = frappe._("The following deleted attributes exist in Variants but not in the Template.")
+		with self.assertRaises(frappe.ValidationError) as cm:
 			template.save()
+		self.assertIn(msg, str(cm.exception))
    
 	def test_item_autoname_with_naming_series_TC_SCK_398(self):
 		frappe.db.set_default("item_naming_by", "Naming Series")
@@ -1524,8 +1530,9 @@ class TestItem(FrappeTestCase):
 			"has_serial_no": 0,
 			"has_batch_no": 0
 		})
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(frappe.ValidationError) as e:
 			item_1.validate_properties_before_merge(item_2.name)
+		self.assertIn("To merge, following properties must be same for both items", str(e.exception))
 	
 	def test_validate_duplicate_product_bundles_before_merge_pass_TC_SCK_402(self):
 		from erpnext.stock.doctype.item.test_item import make_item
@@ -1548,8 +1555,9 @@ class TestItem(FrappeTestCase):
 				{"item_code": item_2.name, "qty": 1}
 			]
 		}).insert()
-		with self.assertRaises(frappe.ValidationError):
+		with self.assertRaises(frappe.ValidationError) as e:
 			item_1.validate_duplicate_product_bundles_before_merge(item_1.name, item_2.name)
+		self.assertIn("Please delete Product Bundle", str(e.exception))
 	
 	def test_update_variants_TC_SCK_403(self):
 		from erpnext.stock.doctype.item.item import update_variants
