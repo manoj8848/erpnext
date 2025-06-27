@@ -33,7 +33,7 @@ class StockReconciliation(StockController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.stock_reconciliation_item.stock_reconciliation_item import (
@@ -180,7 +180,7 @@ class StockReconciliation(StockController):
 			item_details = frappe.get_cached_value(
 				"Item", item.item_code, ["has_serial_no", "has_batch_no"], as_dict=1
 			)
-		
+
 			if not (item_details.has_serial_no or item_details.has_batch_no):
 				continue
 

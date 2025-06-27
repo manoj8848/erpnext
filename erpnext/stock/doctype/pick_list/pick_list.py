@@ -38,7 +38,7 @@ class PickList(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.pick_list_item.pick_list_item import PickListItem
@@ -230,7 +230,7 @@ class PickList(Document):
 				frappe.throw(
 					_("The following batches are expired, please restock them: <br> {0}").format(msg),
 					title=_("Expired Batches"),
-			)
+				)
 
 	def make_bundle_using_old_serial_batch_fields(self):
 		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
@@ -671,7 +671,7 @@ class PickList(Document):
 
 		self.update_picked_item_from_current_pick_list(picked_items)
 		return picked_items
-	
+
 	def update_picked_item_from_current_pick_list(self, picked_items):
 		for row in self.locations:
 			if flt(row.picked_qty) > 0:
@@ -708,10 +708,10 @@ class PickList(Document):
 				pi_item.serial_and_batch_bundle,
 				pi_item.serial_no,
 				(
- 					Case()
- 					.when((pi_item.picked_qty > 0) & (pi_item.docstatus == 1), pi_item.picked_qty)
- 					.else_(pi_item.stock_qty)
- 				).as_("picked_qty"),
+					Case()
+					.when((pi_item.picked_qty > 0) & (pi_item.docstatus == 1), pi_item.picked_qty)
+					.else_(pi_item.stock_qty)
+				).as_("picked_qty"),
 			)
 			.where(
 				(pi_item.item_code.isin([x.item_code for x in items]))
@@ -801,12 +801,12 @@ def get_picked_items_qty(items) -> list[dict]:
 
 	# postgres
 	subquery = (
-        frappe.qb.from_(pi_item)
-        .select(pi_item.name)
-        .where((pi_item.docstatus == 1) & (pi_item.sales_order_item.isin(items)))
-        .for_update()
-    )
-    
+		frappe.qb.from_(pi_item)
+		.select(pi_item.name)
+		.where((pi_item.docstatus == 1) & (pi_item.sales_order_item.isin(items)))
+		.for_update()
+	)
+
 	return (
 		frappe.qb.from_(pi_item)
 		.select(
@@ -816,7 +816,7 @@ def get_picked_items_qty(items) -> list[dict]:
 			Sum(pi_item.stock_qty).as_("stock_qty"),
 			Sum(pi_item.picked_qty).as_("picked_qty"),
 		)
-		.where((pi_item.name.isin(subquery)))
+		.where(pi_item.name.isin(subquery))
 		.groupby(
 			pi_item.sales_order_item,
 			pi_item.sales_order,
