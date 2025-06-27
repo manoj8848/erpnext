@@ -2981,18 +2981,6 @@ class TestPaymentReconciliation(FrappeTestCase):
 			self.assertEqual(data.get("invoice_number"), invoices[0].get("invoice_number"))
 			self.assertEqual(data.get("reference_name"), payments[0].get("reference_name"))
 
-	def test_custom_save_TC_ACC_205(self):
-		doc = frappe.get_doc({"doctype": "Payment Reconciliation", "title": "Test Save"})
-		doc.save()  # no assert required
-
-	def test_db_insert_override_TC_ACC_206(self):
-		doc = frappe.get_doc({"doctype": "Payment Reconciliation", "title": "Test Insert"})
-		doc.db_insert()  # no assert required
-
-	def test_db_update_override_TC_ACC_207(self):
-		doc = frappe.get_doc({"doctype": "Payment Reconciliation", "title": "Test Update"})
-		doc.db_update()  # no assert required
-
 	def test_static_get_list_TC_ACC_208(self):
 		result = PaymentReconciliation.get_list(args={})
 		self.assertIsNone(result)

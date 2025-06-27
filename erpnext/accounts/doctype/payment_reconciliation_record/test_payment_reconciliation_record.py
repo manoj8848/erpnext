@@ -16,6 +16,8 @@ class TestPaymentReconciliationRecord(FrappeTestCase):
 		doc.submit()
 		doc.reload()
 
-		# Attempt to cancel and assert that an exception is thrown
-		with self.assertRaises(frappe.ValidationError, msg="Cancelling records is not allowed"):
+		# Attempt to cancel and assert that the correct exception message is thrown
+		with self.assertRaises(frappe.ValidationError) as cm:
 			doc.cancel()
+
+		self.assertIn("Cancelling records is not allowed", str(cm.exception))
