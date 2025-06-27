@@ -6347,8 +6347,10 @@ class TestPurchaseReceipt(FrappeTestCase):
 		pi.save().submit()
 
 		# This should now raise ValidationError due to linked submitted PI
-		with self.assertRaises(frappe.ValidationError, msg="already submitted"):
+		with self.assertRaises(frappe.ValidationError) as cm:
 			pr.check_next_docstatus()
+
+		self.assertIn("already submitted", str(cm.exception))
 
 	def test_make_item_gl_entries_creates_valid_gl_entries_TC_SCK_457(self):
 		from erpnext.buying.doctype.purchase_order.purchase_order import make_purchase_receipt
