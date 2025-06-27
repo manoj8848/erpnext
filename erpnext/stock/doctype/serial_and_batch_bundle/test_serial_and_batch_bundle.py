@@ -1924,6 +1924,158 @@ class TestSerialandBatchBundle(FrappeTestCase):
 		qty_field="qty"
 		result = serial_batch_bundle_stock_entry.set_serial_and_batch_values(dn_return, row,qty_field=qty_field)
 
+	# codecov
+	def test_serial_and_batch_bundle_of_company_TC_SCK_504(self):
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		item = make_test_item("Test Serial and Batch Bundle Company Item")
+		item.is_stock_item=1
+		item.has_batch_no=1
+		item.has_serial_no=1		
+		item.save()
+
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+		
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+		from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice	
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt	
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+		from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import get_excluded_serial_numbers,update_serial_or_batch 
+		
+		
+
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer",currency="INR")
+
+		if not frappe.db.exists("Company", company):
+			create_child_company("_Test Indian Registered Company")
+
+		item = make_test_item("_Test Serial and Batch Bundle Item3")
+		item.is_stock_item=1
+		item.has_batch_no=1
+		item.has_serial_no=1		
+		item.save()
+	
+		# Create batch
+		if not frappe.db.exists("Batch", "Batch_010114"):
+			batch = frappe.get_doc({
+				"doctype": "Batch",
+				"batch_id": "Batch_010114",
+				"stock_uom": "Nos",
+				"item": item.name,
+				"manufacturing_date": frappe.utils.now(),
+			}).insert(ignore_permissions=True)
+		else:
+			batch = frappe.get_doc("Batch","Batch_010114")
+		assert batch.batch_id == "Batch_010114"
+		# Create serial number
+		if not frappe.db.exists("Serial No", "MDC01014"):
+			serial_no = frappe.get_doc({
+				"doctype": "Serial No",
+				"serial_no": "MDC01014",
+				"item_code": item.name,
+				"batch_no":batch.name,
+				"company": company,
+				"item_group": "Raw Material"
+			}).insert(ignore_permissions=True)
+		else:
+			serial_no = frappe.get_doc("Serial No", "MDC01014")
+	
+		location = "Test Location"
+		if not frappe.db.exists("Location", location):
+			frappe.get_doc({"doctype": "Location", "location_name": location}).insert()
+
+		supplier = "_Test Supplier"
+		if not frappe.db.exists("Supplier", supplier):
+			create_supplier(supplier_name="_Test Supplier", default_currency="INR")
+
+		# Create stock entry (Material Receipt)
+		stock_entry = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"company": company,
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"s_warehouse": None,
+				"t_warehouse": warehouse,
+				"serial_no": "MDC01014",
+				"batch_no": batch.name
+			}]
+		})
+		stock_entry.submit()
+		
+		assert stock_entry.docstatus == 1
+
+		# Create Delivery Note
+		dn = frappe.get_doc({
+			"doctype": "Delivery Note",
+			"customer": customer,
+			"company": company,
+			"posting_date": frappe.utils.nowdate(),
+			"currency": "INR",
+			"items": [{
+				"item_code": item.name,
+				"qty": 1,
+				"allow_zero_valuation_rate": 1,
+				"warehouse": warehouse,
+				"serial_no": serial_no.name,
+				"batch_no": batch.name
+			}]
+		}).insert(ignore_permissions=True)
+		dn.submit()
+		assert dn.docstatus == 1
+		assert dn.items[0].serial_no == serial_no.name
+		
+		serial_batch_bundle_stock_entry = frappe.get_doc({
+			"doctype": "Serial and Batch Bundle",
+			"naming_series": "SABB-.########",
+			"item_code": item.name,
+			"warehouse": warehouse,
+			"company": company,
+			"type_of_transaction": "Inward",
+			"has_serial_no": 1,
+			"has_batch_no": 1,
+			"total_qty":10,
+			"returned_against":"Test",
+			"voucher_detail_no": dn.items[0].name,
+			"entries": [{
+				"doctype":"Serial and Batch Entry",
+				"serial_no": serial_no.name,
+				"batch_no": batch.name,
+				"qty": 10,
+				"warehouse": warehouse
+			}],
+			"voucher_type": "Delivery Note",
+			"voucher_no": dn.name,
+			"posting_date": frappe.utils.now(),
+		}).insert(ignore_permissions=True)
+
+		pr = make_purchase_receipt(
+			item_code=item,
+			warehouse="_Test Warehouse - _TC",
+			qty=3,
+			rate=500,
+			do_not_submit=True,
+		)
+		item_row = pr.items[0]
+		item_row.type_of_transaction = "Inward"
+		item_row.is_rejected = 0
+		item_row.purchase_receipt_item = pr.name
+		item_row.serial_and_batch_bundle = serial_batch_bundle_stock_entry.name  # Set the bundle name
+		add_serial_batch_ledgers(entries=[row.as_dict() for row in serial_batch_bundle_stock_entry.entries], child_row=item_row.as_dict(), doc=pr, warehouse=warehouse)
+		update_serial_or_batch(bundle_id=item_row.serial_and_batch_bundle, serial_no=None, batch_no=None)
+		result = get_excluded_serial_numbers(child_row=item_row.as_dict())
+		update_batch = update_serial_or_batch(bundle_id=item_row.serial_and_batch_bundle, serial_no=None, batch_no=batch.name)
+		self.assertEqual(update_batch,None)
+		self.assertEqual(result,[])
+		self.assertEqual(pr.docstatus,0)
 
 	def test_inward_outward_serial_valuation(self):
 		from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
