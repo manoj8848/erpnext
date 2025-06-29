@@ -92,6 +92,7 @@ class TestStockGLMismatchReport(FrappeTestCase):
     #     self.assertTrue(expected_fields.issubset(found_fields))
 
 
+
 # Helper class to simulate frappe.qb.from_().select().run()
 class DummyQB:
     def __init__(self, date, run_data=None):
