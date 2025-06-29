@@ -148,8 +148,8 @@ class TestIncorrectStockValueReport(FrappeTestCase):
     def test_execute_returns_columns_and_data(self):
         filters = {
             "company": self.company,
-            # "account": self.account,
-            # "from_date": nowdate()
+            "account": self.account,
+            "from_date": nowdate()
         }
         columns, data = execute(filters)
         print("data",data)
@@ -174,9 +174,9 @@ class TestIncorrectStockValueReport(FrappeTestCase):
     
     def test_get_data_filters_and_calculates_correctly(self):
         filters = {
-            # "company": self.company,
-            # "account": self.account,
-            # "from_date": nowdate()
+            "company": self.company,
+            "account": self.account,
+            "from_date": nowdate()
         }
 
         # Directly invoke get_data to test filtering and calculation logic
