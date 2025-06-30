@@ -706,7 +706,7 @@ erpnext.utils.update_child_items = function (opts) {
 									uom: me.doc.uom || uom,
 									qty: me.doc.qty || qty,
 									rate: me.doc.rate || rate,
- 									bom_no: bom_no,
+									bom_no: bom_no,
 								});
 								dialog.fields_dict.trans_items.grid.refresh();
 							}
@@ -714,29 +714,27 @@ erpnext.utils.update_child_items = function (opts) {
 					},
 				});
 				const item_code = this.value;
- 				if (item_code) {
- 					frappe.db.get_value("Item", item_code, "item_name", (r) => {
- 						if (r && r.item_name) {
- 							const idx = this.doc.idx;
- 							dialog.fields_dict.trans_items.df.data.some((doc) => {
- 								if (doc.idx === idx) {
- 									doc.item_name = r.item_name;
- 									dialog.fields_dict.trans_items.grid.refresh();
- 									return true;
- 								}
- 							});
- 						}
- 					});
- 				}
+				if (item_code) {
+					frappe.db.get_value("Item", item_code, "item_name", (r) => {
+						if (r && r.item_name) {
+							const idx = this.doc.idx;
+							dialog.fields_dict.trans_items.df.data.some((doc) => {
+								if (doc.idx === idx) {
+									doc.item_name = r.item_name;
+									dialog.fields_dict.trans_items.grid.refresh();
+									return true;
+								}
+							});
+						}
+					});
+				}
 			},
-
 		},
 		{
 			fieldtype: "Data",
 			fieldname: "item_name",
 			label: __("Item Name"),
 			read_only: 1,
-
 		},
 		{
 			fieldtype: "Link",
@@ -1225,9 +1223,9 @@ function set_time_to_resolve_and_response(frm, apply_sla_for_resolution) {
 	if (apply_sla_for_resolution) {
 		let time_to_resolve;
 		if (!frm.doc.resolution_date) {
-			time_to_resolve = get_time_left(frm.doc.resolution_by, frm.doc.agreement_status);
+			time_to_resolve = get_time_left(frm.doc.sla_resolution_by, frm.doc.agreement_status);
 		} else {
-			time_to_resolve = get_status(frm.doc.resolution_by, frm.doc.resolution_date);
+			time_to_resolve = get_status(frm.doc.sla_resolution_by, frm.doc.sla_resolution_date);
 		}
 
 		alert += `

@@ -48,3 +48,18 @@ class TestModeofPayment(unittest.TestCase):
 				# Here we can add further checks, like verifying the amount and whether it's debit/credit
 				self.assertEqual(entry.credit, pe.paid_amount)  # Assuming full payment is being made in Cash
 
+def set_default_account_for_mode_of_payment(mode_of_payment, company, account):
+	mode_of_payment.reload()
+	if frappe.db.exists(
+		"Mode of Payment Account", {"parent": mode_of_payment.mode_of_payment, "company": company}
+	):
+		frappe.db.set_value(
+			"Mode of Payment Account",
+			{"parent": mode_of_payment.mode_of_payment, "company": company},
+			"default_account",
+			account,
+		)
+		return
+
+	mode_of_payment.append("accounts", {"company": company, "default_account": account})
+	mode_of_payment.save()
