@@ -731,6 +731,134 @@ class TestSerialNo(FrappeTestCase):
 		for sn in new_serials:
 			self.assertIn(sn, extra_html)
 
+	def test_update_maintenance_status_TC_SCK_442(self):
+		from erpnext.stock.doctype.serial_no.serial_no import update_maintenance_status
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+
+		create_company("_Test Company")
+		warehouse = create_warehouse("Stores", company="_Test Company")
+
+		item = make_item("_Test Item Auto 2", {
+			"is_stock_item": 1,
+			"has_serial_no": 1,
+			"serial_no_series": "AUTO-SERIAL-.###"
+		})
+
+		if not frappe.db.exists("UOM", "_Test UOM"):
+			frappe.get_doc({
+				"doctype": "UOM",
+				"uom_name": "_Test UOM",
+			}).insert(ignore_permissions=True, ignore_links=True, ignore_mandatory=True)
+
+		if not frappe.db.exists("Supplier", "_Test Supplier"):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": "_Test Supplier",
+				"company": "_Test Company"
+			}).insert(ignore_mandatory=True, ignore_permissions=True, ignore_links=True)
+
+		
+		pr = make_purchase_receipt(
+			item_code=item.name,
+			warehouse=warehouse,
+			supplier="_Test Supplier",
+			supplier_warehouse=warehouse,
+			qty=2,
+			rate=100,
+			do_not_submit=True
+		)
+		pr.submit()
+
+		
+		serial_nos = frappe.get_all("Serial No", filters={"item_code": item.name}, pluck="name")
+		for sn in serial_nos:
+			frappe.db.set_value("Serial No", sn, {
+				"warranty_expiry_date": frappe.utils.add_days(frappe.utils.nowdate(), -1),
+				"amc_expiry_date": frappe.utils.add_days(frappe.utils.nowdate(), -1),
+				"maintenance_status": "Under AMC"
+			})
+
+
+		update_maintenance_status()
+
+		for sn in serial_nos:
+			updated_status = frappe.db.get_value("Serial No", sn, "maintenance_status")
+			self.assertIn(updated_status, ("Out of Warranty", "Out of AMC"))
+   
+	def test_on_trash_with_single_qty_serial_no_TC_SCK_443(self):
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+		from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+		from erpnext.stock.doctype.item.test_item import make_item
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+
+		create_company("_Test Company")
+		warehouse = create_warehouse("Stores", company="_Test Company")
+
+		item = make_item("_Test Item Auto 2", {
+			"is_stock_item": 1,
+			"has_serial_no": 1,
+			"serial_no_series": "AUTO-SERIAL-.###"
+		})
+
+		if not frappe.db.exists("UOM", "_Test UOM"):
+			frappe.get_doc({
+				"doctype": "UOM",
+				"uom_name": "_Test UOM",
+			}).insert(ignore_permissions=True, ignore_links=True, ignore_mandatory=True)
+
+		if not frappe.db.exists("Supplier", "_Test Supplier"):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": "_Test Supplier",
+				"company": "_Test Company"
+			}).insert(ignore_mandatory=True, ignore_permissions=True, ignore_links=True)
+
+		
+		pr = make_purchase_receipt(
+			item_code=item.name,
+			warehouse=warehouse,
+			supplier="_Test Supplier",
+			supplier_warehouse=warehouse,
+			qty=1,
+			rate=100,
+			do_not_submit=True
+		)
+		pr.submit()
+		stock_ledger = frappe.db.get_value(
+		"Stock Ledger Entry",
+		{
+			"voucher_type": "Purchase Receipt",
+			"voucher_no": pr.name,
+			"voucher_detail_no":pr.items[0].name,
+			"warehouse": warehouse,
+			"is_cancelled": 0,
+		},
+		"name",
+		)
+		serial_nos = frappe.get_all("Serial No", filters={"purchase_document_no": pr.name}, pluck="name")
+		sl_sno = frappe.db.get_value("Stock Ledger Entry",
+		{
+			"voucher_type": "Purchase Receipt",
+			"voucher_no": pr.name,
+			"voucher_detail_no":pr.items[0].name,
+			"warehouse": warehouse,
+			"is_cancelled": 0,
+		},
+		"serial_no",)
+		if not sl_sno or sl_sno not in serial_nos:
+			frappe.db.set_value("Stock Ledger Entry", stock_ledger, "serial_no", serial_nos[0])
+		
+		serial_doc = frappe.get_doc("Serial No", serial_nos[0])
+
+		with self.assertRaises(frappe.ValidationError) as e2:
+			serial_doc.on_trash()
+
+		self.assertTrue("Cannot delete Serial No" in str(e2.exception))
+
   
 def get_auto_serial_nos(kwargs):
 	from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import (
