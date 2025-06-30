@@ -499,8 +499,13 @@ class TestSerialNo(FrappeTestCase):
    
 		frappe.db.set_value("Company", company, {
 			"enable_provisional_accounting_for_non_stock_items": 0,
-			"enable_perpetual_inventory": 0
+			"enable_perpetual_inventory":0
 		})
+		frappe.local.enable_perpetual_inventory = {}
+		frappe.local.enable_perpetual_inventory[company] = 0
+		company_doc = frappe.get_doc("Company", company)
+		frappe._set_document_in_cache("Company", company_doc)
+		
 		item = make_item("_Test Serial Item Auto", {
 			"has_serial_no": 1,
 			"serial_no_series": "AUTO-SERIAL-.###",
@@ -509,7 +514,7 @@ class TestSerialNo(FrappeTestCase):
 			"create_new_batch": 1,
 			"batch_no_series": "AUTO-BATCH-.###",
 			"valuation_rate": 100,
-			"is_fixed_asset":False
+			"is_fixed_asset": False
 		})
 
 		pe = make_purchase_receipt(
@@ -549,10 +554,26 @@ class TestSerialNo(FrappeTestCase):
 			"has_serial_no": 1,
 			"serial_no_series": "AUTO-SERIAL-.###"
 		})
-		
+		if not frappe.db.exists("UOM", "_Test UOM"):
+			frappe.get_doc({
+				"doctype": "UOM",
+				"uom_name": "_Test UOM",
+			}).insert(
+				ignore_permissions=True,
+				ignore_links=True,
+				ignore_mandatory=True
+			)
+		if not frappe.db.exists("Supplier", "_Test Supplier"):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": "_Test Supplier",
+				"company": "_Test Company"
+			}).insert(ignore_mandatory=True,ignore_permissions=True,ignore_links=True)
 		pr = make_purchase_receipt(
 			item_code=item.name,
 			warehouse=warehouse1,
+			supplier_warehouse=warehouse1,
+			supplier="_Test Supplier",
 			qty=1,
 			rate=100,
 			do_not_submit=True
@@ -592,9 +613,26 @@ class TestSerialNo(FrappeTestCase):
 		create_company("_Test Company")
 		warehouse = create_warehouse("Stores", company="_Test Company")
 		item = make_item("_Test Item Auto 1", {"is_stock_item": 1, "has_serial_no": 1, "serial_no_series": "AUTO-SERIAL-.###"})
+		if not frappe.db.exists("UOM", "_Test UOM"):
+			frappe.get_doc({
+				"doctype": "UOM",
+				"uom_name": "_Test UOM",
+			}).insert(
+				ignore_permissions=True,
+				ignore_links=True,
+				ignore_mandatory=True
+			)
+		if not frappe.db.exists("Supplier", "_Test Supplier"):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": "_Test Supplier",
+				"company": "_Test Company"
+			}).insert(ignore_mandatory=True,ignore_permissions=True,ignore_links=True)
 		pr = make_purchase_receipt(
 			item_code=item.name,
 			warehouse=warehouse,
+			supplier="_Test Supplier",
+			supplier_warehouse=warehouse,
 			qty=1,
 			rate=100,
 		)
@@ -644,10 +682,26 @@ class TestSerialNo(FrappeTestCase):
 			"has_serial_no": 1,
 			"serial_no_series": "AUTO-SERIAL-.###"
 		})
-
+		if not frappe.db.exists("UOM", "_Test UOM"):
+			frappe.get_doc({
+				"doctype": "UOM",
+				"uom_name": "_Test UOM",
+			}).insert(
+				ignore_permissions=True,
+				ignore_links=True,
+				ignore_mandatory=True
+			)
+		if not frappe.db.exists("Supplier", "_Test Supplier"):
+			frappe.get_doc({
+				"doctype": "Supplier",
+				"supplier_name": "_Test Supplier",
+				"company": "_Test Company"
+			}).insert(ignore_mandatory=True,ignore_permissions=True,ignore_links=True)
 		pr = make_purchase_receipt(
 			item_code=item.name,
 			warehouse=warehouse,
+			supplier="_Test Supplier",
+			supplier_warehouse=warehouse,
 			qty=2,
 			rate=100,
 			do_not_submit=True  
