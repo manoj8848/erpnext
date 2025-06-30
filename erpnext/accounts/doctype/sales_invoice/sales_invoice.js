@@ -909,3 +909,15 @@ frappe.ui.form.on("Discount Terms", {
 		frm.refresh_field("payment_discount_terms")
 	}
 })
+
+frappe.ui.form.on("Sales Invoice Payment", {
+	mode_of_payment: function (frm) {
+		frappe.call({
+			doc: frm.doc,
+			method: "set_account_for_mode_of_payment",
+			callback: function (r) {
+				refresh_field("payments");
+			},
+		});
+	},
+});

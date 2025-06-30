@@ -898,7 +898,7 @@ class update_entries_after:
 		self.wh_data.prev_stock_value = self.wh_data.stock_value
 
 		# update current sle
-		sle.qty_after_transaction = self.wh_data.qty_after_transaction
+		sle.qty_after_transaction = flt(self.wh_data.qty_after_transaction, self.flt_precision)
 		sle.valuation_rate = self.wh_data.valuation_rate
 		sle.stock_value = self.wh_data.stock_value
 		sle.stock_queue = json.dumps(self.wh_data.stock_queue)
@@ -966,7 +966,7 @@ class update_entries_after:
 
 	def reset_actual_qty_for_stock_reco(self, sle):
 		doc = frappe.get_cached_doc("Stock Reconciliation", sle.voucher_no)
-		doc.recalculate_current_qty(sle.voucher_detail_no)
+		doc.recalculate_current_qty(sle.voucher_detail_no, sle.creation, sle.actual_qty > 0)
 
 		if sle.actual_qty < 0:
 			sle.actual_qty = (
