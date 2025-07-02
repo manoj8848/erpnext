@@ -3865,7 +3865,7 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 		purchase_tax = frappe.new_doc("Purchase Taxes and Charges Template")
 		purchase_tax.title = "TEST"
 		purchase_tax.company = "_Test Company"
-		purchase_tax.tax_category = "_Test Tax Category 1"
+		purchase_tax.tax_category = "_Test Tax Category 2"
 
 		purchase_tax.append(
 			"taxes",
