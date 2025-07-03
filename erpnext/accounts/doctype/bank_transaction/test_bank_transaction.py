@@ -224,7 +224,7 @@ class TestBankTransaction(FrappeTestCase):
 		linked_payments = get_linked_payments(bank_transaction.name, ["loan_repayment", "exact_match"])
 		self.assertEqual(linked_payments[0]["name"], repayment_entry.name)
 
-	def test_validate_currency_01(self):
+	def test_validate_currency_TC_ACC_270(self):
 		bank_account = create_bank_account()
 		account = frappe.get_doc("Account", frappe.get_value("Bank Account", bank_account, "account"))
 		account.account_currency = "USD"
@@ -243,7 +243,7 @@ class TestBankTransaction(FrappeTestCase):
 
 		self.assertRaises(frappe.ValidationError, bank_transaction.validate_currency)
 
-	def test_validate_duplicate_references_02(self):
+	def test_validate_duplicate_references_TC_ACC_271(self):
 		bt = frappe.get_doc(
 			{
 				"doctype": "Bank Transaction",
@@ -274,7 +274,7 @@ class TestBankTransaction(FrappeTestCase):
 
 		self.assertRaises(frappe.ValidationError, bt.validate_duplicate_references)
 
-	def test_before_save_03(self):
+	def test_before_save_TC_ACC_272(self):
 		bank_account = create_bank_account()
 		doc1 = frappe.get_doc(
 			{
@@ -303,7 +303,7 @@ class TestBankTransaction(FrappeTestCase):
 
 		self.assertRaises(frappe.ValidationError, doc2.before_save)
 
-	def test_remove_payment_entries_04(self):
+	def test_remove_payment_entries_TC_ACC_273(self):
 		gl_account = create_gl_account("Remove PE Bank")
 		bank_account = create_bank_account(gl_account=gl_account, bank_account_name="Remove PE Account")
 
@@ -343,7 +343,7 @@ class TestBankTransaction(FrappeTestCase):
 		bt.reload()
 		self.assertEqual(len(bt.payment_entries), 0)
 
-	def test_remove_payment_entries_05(self):
+	def test_remove_payment_entries_TC_ACC_274(self):
 		gl_account = create_gl_account("Linked BT Bank")
 		bank_account = create_bank_account(gl_account=gl_account, bank_account_name="Linked BT Account")
 
@@ -398,7 +398,7 @@ class TestBankTransaction(FrappeTestCase):
 		bt_main.reload()
 		self.assertEqual(len(bt_main.payment_entries), 0)
 
-	def test_allocate_payment_entries_all_paths_07(self):
+	def test_allocate_payment_entries_all_paths_TC_ACC_275(self):
 		gl_account = create_gl_account("Alloc Paths")
 		bank_account = create_bank_account(gl_account=gl_account, bank_account_name="Alloc Paths")
 
