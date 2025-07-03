@@ -2,7 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 
-from datetime import date
+from datetime import date, datetime
 
 from frappe.desk.query_report import run
 from frappe.permissions import add_user_permission, remove_user_permission
@@ -461,7 +461,7 @@ class TestStockEntry(FrappeTestCase):
 				rec["doctype"] = "Company"
 				frappe.get_doc(rec).insert()
 		company = frappe.db.get_value("Warehouse", "Stores - TCP1", "company")
-		create_fiscal_with_company(company)
+		get_or_create_fiscal_year(company)
 		make_stock_entry(
 			item_code="_Test Item",
 			target="Stores - TCP1",
@@ -2414,7 +2414,7 @@ class TestStockEntry(FrappeTestCase):
 		company = "_Test Company"
 		frappe.db.set_value("Company", company, "stock_adjustment_account", "Stock Adjustment - _TC")
 
-		create_fiscal_with_company("_Test Company")
+		get_or_create_fiscal_year("_Test Company")
 		self.source_warehouse = create_warehouse(
 			"Stores-test", properties={"parent_warehouse": "All Warehouses - _TC"}, company="_Test Company"
 		)
@@ -4114,7 +4114,7 @@ class TestStockEntry(FrappeTestCase):
 		company = "_Test Company"
 		frappe.db.set_value("Company", company, "stock_adjustment_account", "Stock Adjustment - _TC")
 
-		get_fiscal_year(company)
+		get_or_create_fiscal_year(company)
 		create_warehouse("_Test Warehouse Group - _TC", company=company)
 		if not frappe.db.exists("Company", company):
 			company_doc = frappe.new_doc("Company")
@@ -4174,7 +4174,7 @@ class TestStockEntry(FrappeTestCase):
 		create_company()
 		company = "_Test Company"
 		frappe.db.set_value("Company", company, "stock_adjustment_account", "Stock Adjustment - _TC")
-		get_fiscal_year(company)
+		get_or_create_fiscal_year(company)
 		create_warehouse("_Test Warehouse Group - _TC", company=company)
 
 		if not frappe.db.exists("Company", company):
@@ -4407,7 +4407,7 @@ class TestStockEntry(FrappeTestCase):
 		create_company()
 		company = "_Test Company"
 		frappe.db.set_value("Company", company, "stock_adjustment_account", "Stock Adjustment - _TC")
-		get_fiscal_year(company)
+		get_or_create_fiscal_year(company)
 		create_warehouse("_Test Warehouse Group - _TC", company=company)
 
 		if not frappe.db.exists("Company", company):
@@ -6306,55 +6306,6 @@ def create_company(company):
 		company.insert()
 
 
-def create_fiscal_with_company(company):
-	from datetime import date
-
-	today = date.today()
-	if today.month >= 4:  # Fiscal year starts in April
-		start_date = date(today.year, 4, 1)
-		end_date = date(today.year + 1, 3, 31)
-	else:
-		start_date = date(today.year - 1, 4, 1)
-		end_date = date(today.year, 3, 31)
-
-	FiscalYear = frappe.qb.DocType("Fiscal Year")
-
-	existing_fiscal_years = (
-		frappe.qb.from_(FiscalYear)
-		.select(FiscalYear.name)
-		.where(
-			(FiscalYear.year_start_date <= start_date) & (FiscalYear.year_end_date >= start_date)
-			| (FiscalYear.year_start_date <= end_date) & (FiscalYear.year_end_date >= end_date)
-			| (start_date <= FiscalYear.year_start_date) & (end_date >= FiscalYear.year_start_date)
-			| (start_date <= FiscalYear.year_end_date) & (end_date >= FiscalYear.year_end_date)
-		)
-	).run(as_dict=True)
-
-	# fix for overlapping fiscal year
-	if existing_fiscal_years != []:
-		for fiscal_years in existing_fiscal_years:
-			fy_doc = frappe.get_doc("Fiscal Year", fiscal_years.get("name"))
-			if not frappe.db.exists("Fiscal Year Company", {"company": company, "parent": fy_doc.name}):
-				fy_doc.append("companies", {"company": company})
-				fy_doc.save()
-	else:
-		fy_doc = frappe.new_doc("Fiscal Year")
-		fy_doc.year = "2024-2025"
-		fy_doc.year_start_date = start_date
-		fy_doc.year_end_date = end_date
-		fy_doc.append("companies", {"company": company})
-		fy_doc.submit()
-
-
-def get_fiscal_year(company):
-	if frappe.db.exists("Fiscal Year", "2024-2025"):
-		fiscal_year = frappe.get_doc("Fiscal Year", "2024-2025")
-		fiscal_year.append("companies", {"company": company})
-		fiscal_year.save()
-	else:
-		create_fiscal_with_company(company)
-
-
 def generate_serial_nos(item_code, qty):
 	"""Generate and insert serial numbers for an item."""
 	serial_nos = []
@@ -6377,42 +6328,50 @@ def generate_serial_nos(item_code, qty):
 
 
 def get_or_create_fiscal_year(company):
-	from datetime import datetime
-
-	import frappe
-
 	current_date = datetime.today().date()
-	existing_fy = frappe.get_all(
-		"Fiscal Year", filters={"disabled": 0}, fields=["name", "year_start_date", "year_end_date"]
+
+	matching_fy_list = frappe.get_all(
+		"Fiscal Year",
+		filters={
+			"disabled": 0,
+			"year_start_date": ["<=", current_date],
+			"year_end_date": [">=", current_date],
+		},
+		fields=["name", "year_start_date", "year_end_date"],
 	)
-	updated_existing_fy = None
-
-	for d in existing_fy:
-		start_date = (
-			d.year_start_date.date() if isinstance(d.year_start_date, datetime) else d.year_start_date
-		)
-		end_date = d.year_end_date.date() if isinstance(d.year_end_date, datetime) else d.year_end_date
-		if start_date <= current_date <= end_date:
-			updated_existing_fy = d.name
-			break
-
 	is_company = False
-	if updated_existing_fy:
-		fiscal_year = frappe.get_doc("Fiscal Year", updated_existing_fy)
-		for years in fiscal_year.companies:
-			if years.company == company:
-				is_company = True
+	if len(matching_fy_list) > 0:
+		for fy in matching_fy_list:
+			fiscal_year = frappe.get_doc("Fiscal Year", fy["name"])
+			for years in fiscal_year.companies:
+				if years.company == company:
+					is_company = True
+					break
+			if is_company:
+				break
+
 		if not is_company:
-			fiscal_year.append("companies", {"company": company})
-			fiscal_year.save()
+			for rows in matching_fy_list:
+				try:
+					fiscal_year = frappe.get_doc("Fiscal Year", rows.name)
+					fiscal_year.append("companies", {"company": company})
+					fiscal_year.save()
+					break
+				except Exception as e:
+					print(f"Failed to get Fiscal Year {fy['name']}: {e}")
+					continue
+
 	else:
-		current_year = datetime.now().year
+		# No fiscal year includes current date — create a new one
+		current_year = current_date.year
 		first_date = date(current_year, 1, 1)
 		last_date = date(current_year, 12, 31)
+
 		fiscal_year = frappe.new_doc("Fiscal Year")
 		fiscal_year.year = f"{current_year}-{company}"
 		fiscal_year.year_start_date = first_date
 		fiscal_year.year_end_date = last_date
+		fiscal_year.company = company  # Required to avoid overlap error
 		fiscal_year.append("companies", {"company": company})
 		fiscal_year.save()
 

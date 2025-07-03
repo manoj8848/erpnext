@@ -42,7 +42,7 @@ class TestItemPriceReport(FrappeTestCase):
 		frappe.delete_doc("Price List", self.buying_pl.name, force=1)
 		frappe.delete_doc("Price List", self.selling_pl.name, force=1)
 
-	def test_item_price_stock_execute_T_IPS_001(self):
+	def test_item_price_stock_execute_TC_SCK_510(self):
 		filters = {"item_code": self.item.name}
 		columns, data = item_price_stock.execute(filters)
 

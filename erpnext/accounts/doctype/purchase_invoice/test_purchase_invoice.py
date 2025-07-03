@@ -3666,7 +3666,9 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 	def test_fully_paid_of_pi_to_pr_to_pe_with_gst_TC_B_084(self):
 		frappe.set_user("Administrator")
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_payment_entry
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
 
+		frappe.set_value("Supplier", "_Test Supplier", "payment_terms", None)
 		template = frappe.get_all(
 			"Purchase Taxes and Charges Template",
 			filters={

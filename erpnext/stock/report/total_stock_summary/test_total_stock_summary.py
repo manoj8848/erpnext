@@ -41,7 +41,7 @@ class TestTotalStockSummary(FrappeTestCase):
 
 		self.filters = {"group_by": "Warehouse", "company": "_Test Company"}
 
-	def test_execute_without_filters_T_TSS_001(self):
+	def test_execute_without_filters_TC_SCK_517(self):
 		from erpnext.stock.report.total_stock_summary.total_stock_summary import execute
 
 		# Test with filters - group by Warehouse

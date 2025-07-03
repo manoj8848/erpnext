@@ -1,7 +1,7 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from datetime import datetime
+from datetime import date, datetime
 
 import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
@@ -5969,12 +5969,11 @@ class TestPurchaseReceipt(FrappeTestCase):
 		frappe.db.set_value("Purchase Order Item", po_item.name, "billed_amt", 800)
 
 		# Debug: Check PR items linked to PO
-		pr_items = frappe.get_all(
+		frappe.get_all(
 			"Purchase Receipt Item",
 			filters={"purchase_order_item": po_item.name},
 			fields=["name", "parent", "purchase_order_item"],
 		)
-		print("PR Items linked to PO:", pr_items)
 
 		po_details = [po_item.name]
 
@@ -6168,15 +6167,8 @@ class TestPurchaseReceipt(FrappeTestCase):
 			item.purchase_receipt = pr.name
 		pi2.save().submit()
 
-		# Debug: Check PI items linked to PR
-		pi_items = frappe.get_all(
-			"Purchase Invoice Item", filters={"pr_detail": pr_item.name}, fields=["name", "qty", "parent"]
-		)
-		print("PI Items linked to PR:", pi_items)
-
 		# Run the method under test
 		invoiced_qty_map = get_invoiced_qty_map(pr.name)
-		print("Invoiced Qty Map:", invoiced_qty_map)
 
 		# Assert the PR detail was added and quantity was aggregated (4 + 6 = 10)
 		self.assertIn(pr_item.name, invoiced_qty_map)
@@ -6888,34 +6880,53 @@ def setup_fy_gls_cost_center():
 			}
 		).insert()
 
-	# Setup Fiscal Year
-	fiscal_year = frappe.get_all(
+	current_date = datetime.today().date()
+
+	matching_fy_list = frappe.get_all(
 		"Fiscal Year",
-		filters={"year_start_date": ["<=", today()], "year_end_date": [">=", today()], "disabled": 0},
-		fields=["name"],
-		limit=1,
+		filters={
+			"disabled": 0,
+			"year_start_date": ["<=", current_date],
+			"year_end_date": [">=", current_date],
+		},
+		fields=["name", "year_start_date", "year_end_date"],
 	)
+	is_company = False
+	if len(matching_fy_list) > 0:
+		for fy in matching_fy_list:
+			fiscal_year = frappe.get_doc("Fiscal Year", fy["name"])
+			for years in fiscal_year.companies:
+				if years.company == company:
+					is_company = True
+					break
+			if is_company:
+				break
 
-	if fiscal_year:
-		fy_doc = frappe.get_doc("Fiscal Year", fiscal_year[0]["name"])
-		linked_companies = [d.company for d in fy_doc.companies]
+		if not is_company:
+			for rows in matching_fy_list:
+				try:
+					fiscal_year = frappe.get_doc("Fiscal Year", rows.name)
+					fiscal_year.append("companies", {"company": company})
+					fiscal_year.save()
+					break
+				except Exception as e:
+					print(f"Failed to get Fiscal Year {fy['name']}: {e}")
+					continue
 
-		if company.name not in linked_companies:
-			fy_doc.append("companies", {"company": company.name})
-			fy_doc.save()
 	else:
-		# If not exists create new FY
-		fy_doc = frappe.get_doc(
-			{
-				"doctype": "Fiscal Year",
-				"year": f"FY {today()[:4]}",
-				"year_start_date": today(),
-				"year_end_date": add_days(today(), 364),
-				"disabled": 0,
-			}
-		)
-		fy_doc.append("fiscal_year_company", {"company": company.name})
-		fy_doc.insert()
+		# No fiscal year includes current date — create a new one
+		current_year = current_date.year
+		first_date = date(current_year, 1, 1)
+		last_date = date(current_year, 12, 31)
+
+		fiscal_year = frappe.new_doc("Fiscal Year")
+		fiscal_year.year = f"{current_year}-{company}"
+		fiscal_year.year_start_date = first_date
+		fiscal_year.year_end_date = last_date
+		fiscal_year.company = company  # Required to avoid overlap error
+		fiscal_year.append("companies", {"company": company})
+		fiscal_year.save()
+
 	expense_account = f"T Cost of Goods Sold - {company_abbr}"
 	cost_center = f"_Test Cost Center - {company_abbr}"
 	return fiscal_year, expense_account, cost_center
@@ -7230,36 +7241,54 @@ def create_company(company):
 
 
 def get_or_create_fiscal_year(company):
-	from datetime import datetime
+	from datetime import date, datetime
 
-	current_date = datetime.today()
-	formatted_date = current_date.strftime("%d-%m-%Y")
-	existing_fy = frappe.get_all(
+	import frappe
+
+	current_date = datetime.today().date()
+
+	matching_fy_list = frappe.get_all(
 		"Fiscal Year",
 		filters={
-			"year_start_date": ["<=", formatted_date],
-			"year_end_date": [">=", formatted_date],
 			"disabled": 0,
+			"year_start_date": ["<=", current_date],
+			"year_end_date": [">=", current_date],
 		},
-		fields=["name"],
+		fields=["name", "year_start_date", "year_end_date"],
 	)
+	is_company = False
+	if len(matching_fy_list) > 0:
+		for fy in matching_fy_list:
+			fiscal_year = frappe.get_doc("Fiscal Year", fy["name"])
+			for years in fiscal_year.companies:
+				if years.company == company:
+					is_company = True
+					break
+			if is_company:
+				break
 
-	if existing_fy:
-		fiscal_year = frappe.get_doc("Fiscal Year", existing_fy[0].name)
-		for years in fiscal_year.companies:
-			if years.company == company:
-				pass
-			else:
-				fiscal_year.append("companies", {"company": company})
-				fiscal_year.save()
+		if not is_company:
+			for rows in matching_fy_list:
+				try:
+					fiscal_year = frappe.get_doc("Fiscal Year", rows.name)
+					fiscal_year.append("companies", {"company": company})
+					fiscal_year.save()
+					break
+				except Exception as e:
+					print(f"Failed to get Fiscal Year {fy['name']}: {e}")
+					continue
+
 	else:
-		current_year = datetime.now().year
-		first_date = f"01-01-{current_year}"
-		last_date = f"31-12-{current_year}"
+		# No fiscal year includes current date — create a new one
+		current_year = current_date.year
+		first_date = date(current_year, 1, 1)
+		last_date = date(current_year, 12, 31)
+
 		fiscal_year = frappe.new_doc("Fiscal Year")
-		fiscal_year.year = f"{current_year}"
+		fiscal_year.year = f"{current_year}-{company}"
 		fiscal_year.year_start_date = first_date
 		fiscal_year.year_end_date = last_date
+		fiscal_year.company = company  # Required to avoid overlap error
 		fiscal_year.append("companies", {"company": company})
 		fiscal_year.save()
 
