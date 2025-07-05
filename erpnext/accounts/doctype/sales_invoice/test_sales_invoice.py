@@ -6098,11 +6098,13 @@ class TestSalesInvoice(FrappeTestCase):
 		si.cancel()
 		si.reload()
 		self.assertEqual(si.status, "Cancelled")
-
 		amended_si = frappe.copy_doc(si)
 		amended_si.docstatus = 0
+		amended_si.due_date = si.due_date
 		amended_si.amended_from = si.name
 		amended_si.payment_terms_template = "Test Receivable Template Selling"
+		for idx, payment_schedule in enumerate(amended_si.payment_schedule):
+			payment_schedule.due_date = add_days(amended_si.posting_date, idx)
 		amended_si.save()
 		amended_si.submit()
 
