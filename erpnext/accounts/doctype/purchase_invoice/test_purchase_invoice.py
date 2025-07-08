@@ -9,6 +9,7 @@ from frappe.utils import (
 	add_days,
 	cint,
 	flt,
+	formatdate,
 	get_quarter_start,
 	get_year_ending,
 	get_year_start,
@@ -5522,6 +5523,76 @@ class TestPurchaseInvoice(FrappeTestCase, StockTestMixin):
 		change_release_date(name=pi.name, release_date=add_days(today(), 1))
 		pi.load_from_db()
 		self.assertEqual(getdate(pi.release_date), getdate(add_days(today(), 1)))
+
+	def test_get_list_context_codecov(self):
+		from .purchase_invoice import get_list_context
+
+		data = get_list_context()
+		self.assertTrue(data.get("title"), "Purchase Invoices")
+		self.assertTrue(data.get("no_breadcrumbs"), True)
+		self.assertTrue(data.get("show_sidebar"), True)
+		self.assertTrue(data.get("show_search"), True)
+
+	def test_check_prev_docstatus_codecov(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import create_purchase_order
+		from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import make_purchase_receipt
+
+		po = create_purchase_order(do_not_save=True)
+		po.insert(ignore_permissions=True)
+
+		pi = make_purchase_invoice(do_not_save=True)
+		pi.items[0].purchase_order = po.name
+		pi.insert(ignore_permissions=True)
+		with self.assertRaises(frappe.ValidationError) as cm:
+			pi.submit()
+		self.assertIn(f"{po.doctype} {po.name} is not submitted", str(cm.exception))
+
+		pr = make_purchase_receipt(do_not_save=True)
+		pr.insert(ignore_permissions=True)
+
+		pi_1 = make_purchase_invoice(do_not_save=True)
+		pi_1.items[0].purchase_receipt = pr.name
+		pi_1.insert(ignore_permissions=True)
+		with self.assertRaises(frappe.ValidationError) as cm:
+			pi_1.submit()
+		self.assertIn(f"{pr.doctype} {pr.name} is not submitted", str(cm.exception))
+
+	def test_make_write_off_gl_entry_with_writeoff_account_codecov(self):
+		args = {"qty": 1, "rate": 200, "do_not_save": True}
+		pi = make_purchase_invoice(**args)
+		pi.write_off_amount = 100
+		pi.write_off_account = "Cash - _TC"
+		pi.insert(ignore_permissions=True)
+		pi.submit()
+
+		self.assertEqual(pi.status, "Partly Paid")
+		self.assertEqual(pi.docstatus, 1)
+
+	def test_create_remarks_codecov(self):
+		args = {"qty": 1, "rate": 200, "do_not_save": True}
+		pi = make_purchase_invoice(**args)
+		pi.remarks = ""
+		pi.bill_no = "test-1122"
+		pi.bill_date = today()
+		pi.insert(ignore_permissions=True)
+		pi.submit()
+		self.assertEqual(pi.remarks, f"Against Supplier Invoice {pi.bill_no} dated {formatdate(today())}")
+
+	def test_validate_credit_to_acc_codecov(self):
+		from erpnext.accounts.doctype.account.test_account import create_account
+
+		account = create_account(
+			account_name="Deferred Expense", parent_account="Current Assets - _TC", company="_Test Company"
+		)
+		args = {"qty": 1, "rate": 200, "do_not_save": True}
+		pi = make_purchase_invoice(**args)
+		pi.credit_to = account
+		with self.assertRaises(frappe.ValidationError) as cm:
+			pi.insert(ignore_mandatory=True)
+		self.assertIn(
+			"Please ensure that the Credit To account Deferred Expense - _TC is a Payable account. You can change the account type to Payable or select a different account.",
+			str(cm.exception),
+		)
 
 
 def set_advance_flag(company, flag, default_account):
