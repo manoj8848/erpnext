@@ -1187,7 +1187,6 @@ def setup_test_company_defaults(company_name="_Test Company", abbreviation="_TC"
 	company.enable_perpetual_inventory = 1
 	company.enable_provisional_accounting_for_non_stock_items = 1
 	company.save()
-	frappe.db.commit()
 
 	set_default("company", company_name, "__default")
 

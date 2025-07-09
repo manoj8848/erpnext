@@ -148,7 +148,7 @@ class MaintenanceVisit(TransactionBase):
 						else:
 							service_person_field = "NULL"
 						nm = frappe.db.sql(
-							"select t1.name, t1.mntc_date, {service_person_field}, t2.work_done from `tabMaintenance Visit` t1, `tabMaintenance Visit Purpose` t2 where t2.parent = t1.name and t1.completion_status = 'Partially Completed' and t2.prevdoc_docname = %s and t1.name!=%s and t1.docstatus = 1 order by t1.name desc limit 1",
+							f"select t1.name, t1.mntc_date, {service_person_field}, t2.work_done from `tabMaintenance Visit` t1, `tabMaintenance Visit Purpose` t2 where t2.parent = t1.name and t1.completion_status = 'Partially Completed' and t2.prevdoc_docname = %s and t1.name!=%s and t1.docstatus = 1 order by t1.name desc limit 1",
 							(d.prevdoc_docname, self.name),
 						)
 
