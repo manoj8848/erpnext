@@ -7508,6 +7508,7 @@ class TestSalesInvoice(FrappeTestCase):
 		)
 
 	def test_on_recurring_TC_ACC_257(self):
+		frappe.flags.in_test = True
 		reference_si = create_sales_invoice(do_not_save=1)
 		reference_si.insert(ignore_permissions=True)
 		reference_si.submit()
