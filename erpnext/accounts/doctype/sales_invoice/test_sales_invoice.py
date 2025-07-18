@@ -7361,6 +7361,10 @@ class TestSalesInvoice(FrappeTestCase):
 	def test_create_invoice_discounting_TC_ACC_244(self):
 		from .sales_invoice import create_invoice_discounting
 
+		get_dimensions = frappe.get_doc("Accounting Dimension", "Branch")
+		if get_dimensions:
+			get_dimensions.disabled = 1
+			get_dimensions.save()
 		si = create_sales_invoice()
 
 		self.assertEqual(si.docstatus, 1)
@@ -7382,6 +7386,9 @@ class TestSalesInvoice(FrappeTestCase):
 
 		self.assertEqual(invoice_discounting.docstatus, 1)
 		self.assertEqual(invoice_discounting.status, "Sanctioned")
+
+		get_dimensions.disabled = 0
+		get_dimensions.save()
 
 	def test_get_warehouse_TC_ACC_245(self):
 		si = create_sales_invoice(do_not_save=1)
