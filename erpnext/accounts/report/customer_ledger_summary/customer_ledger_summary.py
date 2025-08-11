@@ -383,7 +383,9 @@ class PartyLedgerSummaryReport:
 		gl = qb.DocType("GL Entry")
 		query = (
 			qb.from_(gl)
-			.select(gl.voucher_type, gl.voucher_no)
+			.select(
+				gl.posting_date, gl.account, gl.party, gl.voucher_type, gl.voucher_no, gl.debit, gl.credit
+			)
 			.where(
 				(gl.docstatus < 2)
 				& (gl.is_cancelled == 0)
