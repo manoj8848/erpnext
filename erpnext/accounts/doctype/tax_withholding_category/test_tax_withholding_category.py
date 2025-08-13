@@ -621,11 +621,21 @@ class TestTaxWithholdingCategory(FrappeTestCase):
 		pi3.cancel()
 
 	def test_lower_deduction_certificate_TC_ACC_090_and_TC_ACC_091(self):
+		tax_category = get_tax_withholding_category(
+			category_name="Test Goods Category" + frappe.generate_hash(length=3),
+			rate=10,
+			from_date=today(),
+			to_date=add_days(today(), 30),
+			account="TDS - _TC",
+			single_threshold=2000,
+			cumulative_threshold=2000,
+		)
+		tax_category.insert(ignore_permissions=True)
 		frappe.db.set_value(
 			"Supplier",
 			"Test LDC Supplier",
 			{
-				"tax_withholding_category": "Test Service Category",
+				"tax_withholding_category": tax_category.name,
 				"pan": "ABCTY1234D",
 			},
 		)
@@ -633,7 +643,7 @@ class TestTaxWithholdingCategory(FrappeTestCase):
 		create_lower_deduction_certificate(
 			supplier="Test LDC Supplier",
 			certificate_no="1AE0423AAJ",
-			tax_withholding_category="Test Service Category",
+			tax_withholding_category=tax_category.name,
 			tax_rate=2,
 			limit=50000,
 		)

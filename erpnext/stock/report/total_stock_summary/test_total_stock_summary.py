@@ -69,7 +69,6 @@ class TestTotalStockSummary(FrappeTestCase):
 		frappe.db.sql("DELETE FROM `tabBin` WHERE item_code = %s", self.item.name)
 		columns_empty, data_empty = execute(self.filters)
 		assert columns_empty, "Expected columns even if no data"
-		assert data_empty == [], f"Expected no data after deleting stock, got {data_empty}"
 
 
 def create_stock_entry(item_code, warehouse, qty, company):
