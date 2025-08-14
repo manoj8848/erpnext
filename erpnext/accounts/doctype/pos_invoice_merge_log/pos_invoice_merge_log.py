@@ -18,7 +18,7 @@ from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 )
 
 
-class POSInvoiceMergeLog(Document):  # pragma: no cover
+class POSInvoiceMergeLog(Document):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
