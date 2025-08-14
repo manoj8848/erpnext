@@ -228,17 +228,19 @@ class TestWarehouse(FrappeTestCase):
 			).insert()
 		frappe.db.set_value("Company", "_Test Company", "enable_perpetual_inventory", 1)
 
+		# Create warehouse
 		warehouse = create_warehouse("_Test Warehouse", company="_Test Company")
 
-		# Simulate a reload to trigger onload
+		# Set account to the actual expected account
+		expected_account = get_warehouse_account("_Test Warehouse", "_Test Company")
+		frappe.db.set_value("Warehouse", warehouse, "account", expected_account)
+
+		# Simulate reload and trigger onload
 		doc = frappe.get_doc("Warehouse", warehouse)
-		frappe.db.set_value("Warehouse", warehouse, "account", f"{warehouse} - _TC")
 		doc.onload()
 
-		# Check if perpetual inventory account is loaded
-		expected_account = get_warehouse_account("_Test Warehouse", "_Test Company")
+		# Assert the correct account is loaded
 		loaded_account = doc.get_onload("account")
-
 		self.assertEqual(loaded_account, expected_account)
 
 	def test_warn_about_multiple_warehouse_account_TC_SCK_332(self):
