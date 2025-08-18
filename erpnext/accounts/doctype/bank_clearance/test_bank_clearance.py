@@ -200,16 +200,30 @@ def add_transactions():
 
 def make_payment_entry():
 	from erpnext.buying.doctype.supplier.test_supplier import create_supplier
-
+	from erpnext.accounts.doctype.account.test_account import create_account
 	supplier = create_supplier(supplier_name="_Test Supplier")
+	validate_allow_transact("_Test Company", supplier.name)
+	create_account(
+		account_name="_Test Credit",
+		company="_Test Company",
+		parent_account="Accounts Receivable - _TC",
+		account_currency="INR",
+		account_type="Expense Account",
+		allow_credit=1,
+	)
 	pi = make_purchase_invoice(
 		supplier=supplier,
 		supplier_warehouse="_Test Warehouse - _TC",
 		expense_account="Cost of Goods Sold - _TC",
 		uom="Nos",
+		currency="INR",
 		qty=1,
 		rate=690,
+  		do_not_submit=True
 	)
+	pi.debit_to = "_Test Credit - _TC"
+	pi.save(ignore_permissions=True)
+	pi.submit()
 	pe = get_payment_entry("Purchase Invoice", pi.name, bank_account="_Test Bank Clearance - _TC")
 	pe.reference_no = "Conrad Oct 18"
 	pe.reference_date = "2018-10-24"
@@ -243,3 +257,13 @@ def make_pos_sales_invoice():
 	si.submit()
 
 	return si
+
+def validate_allow_transact(company, supplier):
+	if frappe.db.exists("Supplier", supplier):
+		su = frappe.get_doc("Supplier", supplier)
+		exist = [d.company for d in su.get("companies")]
+		if company not in exist:
+			su.append("companies", {"company": company})
+			su.save(ignore_permissions=True)
+			
+
