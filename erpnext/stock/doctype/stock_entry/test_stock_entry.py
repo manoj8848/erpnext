@@ -3945,6 +3945,12 @@ class TestStockEntry(FrappeTestCase):
 			company=company,
 		)
 		qty = 10
+		if frappe.db.exists("Company", "PP2 Ltd"):
+			frappe.db.set_value("Company", "PP2 Ltd", "default_inventory_account", "Stock In Hand - _TC")
+
+			if frappe.db.exists("Warehouse", "Stores - PP2 Ltd"):
+				frappe.db.set_value("Warehouse", "Stores - PP2 Ltd", "account", "Stock In Hand - _TC")
+
 		get_warehouse_account_map()
 		# Stock Receipt
 		make_stock_entry(

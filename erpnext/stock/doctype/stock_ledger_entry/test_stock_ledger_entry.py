@@ -210,6 +210,12 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 
 		self.assertEqual(outgoing_rate, 100)
 		self.assertEqual(stock_value_difference, -200)
+		frappe.db.set_value(
+			"Company",
+			"_Test Company",
+			"expenses_included_in_valuation",
+			"Expenses Included In Valuation - _TC",
+		)
 
 		create_landed_cost_voucher("Purchase Receipt", pr.name, pr.company)
 
@@ -1106,6 +1112,9 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 		self.addCleanup(frappe.flags.pop, "dont_execute_stock_reposts")
 
 		item = make_item().name
+		item = frappe.get_doc("Item", item)
+		item.valuation_rate = 100
+		item.save()
 		warehouse = "_Test Warehouse - _TC"
 
 		posting_date = "2022-01-01"
