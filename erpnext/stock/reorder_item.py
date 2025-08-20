@@ -98,6 +98,7 @@ def _reorder_item():
 						"description": d.description,
 						"stock_uom": d.stock_uom,
 						"purchase_uom": d.purchase_uom,
+						"lead_time_days": d.lead_time_days,
 					}
 				),
 			)
@@ -129,6 +130,7 @@ def get_items_for_reorder() -> dict[str, list]:
 			item_table.brand,
 			item_table.variant_of,
 			item_table.has_variants,
+			item_table.lead_time_days,
 		)
 		.where(
 			(item_table.disabled == 0)
@@ -354,9 +356,14 @@ def get_email_list(company):
 
 
 def get_comapny_wise_users(company):
+	companies = [company]
+
+	if parent_company := frappe.db.get_value("Company", company, "parent_company"):
+		companies.append(parent_company)
+
 	users = frappe.get_all(
 		"User Permission",
-		filters={"allow": "Company", "for_value": company, "apply_to_all_doctypes": 1},
+		filters={"allow": "Company", "for_value": ("in", companies), "apply_to_all_doctypes": 1},
 		fields=["user"],
 	)
 

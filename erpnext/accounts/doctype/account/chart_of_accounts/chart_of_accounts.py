@@ -18,6 +18,7 @@ def create_charts(
 		accounts = []
 
 		def _import_accounts(children, parent, root_type, root_account=False):
+			nonlocal custom_chart
 			for account_name, child in children.items():
 				if root_account:
 					root_type = child.get("root_type")
@@ -55,7 +56,8 @@ def create_charts(
 							"account_number": account_number,
 							"account_type": child.get("account_type"),
 							"account_currency": child.get("account_currency")
-							or frappe.get_cached_value("Company", company, "default_currency"),
+							if custom_chart
+							else frappe.get_cached_value("Company", company, "default_currency"),
 							"tax_rate": child.get("tax_rate"),
 						}
 					)
@@ -116,6 +118,7 @@ def identify_is_group(child):
 	return is_group
 
 
+@frappe.whitelist()
 def get_chart(chart_template, existing_company=None):
 	chart = {}
 	if existing_company:

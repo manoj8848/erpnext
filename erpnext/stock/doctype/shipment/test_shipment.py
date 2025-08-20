@@ -4,12 +4,12 @@
 from datetime import date, timedelta
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from erpnext.stock.doctype.delivery_note.delivery_note import make_shipment
 
 
-class TestShipment(FrappeTestCase):
+class TestShipment(IntegrationTestCase):
 	def test_shipment_from_delivery_note(self):
 		delivery_note = create_test_delivery_note()
 		delivery_note.submit()
@@ -19,6 +19,17 @@ class TestShipment(FrappeTestCase):
 		self.assertEqual(second_shipment.value_of_goods, delivery_note.grand_total)
 		self.assertEqual(len(second_shipment.shipment_delivery_note), 1)
 		self.assertEqual(second_shipment.shipment_delivery_note[0].delivery_note, delivery_note.name)
+
+	def test_get_total_weight(self):
+		shipment = frappe.new_doc("Shipment")
+		shipment.extend(
+			"shipment_parcel",
+			[
+				{"length": 5, "width": 5, "height": 5, "weight": 5, "count": 5},
+				{"length": 5, "width": 5, "height": 5, "weight": 10, "count": 1},
+			],
+		)
+		self.assertEqual(shipment.get_total_weight(), 35)
 
 
 def create_test_delivery_note():

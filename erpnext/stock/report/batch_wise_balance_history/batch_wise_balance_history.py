@@ -5,30 +5,20 @@
 import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, flt, get_datetime, get_table_name, getdate
-from frappe.utils.deprecations import deprecated
 from pypika import functions as fn
 
+from erpnext.deprecation_dumpster import deprecated
+from erpnext.stock.doctype.stock_closing_entry.stock_closing_entry import StockClosing
 from erpnext.stock.doctype.warehouse.warehouse import apply_warehouse_filter
 
-SLE_COUNT_LIMIT = 10_000
-
-
-def _estimate_table_row_count(doctype: str):
-	table = get_table_name(doctype)
-	return cint(
-		frappe.db.sql(
-			f"""select table_rows
-			   from  information_schema.tables
-			   where table_name = '{table}' ;"""
-		)[0][0]
-	)
+SLE_COUNT_LIMIT = 100_000
 
 
 def execute(filters=None):
 	if not filters:
 		filters = {}
 
-	sle_count = _estimate_table_row_count("Stock Ledger Entry")
+	sle_count = frappe.db.estimate_count("Stock Ledger Entry")
 
 	if (
 		sle_count > SLE_COUNT_LIMIT
@@ -67,6 +57,11 @@ def execute(filters=None):
 								flt(qty_dict.in_qty, float_precision),
 								flt(qty_dict.out_qty, float_precision),
 								flt(qty_dict.bal_qty, float_precision),
+								flt(
+									(qty_dict.bal_value / qty_dict.bal_qty) if qty_dict.bal_qty else 0,
+									float_precision,
+								),
+								flt(qty_dict.bal_value, float_precision),
 								item_map[item]["stock_uom"],
 							]
 						)
@@ -79,14 +74,16 @@ def get_columns(filters):
 
 	columns = [
 		_("Item") + ":Link/Item:100",
-		_("Item Name") + "::150",
-		_("Description") + "::150",
+		_("Item Name") + "::120",
+		_("Description") + "::90",
 		_("Warehouse") + ":Link/Warehouse:100",
 		_("Batch") + ":Link/Batch:100",
 		_("Opening Qty") + ":Float:90",
 		_("In Qty") + ":Float:80",
 		_("Out Qty") + ":Float:80",
-		_("Balance Qty") + ":Float:90",
+		_("Balance Qty") + ":Float:120",
+		_("Valuation Rate") + ":Float:120",
+		_("Balance Value") + ":Currency:120",
 		_("UOM") + "::90",
 	]
 
@@ -94,13 +91,37 @@ def get_columns(filters):
 
 
 def get_stock_ledger_entries(filters):
-	entries = get_stock_ledger_entries_for_batch_no(filters)
+	entries = []
 
+	stk_cl_obj = StockClosing(filters.company, filters.from_date, filters.from_date)
+	if stk_cl_obj.last_closing_balance:
+		entries += get_stock_closing_balance(stk_cl_obj, filters)
+		filters.start_from = stk_cl_obj.last_closing_balance.to_date
+
+	entries += get_stock_ledger_entries_for_batch_no(filters)
 	entries += get_stock_ledger_entries_for_batch_bundle(filters)
+
 	return entries
 
 
-@deprecated
+def get_stock_closing_balance(stk_cl_obj, filters):
+	query_filters = {}
+	for field in ["item_code", "warehouse", "company", "batch_no"]:
+		if filters.get(field):
+			query_filters[field] = filters.get(field)
+
+	if filters.warehouse_type:
+		warehouses = frappe.get_all(
+			"Warehouse",
+			filters={"warehouse_type": filters.warehouse_type, "is_group": 0},
+			pluck="name",
+		)
+		query_filters["warehouse"] = warehouses
+
+	return stk_cl_obj.get_stock_closing_balance(query_filters, for_batch=True)
+
+
+@deprecated(f"{__name__}.get_stock_ledger_entries_for_batch_no", "unknown", "v16", "No known instructions.")
 def get_stock_ledger_entries_for_batch_no(filters):
 	if not filters.get("from_date"):
 		frappe.throw(_("'From Date' is required"))
@@ -118,6 +139,7 @@ def get_stock_ledger_entries_for_batch_no(filters):
 			sle.batch_no,
 			sle.posting_date,
 			fn.Sum(sle.actual_qty).as_("actual_qty"),
+			fn.Sum(sle.stock_value_difference).as_("stock_value_difference"),
 		)
 		.where(
 			(sle.docstatus < 2)
@@ -126,7 +148,6 @@ def get_stock_ledger_entries_for_batch_no(filters):
 			& (sle.posting_datetime < posting_datetime)
 		)
 		.groupby(sle.voucher_no, sle.batch_no, sle.item_code, sle.warehouse)
-		.orderby(sle.item_code, sle.warehouse)
 	)
 
 	query = apply_warehouse_filter(query, sle, filters)
@@ -144,12 +165,17 @@ def get_stock_ledger_entries_for_batch_no(filters):
 		if filters.get(field):
 			query = query.where(sle[field] == filters.get(field))
 
+	if filters.start_from:
+		query = query.where(sle.posting_datetime > get_datetime(filters.start_from))
+
 	return query.run(as_dict=True) or []
 
 
 def get_stock_ledger_entries_for_batch_bundle(filters):
 	sle = frappe.qb.DocType("Stock Ledger Entry")
 	batch_package = frappe.qb.DocType("Serial and Batch Entry")
+
+	to_date = get_datetime(str(filters.to_date) + " 23:59:59")
 
 	query = (
 		frappe.qb.from_(sle)
@@ -161,15 +187,15 @@ def get_stock_ledger_entries_for_batch_bundle(filters):
 			batch_package.batch_no,
 			sle.posting_date,
 			fn.Sum(batch_package.qty).as_("actual_qty"),
+			fn.Sum(batch_package.stock_value_difference).as_("stock_value_difference"),
 		)
 		.where(
 			(sle.docstatus < 2)
 			& (sle.is_cancelled == 0)
 			& (sle.has_batch_no == 1)
-			& (sle.posting_date <= filters["to_date"])
+			& (sle.posting_datetime <= to_date)
 		)
 		.groupby(sle.voucher_no, batch_package.batch_no, batch_package.warehouse)
-		.orderby(sle.item_code, sle.warehouse)
 	)
 
 	query = apply_warehouse_filter(query, sle, filters)
@@ -190,6 +216,9 @@ def get_stock_ledger_entries_for_batch_bundle(filters):
 			else:
 				query = query.where(sle[field] == filters.get(field))
 
+	if filters.start_from:
+		query = query.where(sle.posting_date > getdate(filters.start_from))
+
 	return query.run(as_dict=True) or []
 
 
@@ -202,7 +231,10 @@ def get_item_warehouse_batch_map(filters, float_precision):
 
 	for d in sle:
 		iwb_map.setdefault(d.item_code, {}).setdefault(d.warehouse, {}).setdefault(
-			d.batch_no, frappe._dict({"opening_qty": 0.0, "in_qty": 0.0, "out_qty": 0.0, "bal_qty": 0.0})
+			d.batch_no,
+			frappe._dict(
+				{"opening_qty": 0.0, "in_qty": 0.0, "out_qty": 0.0, "bal_qty": 0.0, "bal_value": 0.0}
+			),
 		)
 		qty_dict = iwb_map[d.item_code][d.warehouse][d.batch_no]
 		if d.posting_date < from_date:
@@ -218,6 +250,7 @@ def get_item_warehouse_batch_map(filters, float_precision):
 				)
 
 		qty_dict.bal_qty = flt(qty_dict.bal_qty, float_precision) + flt(d.actual_qty, float_precision)
+		qty_dict.bal_value += flt(d.stock_value_difference, float_precision)
 
 	return iwb_map
 

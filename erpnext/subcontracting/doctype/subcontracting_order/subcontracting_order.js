@@ -5,10 +5,38 @@ frappe.provide("erpnext.buying");
 
 erpnext.landed_cost_taxes_and_charges.setup_triggers("Subcontracting Order");
 
+// client script for Subcontracting Order Item is not necessarily required as the server side code will do everything that is necessary.
+// this is just so that the user does not get potentially confused
+frappe.ui.form.on("Subcontracting Order Item", {
+	qty(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		frappe.model.set_value(cdt, cdn, "amount", row.qty * row.rate);
+		const service_item = frm.doc.service_items[row.idx - 1];
+		frappe.model.set_value(
+			service_item.doctype,
+			service_item.name,
+			"qty",
+			row.qty * row.subcontracting_conversion_factor
+		);
+		frappe.model.set_value(service_item.doctype, service_item.name, "fg_item_qty", row.qty);
+		frappe.model.set_value(
+			service_item.doctype,
+			service_item.name,
+			"amount",
+			row.qty * row.subcontracting_conversion_factor * service_item.rate
+		);
+	},
+	before_items_remove(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		frm.toggle_enable(["service_items"], true);
+		frm.get_field("service_items").grid.grid_rows[row.idx - 1].remove();
+		frm.toggle_enable(["service_items"], false);
+	},
+});
+
 frappe.ui.form.on("Subcontracting Order", {
 	setup: (frm) => {
 		frm.get_field("items").grid.cannot_add_rows = true;
-		frm.get_field("items").grid.only_sortable();
 		frm.trigger("set_queries");
 
 		frm.set_indicator_formatter("item_code", (doc) => (doc.qty <= doc.received_qty ? "green" : "orange"));
@@ -164,6 +192,10 @@ frappe.ui.form.on("Subcontracting Order", {
 		});
 	},
 
+	company: function (frm) {
+		erpnext.utils.set_letter_head(frm);
+	},
+
 	get_materials_from_supplier: function (frm) {
 		let sco_rm_details = [];
 
@@ -226,20 +258,24 @@ erpnext.buying.SubcontractingOrderController = class SubcontractingOrderControll
 		if (doc.docstatus == 1) {
 			if (!["Closed", "Completed"].includes(doc.status)) {
 				if (flt(doc.per_received) < 100) {
-					cur_frm.add_custom_button(
+					this.frm.add_custom_button(
 						__("Subcontracting Receipt"),
 						this.make_subcontracting_receipt,
 						__("Create")
 					);
 					if (me.has_unsupplied_items()) {
-						cur_frm.add_custom_button(
+						this.frm.add_custom_button(
 							__("Material to Supplier"),
 							this.make_stock_entry,
 							__("Transfer")
 						);
 					}
 				}
-				cur_frm.page.set_inner_btn_group_as_primary(__("Create"));
+				if (flt(doc.per_received) < 100 && me.has_unsupplied_items()) {
+					this.frm.page.set_inner_btn_group_as_primary(__("Transfer"));
+				} else {
+					this.frm.page.set_inner_btn_group_as_primary(__("Create"));
+				}
 			}
 		}
 	}

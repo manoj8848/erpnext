@@ -8,7 +8,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder import DocType, Interval
 from frappe.query_builder.functions import Now
-from frappe.utils import cint, cstr
+from frappe.utils import cint, cstr, date_diff, today
 
 from erpnext.manufacturing.doctype.bom_update_log.bom_updation_utils import (
 	get_leaf_boms,
@@ -88,10 +88,12 @@ class BOMUpdateLog(Document):
 
 		wip_log = frappe.get_all(
 			"BOM Update Log",
-			{"update_type": "Update Cost", "status": ["in", ["Queued", "In Progress"]]},
+			fields=["name", "modified"],
+			filters={"update_type": "Update Cost", "status": ["in", ["Queued", "In Progress"]]},
 			limit_page_length=1,
 		)
-		if wip_log:
+
+		if wip_log and date_diff(today(), wip_log[0].modified) < 1:
 			log_link = frappe.utils.get_link_to_form("BOM Update Log", wip_log[0].name)
 			frappe.throw(
 				_("BOM Updation already in progress. Please wait until {0} is complete.").format(log_link),
@@ -106,7 +108,7 @@ class BOMUpdateLog(Document):
 				doc=self,
 				boms=boms,
 				timeout=40000,
-				now=frappe.flags.in_test,
+				now=frappe.in_test,
 				enqueue_after_commit=True,
 			)
 		else:
@@ -114,7 +116,7 @@ class BOMUpdateLog(Document):
 				method="erpnext.manufacturing.doctype.bom_update_log.bom_update_log.process_boms_cost_level_wise",
 				queue="long",
 				update_doc=self,
-				now=frappe.flags.in_test,
+				now=frappe.in_test,
 				enqueue_after_commit=True,
 			)
 
@@ -126,7 +128,7 @@ def run_replace_bom_job(
 	try:
 		doc.db_set("status", "In Progress")
 
-		if not frappe.flags.in_test:
+		if not frappe.in_test:
 			frappe.db.commit()
 
 		frappe.db.auto_commit_on_many_writes = 1
@@ -139,7 +141,7 @@ def run_replace_bom_job(
 	finally:
 		frappe.db.auto_commit_on_many_writes = 0
 
-		if not frappe.flags.in_test:
+		if not frappe.in_test:
 			frappe.db.commit()  # nosemgrep
 
 
@@ -201,7 +203,7 @@ def queue_bom_cost_jobs(current_boms_list: list[str], update_doc: "BOMUpdateLog"
 			bom_list=boms_to_process,
 			batch_name=batch_row.name,
 			queue="long",
-			now=frappe.flags.in_test,
+			now=frappe.in_test,
 		)
 
 

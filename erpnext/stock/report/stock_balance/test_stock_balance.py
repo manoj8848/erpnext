@@ -2,7 +2,7 @@ from typing import Any
 
 import frappe
 from frappe import _dict
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import today
 
 from erpnext.stock.doctype.item.test_item import make_item
@@ -15,7 +15,7 @@ def stock_balance(filters):
 	return [_dict(row) for row in execute(filters)[1]]
 
 
-class TestStockBalance(FrappeTestCase):
+class TestStockBalance(IntegrationTestCase):
 	# ----------- utils
 
 	def setUp(self):
@@ -23,7 +23,7 @@ class TestStockBalance(FrappeTestCase):
 		self.filters = _dict(
 			{
 				"company": "_Test Company",
-				"item_code": self.item.name,
+				"item_code": [self.item.name],
 				"from_date": "2020-01-01",
 				"to_date": str(today()),
 			}
@@ -165,6 +165,6 @@ class TestStockBalance(FrappeTestCase):
 		variant.save()
 
 		self.generate_stock_ledger(variant.name, [_dict(qty=5, rate=10)])
-		rows = stock_balance(self.filters.update({"show_variant_attributes": 1, "item_code": variant.name}))
+		rows = stock_balance(self.filters.update({"show_variant_attributes": 1, "item_code": [variant.name]}))
 		self.assertPartialDictEq(attributes, rows[0])
 		self.assertInvariants(rows)

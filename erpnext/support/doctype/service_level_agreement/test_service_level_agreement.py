@@ -1,10 +1,10 @@
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-
 import datetime
 import unittest
 
 import frappe
+from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
 from erpnext.support.doctype.issue_priority.test_issue_priority import make_priorities
@@ -13,7 +13,7 @@ from erpnext.support.doctype.service_level_agreement.service_level_agreement imp
 )
 
 
-class TestServiceLevelAgreement(unittest.TestCase):
+class TestServiceLevelAgreement(IntegrationTestCase):
 	def setUp(self):
 		self.create_company()
 		frappe.db.set_single_value("Support Settings", "track_service_level_agreement", 1)
@@ -227,7 +227,7 @@ class TestServiceLevelAgreement(unittest.TestCase):
 
 		self.assertEqual(lead.service_level_agreement, lead_sla.name)
 		self.assertEqual(lead.response_by, datetime.datetime(2019, 3, 4, 16, 0))
-		self.assertEqual(lead.resolution_by, datetime.datetime(2019, 3, 4, 18, 0))
+		self.assertEqual(lead.sla_resolution_by, datetime.datetime(2019, 3, 4, 18, 0))
 
 		frappe.flags.current_time = datetime.datetime(2019, 3, 4, 15, 0)
 		lead.reload()
@@ -268,7 +268,7 @@ class TestServiceLevelAgreement(unittest.TestCase):
 
 		lead.reload()
 		self.assertEqual(flt(lead.total_hold_time, 2), 3000)
-		self.assertEqual(lead.resolution_by, datetime.datetime(2020, 3, 4, 16, 50))
+		self.assertEqual(lead.sla_resolution_by, datetime.datetime(2020, 3, 4, 16, 50))
 
 	def test_failed_sla_for_response_only(self):
 		doctype = "Lead"
@@ -333,7 +333,7 @@ class TestServiceLevelAgreement(unittest.TestCase):
 			holiday_list="__Test Holiday List",
 			entity_type=None,
 			entity=None,
-			condition='doc.source == "Test Source"',
+			condition='doc.utm_source == "Test Source"',
 			response_time=14400,
 			sla_fulfilled_on=[{"status": "Replied"}],
 			apply_sla_for_resolution=0,
@@ -343,16 +343,18 @@ class TestServiceLevelAgreement(unittest.TestCase):
 		applied_sla = frappe.db.get_value("Lead", lead.name, "service_level_agreement")
 		self.assertFalse(applied_sla)
 
-		source = frappe.get_doc(doctype="Lead Source", source_name="Test Source")
+		source = frappe.new_doc(doctype="UTM Source")
+		source.name = "Test Source"
+		source.flags.name_set = True
 		source.insert(ignore_if_duplicate=True)
-		lead.source = "Test Source"
+		lead.utm_source = "Test Source"
 		lead.save()
 		applied_sla = frappe.db.get_value("Lead", lead.name, "service_level_agreement")
 		self.assertEqual(applied_sla, lead_sla.name)
 
 		# check if SLA is removed if condition fails
 		lead.reload()
-		lead.source = None
+		lead.utm_source = None
 		lead.save()
 		applied_sla = frappe.db.get_value("Lead", lead.name, "service_level_agreement")
 		self.assertFalse(applied_sla)

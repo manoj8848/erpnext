@@ -3,7 +3,7 @@
 
 
 import frappe
-from frappe import _
+from frappe import _, bold
 from frappe.model.document import Document
 from frappe.utils import (
 	add_days,
@@ -44,17 +44,15 @@ class Workstation(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
+		from erpnext.manufacturing.doctype.workstation_cost.workstation_cost import WorkstationCost
 		from erpnext.manufacturing.doctype.workstation_working_hour.workstation_working_hour import (
 			WorkstationWorkingHour,
 		)
 
 		description: DF.Text | None
+		disabled: DF.Check
 		holiday_list: DF.Link | None
 		hour_rate: DF.Currency
-		hour_rate_consumable: DF.Currency
-		hour_rate_electricity: DF.Currency
-		hour_rate_labour: DF.Currency
-		hour_rate_rent: DF.Currency
 		off_status_image: DF.AttachImage | None
 		on_status_image: DF.AttachImage | None
 		plant_floor: DF.Link | None
@@ -63,14 +61,35 @@ class Workstation(Document):
 		total_working_hours: DF.Float
 		warehouse: DF.Link | None
 		working_hours: DF.Table[WorkstationWorkingHour]
+		workstation_costs: DF.Table[WorkstationCost]
 		workstation_name: DF.Data
 		workstation_type: DF.Link | None
 	# end: auto-generated types
+
+	def validate(self):
+		self.validate_duplicate_operating_component()
+
+	def validate_duplicate_operating_component(self):
+		components = []
+		for row in self.workstation_costs:
+			if row.operating_component not in components:
+				components.append(row.operating_component)
+			else:
+				frappe.throw(
+					_("Duplicate Operating Component {0} found in Operating Components").format(
+						bold(row.operating_component)
+					)
+				)
 
 	def before_save(self):
 		self.set_data_based_on_workstation_type()
 		self.set_hour_rate()
 		self.set_total_working_hours()
+		self.disabled_workstation()
+
+	def disabled_workstation(self):
+		if self.disabled:
+			self.status = "Off"
 
 	def set_total_working_hours(self):
 		self.total_working_hours = 0.0
@@ -89,40 +108,59 @@ class Workstation(Document):
 			frappe.throw(_("Row #{0}: Start Time must be before End Time").format(row.idx))
 
 	def set_hour_rate(self):
-		self.hour_rate = (
-			flt(self.hour_rate_labour)
-			+ flt(self.hour_rate_electricity)
-			+ flt(self.hour_rate_consumable)
-			+ flt(self.hour_rate_rent)
-		)
+		self.hour_rate = 0.0
+		for row in self.workstation_costs:
+			if row.operating_cost:
+				self.hour_rate += flt(row.operating_cost)
 
 	@frappe.whitelist()
 	def set_data_based_on_workstation_type(self):
+		if self.workstation_costs:
+			return
+
 		if self.workstation_type:
-			fields = [
-				"hour_rate_labour",
-				"hour_rate_electricity",
-				"hour_rate_consumable",
-				"hour_rate_rent",
-				"hour_rate",
-				"description",
-			]
+			data = frappe.get_all(
+				"Workstation Cost",
+				fields=["operating_component", "operating_cost", "idx"],
+				filters={"parent": self.workstation_type, "parenttype": "Workstation Type"},
+				order_by="idx",
+			)
 
-			data = frappe.get_cached_value("Workstation Type", self.workstation_type, fields, as_dict=True)
-
-			if not data:
-				return
-
-			for field in fields:
-				if self.get(field):
-					continue
-
-				if value := data.get(field):
-					self.set(field, value)
+			for row in data:
+				self.append(
+					"workstation_costs",
+					{
+						"operating_component": row.operating_component,
+						"operating_cost": row.operating_cost,
+						"idx": row.idx,
+					},
+				)
 
 	def on_update(self):
 		self.validate_overlap_for_operation_timings()
 		self.update_bom_operation()
+
+		if self.plant_floor:
+			self.publish_workstation_status()
+
+	def publish_workstation_status(self):
+		if not self._doc_before_save:
+			return
+
+		if self._doc_before_save.get("status") == self.status:
+			return
+
+		data = get_workstations(plant_floor=self.plant_floor, workstation_name=self.name)[0]
+
+		color_map = get_color_map()
+		data["old_color"] = color_map.get(self._doc_before_save.get("status"), "red")
+
+		frappe.publish_realtime(
+			"update_workstation_status",
+			data,
+			doctype="Plant Floor",
+			docname=self.plant_floor,
+		)
 
 	def validate_overlap_for_operation_timings(self):
 		"""Check if there is no overlap in setting Workstation Operating Hours"""
@@ -238,10 +276,13 @@ def get_job_cards(workstation, job_card=None):
 		user_employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
 
 		for row in jc_data:
+			if row.status == "Open":
+				row.status = "Not Started"
+
 			item_code = row.finished_good or row.production_item
 			row.fg_uom = frappe.get_cached_value("Item", item_code, "stock_uom")
 
-			row.status_color = get_status_color(row.status)
+			row.status_colour = get_status_color(row.status)
 			row.job_card_link = f"""
 					<a class="ellipsis" data-doctype="Job Card" data-name="{row.name}" href="/app/job-card/{row.name}" title="" data-original-title="{row.name}">{row.name}</a>
 				"""
@@ -423,8 +464,8 @@ def get_workstations(**kwargs):
 			_workstation.on_status_image,
 			_workstation.off_status_image,
 		)
-		.orderby(_workstation.workstation_type, _workstation.name)
-		.where(_workstation.plant_floor == kwargs.plant_floor)
+		.orderby(_workstation.creation, _workstation.workstation_type, _workstation.name)
+		.where((_workstation.plant_floor == kwargs.plant_floor) & (_workstation.disabled == 0))
 	)
 
 	if kwargs.workstation:
@@ -436,9 +477,28 @@ def get_workstations(**kwargs):
 	if kwargs.workstation_status:
 		query = query.where(_workstation.status == kwargs.workstation_status)
 
+	if kwargs.workstation_name:
+		query = query.where(_workstation.name == kwargs.workstation_name)
+
 	data = query.run(as_dict=True)
 
-	color_map = {
+	color_map = get_color_map()
+
+	for d in data:
+		d.workstation_name = get_link_to_form("Workstation", d.name)
+		d.status_image = d.on_status_image
+		d.workstation_off = ""
+		d.color = color_map.get(d.status, "red")
+		d.workstation_link = get_url_to_form("Workstation", d.name)
+		if d.status != "Production":
+			d.status_image = d.off_status_image
+			d.workstation_off = "workstation-off"
+
+	return data
+
+
+def get_color_map():
+	return {
 		"Production": "green",
 		"Off": "gray",
 		"Idle": "gray",
@@ -446,16 +506,6 @@ def get_workstations(**kwargs):
 		"Maintenance": "yellow",
 		"Setup": "blue",
 	}
-
-	for d in data:
-		d.workstation_name = get_link_to_form("Workstation", d.name)
-		d.status_image = d.on_status_image
-		d.color = color_map.get(d.status, "red")
-		d.workstation_link = get_url_to_form("Workstation", d.name)
-		if d.status != "Production":
-			d.status_image = d.off_status_image
-
-	return data
 
 
 @frappe.whitelist()
@@ -469,6 +519,7 @@ def update_job_card(job_card, method, **kwargs):
 	if kwargs.qty and isinstance(kwargs.qty, str):
 		kwargs.qty = flt(kwargs.qty)
 
+	print(method)
 	doc = frappe.get_doc("Job Card", job_card)
 	doc.run_method(method, **kwargs)
 

@@ -28,7 +28,7 @@ def get_pricing_rules(args, doc=None):
 	pricing_rules = []
 	values = {}
 
-	if not frappe.db.exists("Pricing Rule", {"disable": 0, args.transaction_type: 1}):
+	if not frappe.db.count("Pricing Rule", cache=True):
 		return
 
 	for apply_on in ["Item Code", "Item Group", "Brand"]:
@@ -115,8 +115,8 @@ def _get_pricing_rules(apply_on, args, values):
 		if apply_on_field == "item_code":
 			if args.get("uom", None):
 				item_conditions += (
-					" and ({child_doc}.uom='{item_uom}' or IFNULL({child_doc}.uom, '')='')".format(
-						child_doc=child_doc, item_uom=args.get("uom")
+					" and ({child_doc}.uom={item_uom} or IFNULL({child_doc}.uom, '')='')".format(
+						child_doc=child_doc, item_uom=frappe.db.escape(args.get("uom"))
 					)
 				)
 			if "variant_of" not in args:
@@ -128,8 +128,8 @@ def _get_pricing_rules(apply_on, args, values):
 	elif apply_on_field == "item_group":
 		item_conditions = _get_tree_conditions(args, "Item Group", child_doc, False)
 		if args.get("uom", None):
-			item_conditions += " and ({child_doc}.uom='{item_uom}' or IFNULL({child_doc}.uom, '')='')".format(
-				child_doc=child_doc, item_uom=args.get("uom")
+			item_conditions += " and ({child_doc}.uom={item_uom} or IFNULL({child_doc}.uom, '')='')".format(
+				child_doc=child_doc, item_uom=frappe.db.escape(args.get("uom"))
 			)
 
 	conditions += get_other_conditions(conditions, values, args)
@@ -223,6 +223,10 @@ def _get_tree_conditions(args, parenttype, table, allow_blank=True):
 			)
 
 			frappe.flags.tree_conditions[key] = condition
+
+	elif allow_blank:
+		condition = f"ifnull({table}.{field}, '') = ''"
+
 	return condition
 
 
@@ -651,11 +655,23 @@ def get_product_discount_rule(pricing_rule, item_details, args=None, doc=None):
 
 	qty = pricing_rule.free_qty or 1
 	if pricing_rule.is_recursive:
-		transaction_qty = (args.get("qty") if args else doc.total_qty) - pricing_rule.apply_recursion_over
-		if transaction_qty:
+		transaction_qty = sum(
+			[
+				row.qty
+				for row in doc.items
+				if not row.is_free_item
+				and row.item_code == args.item_code
+				and row.pricing_rules == args.pricing_rules
+			]
+		)
+		transaction_qty = transaction_qty - pricing_rule.apply_recursion_over
+		if transaction_qty and transaction_qty > 0:
 			qty = flt(transaction_qty) * qty / pricing_rule.recurse_for
 			if pricing_rule.round_free_qty:
-				qty = math.floor(qty)
+				qty = (flt(transaction_qty) // pricing_rule.recurse_for) * (pricing_rule.free_qty or 1)
+
+	if not qty:
+		return
 
 	free_item_data_args = {
 		"item_code": free_item,
@@ -701,7 +717,10 @@ def apply_pricing_rule_for_free_items(doc, pricing_rule_args):
 				args.pop((item.item_code, item.pricing_rules))
 
 		for free_item in args.values():
-			doc.append("items", free_item)
+			if doc.is_new() or not frappe.get_value(
+				"Pricing Rule", free_item["pricing_rules"], "dont_enforce_free_item_qty"
+			):
+				doc.append("items", free_item)
 
 
 def get_pricing_rule_items(pr_doc, other_items=False) -> list:
@@ -725,13 +744,11 @@ def get_pricing_rule_items(pr_doc, other_items=False) -> list:
 
 def validate_coupon_code(coupon_name):
 	coupon = frappe.get_doc("Coupon Code", coupon_name)
-	if coupon.valid_from:
-		if coupon.valid_from > getdate(today()):
-			frappe.throw(_("Sorry, this coupon code's validity has not started"))
-	elif coupon.valid_upto:
-		if coupon.valid_upto < getdate(today()):
-			frappe.throw(_("Sorry, this coupon code's validity has expired"))
-	elif coupon.used >= coupon.maximum_use:
+	if coupon.valid_from and coupon.valid_from > getdate(today()):
+		frappe.throw(_("Sorry, this coupon code's validity has not started"))
+	elif coupon.valid_upto and coupon.valid_upto < getdate(today()):
+		frappe.throw(_("Sorry, this coupon code's validity has expired"))
+	elif coupon.maximum_use and coupon.used >= coupon.maximum_use:
 		frappe.throw(_("Sorry, this coupon code is no longer valid"))
 
 
@@ -739,7 +756,10 @@ def update_coupon_code_count(coupon_name, transaction_type):
 	coupon = frappe.get_doc("Coupon Code", coupon_name)
 	if coupon:
 		if transaction_type == "used":
-			if coupon.used < coupon.maximum_use:
+			if not coupon.maximum_use:
+				coupon.used = coupon.used + 1
+				coupon.save(ignore_permissions=True)
+			elif coupon.used < coupon.maximum_use:
 				coupon.used = coupon.used + 1
 				coupon.save(ignore_permissions=True)
 			else:

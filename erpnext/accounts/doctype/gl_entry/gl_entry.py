@@ -7,14 +7,18 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.model.meta import get_field_precision
 from frappe.model.naming import set_name_from_naming_options
-from frappe.utils import flt, fmt_money
+from frappe.utils import create_batch, flt, fmt_money, now
 
 import erpnext
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_checks_for_pl_and_bs_accounts,
 )
-from erpnext.accounts.party import validate_party_frozen_disabled, validate_party_gle_currency
-from erpnext.accounts.utils import get_account_currency, get_fiscal_year
+from erpnext.accounts.party import (
+	validate_account_party_type,
+	validate_party_frozen_disabled,
+	validate_party_gle_currency,
+)
+from erpnext.accounts.utils import OUTSTANDING_DOCTYPES, get_account_currency, get_fiscal_year
 from erpnext.exceptions import InvalidAccountCurrency
 
 exclude_from_linked_with = True
@@ -125,7 +129,7 @@ class GLEntry(Document):
 			if not self.get(k):
 				frappe.throw(_("{0} is required").format(_(self.meta.get_label(k))))
 
-		if not (self.party_type and self.party):
+		if not self.is_cancelled and not (self.party_type and self.party):
 			account_type = frappe.get_cached_value("Account", self.account, "account_type")
 			if account_type == "Receivable":
 				frappe.throw(
@@ -220,26 +224,23 @@ class GLEntry(Document):
 	def validate_account_details(self, adv_adj):
 		"""Account must be ledger, active and not freezed"""
 
-		ret = frappe.db.sql(
-			"""select is_group, docstatus, company
-			from tabAccount where name=%s""",
-			self.account,
-			as_dict=1,
-		)[0]
+		account = frappe.get_cached_value(
+			"Account", self.account, fieldname=["is_group", "docstatus", "company"], as_dict=True
+		)
 
-		if ret.is_group == 1:
+		if account.is_group == 1:
 			frappe.throw(
 				_(
 					"""{0} {1}: Account {2} is a Group Account and group accounts cannot be used in transactions"""
 				).format(self.voucher_type, self.voucher_no, self.account)
 			)
 
-		if ret.docstatus == 2:
+		if account.docstatus == 2:
 			frappe.throw(
 				_("{0} {1}: Account {2} is inactive").format(self.voucher_type, self.voucher_no, self.account)
 			)
 
-		if ret.company != self.company:
+		if account.company != self.company:
 			frappe.throw(
 				_("{0} {1}: Account {2} does not belong to Company {3}").format(
 					self.voucher_type, self.voucher_no, self.account, self.company
@@ -268,8 +269,12 @@ class GLEntry(Document):
 
 	def validate_party(self):
 		validate_party_frozen_disabled(self.party_type, self.party)
+		validate_account_party_type(self)
 
 	def validate_currency(self):
+		if self.is_cancelled:
+			return
+
 		company_currency = erpnext.get_company_currency(self.company)
 		account_currency = get_account_currency(self.account)
 
@@ -377,7 +382,7 @@ def update_outstanding_amt(
 				)
 			)
 
-	if against_voucher_type in ["Sales Invoice", "Purchase Invoice", "Fees"]:
+	if against_voucher_type in OUTSTANDING_DOCTYPES:
 		ref_doc = frappe.get_doc(against_voucher_type, against_voucher)
 
 		# Didn't use db_set for optimization purpose
@@ -430,8 +435,9 @@ def update_against_account(voucher_type, voucher_no):
 
 
 def on_doctype_update():
-	frappe.db.add_index("GL Entry", ["against_voucher_type", "against_voucher"])
 	frappe.db.add_index("GL Entry", ["voucher_type", "voucher_no"])
+	frappe.db.add_index("GL Entry", ["posting_date", "company"])
+	frappe.db.add_index("GL Entry", ["party_type", "party"])
 
 
 def rename_gle_sle_docs():
@@ -442,12 +448,20 @@ def rename_gle_sle_docs():
 def rename_temporarily_named_docs(doctype):
 	"""Rename temporarily named docs using autoname options"""
 	docs_to_rename = frappe.get_all(doctype, {"to_rename": "1"}, order_by="creation", limit=50000)
-	for doc in docs_to_rename:
-		oldname = doc.name
-		set_name_from_naming_options(frappe.get_meta(doctype).autoname, doc)
-		newname = doc.name
-		frappe.db.sql(
-			f"UPDATE `tab{doctype}` SET name = %s, to_rename = 0 where name = %s",
-			(newname, oldname),
-			auto_commit=True,
-		)
+	autoname = frappe.get_meta(doctype).autoname
+
+	for batch in create_batch(docs_to_rename, 100):
+		for doc in batch:
+			oldname = doc.name
+			set_name_from_naming_options(autoname, doc)
+			newname = doc.name
+			frappe.db.sql(
+				f"UPDATE `tab{doctype}` SET name = %s, to_rename = 0, modified = %s where name = %s",
+				(newname, now(), oldname),
+			)
+
+			for hook_type in ("on_gle_rename", "on_sle_rename"):
+				for hook in frappe.get_hooks(hook_type):
+					frappe.call(hook, newname=newname, oldname=oldname)
+
+		frappe.db.commit()

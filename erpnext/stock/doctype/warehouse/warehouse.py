@@ -8,6 +8,7 @@ import frappe
 from frappe import _, throw
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.utils import cint
+from frappe.utils.caching import request_cache
 from frappe.utils.nestedset import NestedSet
 from pypika.terms import ExistsCriterion
 
@@ -32,6 +33,7 @@ class Warehouse(NestedSet):
 		disabled: DF.Check
 		email_id: DF.Data | None
 		is_group: DF.Check
+		is_rejected_warehouse: DF.Check
 		lft: DF.Int
 		mobile_no: DF.Data | None
 		old_parent: DF.Link | None
@@ -220,6 +222,7 @@ def convert_to_group_or_ledger(docname=None):
 	return frappe.get_doc("Warehouse", docname).convert_to_group_or_ledger()
 
 
+@request_cache
 def get_child_warehouses(warehouse):
 	from frappe.utils.nestedset import get_descendants_of
 
@@ -250,19 +253,35 @@ def get_warehouses_based_on_account(account, company=None):
 
 # Will be use for frappe.qb
 def apply_warehouse_filter(query, sle, filters):
-	if warehouse := filters.get("warehouse"):
-		warehouse_table = frappe.qb.DocType("Warehouse")
+	if not (warehouses := filters.get("warehouse")):
+		return query
 
-		lft, rgt = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt"])
-		chilren_subquery = (
-			frappe.qb.from_(warehouse_table)
-			.select(warehouse_table.name)
-			.where(
-				(warehouse_table.lft >= lft)
-				& (warehouse_table.rgt <= rgt)
-				& (warehouse_table.name == sle.warehouse)
-			)
-		)
-		query = query.where(ExistsCriterion(chilren_subquery))
+	warehouse_table = frappe.qb.DocType("Warehouse")
+
+	if isinstance(warehouses, str):
+		warehouses = [warehouses]
+
+	warehouse_range = frappe.get_all(
+		"Warehouse",
+		filters={
+			"name": ("in", warehouses),
+		},
+		fields=["lft", "rgt"],
+		as_list=True,
+	)
+
+	child_query = frappe.qb.from_(warehouse_table).select(warehouse_table.name)
+
+	range_conditions = [
+		(warehouse_table.lft >= lft) & (warehouse_table.rgt <= rgt) for lft, rgt in warehouse_range
+	]
+
+	combined_condition = range_conditions[0]
+	for condition in range_conditions[1:]:
+		combined_condition = combined_condition | condition
+
+	child_query = child_query.where(combined_condition).where(warehouse_table.name == sle.warehouse)
+
+	query = query.where(ExistsCriterion(child_query))
 
 	return query

@@ -15,6 +15,7 @@
   "workstation_name",
   "workstation_type",
   "plant_floor",
+  "disabled",
   "column_break_3",
   "production_capacity",
   "warehouse",
@@ -26,11 +27,8 @@
   "column_break_etmc",
   "off_status_image",
   "over_heads",
-  "hour_rate_electricity",
-  "hour_rate_consumable",
-  "column_break_11",
-  "hour_rate_rent",
-  "hour_rate_labour",
+  "section_break_auzm",
+  "workstation_costs",
   "section_break_11",
   "hour_rate",
   "workstaion_description",
@@ -68,46 +66,6 @@
    "oldfieldtype": "Section Break"
   },
   {
-   "bold": 1,
-   "description": "per hour",
-   "fieldname": "hour_rate_electricity",
-   "fieldtype": "Currency",
-   "label": "Electricity Cost",
-   "oldfieldname": "hour_rate_electricity",
-   "oldfieldtype": "Currency"
-  },
-  {
-   "bold": 1,
-   "description": "per hour",
-   "fieldname": "hour_rate_consumable",
-   "fieldtype": "Currency",
-   "label": "Consumable Cost",
-   "oldfieldname": "hour_rate_consumable",
-   "oldfieldtype": "Currency"
-  },
-  {
-   "fieldname": "column_break_11",
-   "fieldtype": "Column Break"
-  },
-  {
-   "bold": 1,
-   "description": "per hour",
-   "fieldname": "hour_rate_rent",
-   "fieldtype": "Currency",
-   "label": "Rent Cost",
-   "oldfieldname": "hour_rate_rent",
-   "oldfieldtype": "Currency"
-  },
-  {
-   "bold": 1,
-   "description": "Wages per hour",
-   "fieldname": "hour_rate_labour",
-   "fieldtype": "Currency",
-   "label": "Wages",
-   "oldfieldname": "hour_rate_labour",
-   "oldfieldtype": "Currency"
-  },
-  {
    "description": "per hour",
    "fieldname": "hour_rate",
    "fieldtype": "Currency",
@@ -139,6 +97,7 @@
    "fieldname": "production_capacity",
    "fieldtype": "Int",
    "label": "Job Capacity",
+   "non_negative": 1,
    "reqd": 1
   },
   {
@@ -240,13 +199,31 @@
    "fieldname": "section_break_mqqv",
    "fieldtype": "Section Break",
    "hide_border": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "section_break_auzm",
+   "fieldtype": "Section Break",
+   "label": "Operating Costs (Per Hour)"
+  },
+  {
+   "fieldname": "workstation_costs",
+   "fieldtype": "Table",
+   "label": "Operating Components Cost",
+   "options": "Workstation Cost"
   }
  ],
+ "hide_toolbar": 1,
  "icon": "icon-wrench",
  "idx": 1,
  "image_field": "on_status_image",
  "links": [],
- "modified": "2024-06-20 14:17:13.806609",
+ "modified": "2025-08-19 12:07:05.374386",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "Workstation",
@@ -266,6 +243,7 @@
   }
  ],
  "quick_entry": 1,
+ "row_format": "Dynamic",
  "show_name_in_global_search": 1,
  "sort_field": "creation",
  "sort_order": "ASC",

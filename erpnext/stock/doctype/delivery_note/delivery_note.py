@@ -2,6 +2,8 @@
 # License: GNU General Public License v3. See license.txt
 
 
+import json
+
 import frappe
 from frappe import _
 from frappe.contacts.doctype.address.address import get_company_address
@@ -10,9 +12,9 @@ from frappe.model.mapper import get_mapped_doc
 from frappe.model.utils import get_fetch_values
 from frappe.utils import cint, flt
 
+from erpnext.accounts.party import get_due_date
 from erpnext.controllers.accounts_controller import get_taxes_and_charges, merge_taxes
 from erpnext.controllers.selling_controller import SellingController
-from erpnext.stock.doctype.serial_no.serial_no import get_delivery_note_serial_no
 
 form_grid_templates = {"items": "templates/form_grid/item_grid.html"}
 
@@ -48,11 +50,11 @@ class DeliveryNote(SellingController):
 		base_rounding_adjustment: DF.Currency
 		base_total: DF.Currency
 		base_total_taxes_and_charges: DF.Currency
-		campaign: DF.Link | None
 		commission_rate: DF.Float
 		company: DF.Link
 		company_address: DF.Link | None
 		company_address_display: DF.TextEditor | None
+		company_contact_person: DF.Link | None
 		contact_display: DF.SmallText | None
 		contact_email: DF.Data | None
 		contact_mobile: DF.SmallText | None
@@ -77,7 +79,7 @@ class DeliveryNote(SellingController):
 		ignore_pricing_rule: DF.Check
 		in_words: DF.Data | None
 		incoterm: DF.Link | None
-		installation_status: DF.LiteralNone
+		installation_status: DF.Literal[None]
 		instructions: DF.Text | None
 		inter_company_reference: DF.Link | None
 		is_internal_customer: DF.Check
@@ -96,7 +98,6 @@ class DeliveryNote(SellingController):
 		per_billed: DF.Percent
 		per_installed: DF.Percent
 		per_returned: DF.Percent
-		pick_list: DF.Link | None
 		plc_conversion_rate: DF.Float
 		po_date: DF.Date | None
 		po_no: DF.SmallText | None
@@ -121,7 +122,6 @@ class DeliveryNote(SellingController):
 		shipping_address: DF.TextEditor | None
 		shipping_address_name: DF.Link | None
 		shipping_rule: DF.Link | None
-		source: DF.Link | None
 		status: DF.Literal["", "Draft", "To Bill", "Completed", "Return Issued", "Cancelled", "Closed"]
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
@@ -130,7 +130,6 @@ class DeliveryNote(SellingController):
 		tc_name: DF.Link | None
 		terms: DF.TextEditor | None
 		territory: DF.Link | None
-		title: DF.Data | None
 		total: DF.Currency
 		total_commission: DF.Currency
 		total_net_weight: DF.Float
@@ -138,6 +137,10 @@ class DeliveryNote(SellingController):
 		total_taxes_and_charges: DF.Currency
 		transporter: DF.Link | None
 		transporter_name: DF.Data | None
+		utm_campaign: DF.Link | None
+		utm_content: DF.Data | None
+		utm_medium: DF.Link | None
+		utm_source: DF.Link | None
 		vehicle_no: DF.Data | None
 	# end: auto-generated types
 
@@ -175,6 +178,19 @@ class DeliveryNote(SellingController):
 				"overflow_type": "delivery",
 				"no_allowance": 1,
 			},
+			{
+				"source_dt": "Delivery Note Item",
+				"target_dt": "Pick List Item",
+				"join_field": "pick_list_item",
+				"target_field": "delivered_qty",
+				"target_parent_dt": "Pick List",
+				"target_parent_field": "per_delivered",
+				"target_ref_field": "picked_qty",
+				"source_field": "stock_qty",
+				"percent_join_field": "against_pick_list",
+				"status_field": "delivery_status",
+				"keyword": "Delivered",
+			},
 		]
 		if cint(self.is_return):
 			self.status_updater.extend(
@@ -209,6 +225,8 @@ class DeliveryNote(SellingController):
 			)
 
 	def onload(self):
+		super().onload()
+
 		if self.docstatus == 0:
 			self.set_onload("has_unpacked_items", self.has_unpacked_items())
 
@@ -244,7 +262,7 @@ class DeliveryNote(SellingController):
 
 	def so_required(self):
 		"""check in manage account if sales order required or not"""
-		if frappe.db.get_single_value("Selling Settings", "so_required") == "Yes":
+		if frappe.get_single_value("Selling Settings", "so_required") == "Yes":
 			for d in self.get("items"):
 				if not d.against_sales_order:
 					frappe.throw(_("Sales Order required for Item {0}").format(d.item_code))
@@ -311,7 +329,7 @@ class DeliveryNote(SellingController):
 		)
 
 		if (
-			cint(frappe.db.get_single_value("Selling Settings", "maintain_same_sales_rate"))
+			cint(frappe.get_single_value("Selling Settings", "maintain_same_sales_rate"))
 			and not self.is_return
 			and not self.is_internal_customer
 		):
@@ -325,18 +343,15 @@ class DeliveryNote(SellingController):
 	def set_serial_and_batch_bundle_from_pick_list(self):
 		from erpnext.stock.serial_batch_bundle import SerialBatchCreation
 
-		if not self.pick_list:
-			return
-
 		for item in self.items:
-			if item.use_serial_batch_fields:
+			if item.use_serial_batch_fields or not item.against_pick_list:
 				continue
 
 			if item.pick_list_item and not item.serial_and_batch_bundle:
 				filters = {
 					"item_code": item.item_code,
 					"voucher_type": "Pick List",
-					"voucher_no": self.pick_list,
+					"voucher_no": item.against_pick_list,
 					"voucher_detail_no": item.pick_list_item,
 				}
 
@@ -361,52 +376,33 @@ class DeliveryNote(SellingController):
 		self.validate_sales_invoice_references()
 
 	def validate_sales_order_references(self):
-		err_msg = ""
-		for item in self.items:
-			if (item.against_sales_order and not item.so_detail) or (
-				not item.against_sales_order and item.so_detail
-			):
-				if not item.against_sales_order:
-					err_msg += (
-						_("'Sales Order' reference ({1}) is missing in row {0}").format(
-							frappe.bold(item.idx), frappe.bold("against_sales_order")
-						)
-						+ "<br>"
-					)
-				else:
-					err_msg += (
-						_("'Sales Order Item' reference ({1}) is missing in row {0}").format(
-							frappe.bold(item.idx), frappe.bold("so_detail")
-						)
-						+ "<br>"
-					)
-
-		if err_msg:
-			frappe.throw(err_msg, title=_("References to Sales Orders are Incomplete"))
+		self._validate_dependent_item_fields(
+			"against_sales_order", "so_detail", _("References to Sales Orders are Incomplete")
+		)
 
 	def validate_sales_invoice_references(self):
-		err_msg = ""
-		for item in self.items:
-			if (item.against_sales_invoice and not item.si_detail) or (
-				not item.against_sales_invoice and item.si_detail
-			):
-				if not item.against_sales_invoice:
-					err_msg += (
-						_("'Sales Invoice' reference ({1}) is missing in row {0}").format(
-							frappe.bold(item.idx), frappe.bold("against_sales_invoice")
-						)
-						+ "<br>"
-					)
-				else:
-					err_msg += (
-						_("'Sales Invoice Item' reference ({1}) is missing in row {0}").format(
-							frappe.bold(item.idx), frappe.bold("si_detail")
-						)
-						+ "<br>"
-					)
+		self._validate_dependent_item_fields(
+			"against_sales_invoice", "si_detail", _("References to Sales Invoices are Incomplete")
+		)
 
-		if err_msg:
-			frappe.throw(err_msg, title=_("References to Sales Invoices are Incomplete"))
+	def _validate_dependent_item_fields(self, field_a: str, field_b: str, error_title: str):
+		errors = []
+		for item in self.items:
+			missing_label = None
+			if item.get(field_a) and not item.get(field_b):
+				missing_label = item.meta.get_label(field_b)
+			elif item.get(field_b) and not item.get(field_a):
+				missing_label = item.meta.get_label(field_a)
+
+			if missing_label and missing_label != "No Label":
+				errors.append(
+					_("The field {0} in row {1} is not set").format(
+						frappe.bold(_(missing_label)), frappe.bold(item.idx)
+					)
+				)
+
+		if errors:
+			frappe.throw("<br>".join(errors), title=error_title)
 
 	def validate_proj_cust(self):
 		"""check for does customer belong to same project as entered.."""
@@ -452,15 +448,13 @@ class DeliveryNote(SellingController):
 		self.update_pick_list_status()
 
 		# Check for Approving Authority
-		frappe.get_doc("Authorization Control").validate_approving_authority(
+		frappe.get_cached_doc("Authorization Control").validate_approving_authority(
 			self.doctype, self.company, self.base_grand_total, self
 		)
 
 		# update delivered qty in sales order
 		self.update_prevdoc_status()
 		self.update_billing_status()
-
-		self.update_stock_reservation_entries()
 
 		if not self.is_return:
 			self.check_credit_limit()
@@ -473,6 +467,9 @@ class DeliveryNote(SellingController):
 
 			self.make_bundle_for_sales_purchase_return(table_name)
 			self.make_bundle_using_old_serial_batch_fields(table_name)
+
+		self.validate_standalone_serial_nos_customer()
+		self.update_stock_reservation_entries()
 
 		# Updating stock ledger should always be called after updating prevdoc status,
 		# because updating reserved qty in bin depends upon updated delivered qty in SO
@@ -508,149 +505,6 @@ class DeliveryNote(SellingController):
 		)
 
 		self.delete_auto_created_batches()
-
-	def update_stock_reservation_entries(self) -> None:
-		"""Updates Delivered Qty in Stock Reservation Entries."""
-
-		# Don't update Delivered Qty on Return.
-		if self.is_return:
-			return
-
-		if self._action == "submit":
-			for item in self.get("items"):
-				# Skip if `Sales Order` or `Sales Order Item` reference is not set.
-				if not item.against_sales_order or not item.so_detail:
-					continue
-
-				sre_list = frappe.db.get_all(
-					"Stock Reservation Entry",
-					{
-						"docstatus": 1,
-						"voucher_type": "Sales Order",
-						"voucher_no": item.against_sales_order,
-						"voucher_detail_no": item.so_detail,
-						"warehouse": item.warehouse,
-						"status": ["not in", ["Delivered", "Cancelled"]],
-					},
-					order_by="creation",
-				)
-
-				# Skip if no Stock Reservation Entries.
-				if not sre_list:
-					continue
-
-				qty_to_deliver = item.stock_qty
-				for sre in sre_list:
-					if qty_to_deliver <= 0:
-						break
-
-					sre_doc = frappe.get_doc("Stock Reservation Entry", sre)
-
-					qty_can_be_deliver = 0
-					if sre_doc.reservation_based_on == "Serial and Batch":
-						sbb = frappe.get_doc("Serial and Batch Bundle", item.serial_and_batch_bundle)
-						if sre_doc.has_serial_no:
-							delivered_serial_nos = [d.serial_no for d in sbb.entries]
-							for entry in sre_doc.sb_entries:
-								if entry.serial_no in delivered_serial_nos:
-									entry.delivered_qty = 1  # Qty will always be 0 or 1 for Serial No.
-									entry.db_update()
-									qty_can_be_deliver += 1
-									delivered_serial_nos.remove(entry.serial_no)
-						else:
-							delivered_batch_qty = {d.batch_no: -1 * d.qty for d in sbb.entries}
-							for entry in sre_doc.sb_entries:
-								if entry.batch_no in delivered_batch_qty:
-									delivered_qty = min(
-										(entry.qty - entry.delivered_qty), delivered_batch_qty[entry.batch_no]
-									)
-									entry.delivered_qty += delivered_qty
-									entry.db_update()
-									qty_can_be_deliver += delivered_qty
-									delivered_batch_qty[entry.batch_no] -= delivered_qty
-					else:
-						# `Delivered Qty` should be less than or equal to `Reserved Qty`.
-						qty_can_be_deliver = min(
-							(sre_doc.reserved_qty - sre_doc.delivered_qty), qty_to_deliver
-						)
-
-					sre_doc.delivered_qty += qty_can_be_deliver
-					sre_doc.db_update()
-
-					# Update Stock Reservation Entry `Status` based on `Delivered Qty`.
-					sre_doc.update_status()
-
-					# Update Reserved Stock in Bin.
-					sre_doc.update_reserved_stock_in_bin()
-
-					qty_to_deliver -= qty_can_be_deliver
-
-		if self._action == "cancel":
-			for item in self.get("items"):
-				# Skip if `Sales Order` or `Sales Order Item` reference is not set.
-				if not item.against_sales_order or not item.so_detail:
-					continue
-
-				sre_list = frappe.db.get_all(
-					"Stock Reservation Entry",
-					{
-						"docstatus": 1,
-						"voucher_type": "Sales Order",
-						"voucher_no": item.against_sales_order,
-						"voucher_detail_no": item.so_detail,
-						"warehouse": item.warehouse,
-						"status": ["in", ["Partially Delivered", "Delivered"]],
-					},
-					order_by="creation",
-				)
-
-				# Skip if no Stock Reservation Entries.
-				if not sre_list:
-					continue
-
-				qty_to_undelivered = item.stock_qty
-				for sre in sre_list:
-					if qty_to_undelivered <= 0:
-						break
-
-					sre_doc = frappe.get_doc("Stock Reservation Entry", sre)
-
-					qty_can_be_undelivered = 0
-					if sre_doc.reservation_based_on == "Serial and Batch":
-						sbb = frappe.get_doc("Serial and Batch Bundle", item.serial_and_batch_bundle)
-						if sre_doc.has_serial_no:
-							serial_nos_to_undelivered = [d.serial_no for d in sbb.entries]
-							for entry in sre_doc.sb_entries:
-								if entry.serial_no in serial_nos_to_undelivered:
-									entry.delivered_qty = 0  # Qty will always be 0 or 1 for Serial No.
-									entry.db_update()
-									qty_can_be_undelivered += 1
-									serial_nos_to_undelivered.remove(entry.serial_no)
-						else:
-							batch_qty_to_undelivered = {d.batch_no: -1 * d.qty for d in sbb.entries}
-							for entry in sre_doc.sb_entries:
-								if entry.batch_no in batch_qty_to_undelivered:
-									undelivered_qty = min(
-										entry.delivered_qty, batch_qty_to_undelivered[entry.batch_no]
-									)
-									entry.delivered_qty -= undelivered_qty
-									entry.db_update()
-									qty_can_be_undelivered += undelivered_qty
-									batch_qty_to_undelivered[entry.batch_no] -= undelivered_qty
-					else:
-						# `Qty to Undelivered` should be less than or equal to `Delivered Qty`.
-						qty_can_be_undelivered = min(sre_doc.delivered_qty, qty_to_undelivered)
-
-					sre_doc.delivered_qty -= qty_can_be_undelivered
-					sre_doc.db_update()
-
-					# Update Stock Reservation Entry `Status` based on `Delivered Qty`.
-					sre_doc.update_status()
-
-					# Update Reserved Stock in Bin.
-					sre_doc.update_reserved_stock_in_bin()
-
-					qty_to_undelivered -= qty_can_be_undelivered
 
 	def validate_against_stock_reservation_entries(self):
 		"""Validates if Stock Reservation Entries are available for the Sales Order Item reference."""
@@ -747,7 +601,9 @@ class DeliveryNote(SellingController):
 	def update_pick_list_status(self):
 		from erpnext.stock.doctype.pick_list.pick_list import update_pick_list_status
 
-		update_pick_list_status(self.pick_list)
+		pick_lists = {row.against_pick_list for row in self.items if row.against_pick_list}
+		for pick_list in pick_lists:
+			update_pick_list_status(pick_list)
 
 	def check_next_docstatus(self):
 		submit_rv = frappe.db.sql(
@@ -798,7 +654,7 @@ class DeliveryNote(SellingController):
 				updated_delivery_notes += update_billed_amount_based_on_so(d.so_detail, update_modified)
 
 		for dn in set(updated_delivery_notes):
-			dn_doc = self if (dn == self.name) else frappe.get_doc("Delivery Note", dn)
+			dn_doc = self if (dn == self.name) else frappe.get_lazy_doc("Delivery Note", dn)
 			dn_doc.update_billing_percentage(update_modified=update_modified)
 
 		self.load_from_db()
@@ -842,16 +698,20 @@ def update_billed_amount_based_on_so(so_detail, update_modified=True):
 	from frappe.query_builder.functions import Sum
 
 	# Billed against Sales Order directly
+	si = frappe.qb.DocType("Sales Invoice").as_("si")
 	si_item = frappe.qb.DocType("Sales Invoice Item").as_("si_item")
 	sum_amount = Sum(si_item.amount).as_("amount")
 
 	billed_against_so = (
 		frappe.qb.from_(si_item)
+		.join(si)
+		.on(si.name == si_item.parent)
 		.select(sum_amount)
 		.where(
 			(si_item.so_detail == so_detail)
 			& ((si_item.dn_detail.isnull()) | (si_item.dn_detail == ""))
 			& (si_item.docstatus == 1)
+			& (si.update_stock == 0)
 		)
 		.run()
 	)
@@ -950,12 +810,14 @@ def get_returned_qty_map(delivery_note):
 	"""returns a map: {so_detail: returned_qty}"""
 	returned_qty_map = frappe._dict(
 		frappe.db.sql(
-			"""select dn_item.dn_detail, abs(dn_item.qty) as qty
+			"""select dn_item.dn_detail, sum(abs(dn_item.qty)) as qty
 		from `tabDelivery Note Item` dn_item, `tabDelivery Note` dn
 		where dn.name = dn_item.parent
 			and dn.docstatus = 1
 			and dn.is_return = 1
 			and dn.return_against = %s
+			and dn_item.qty <= 0
+			group by dn_item.item_code
 	""",
 			delivery_note,
 		)
@@ -966,6 +828,11 @@ def get_returned_qty_map(delivery_note):
 
 @frappe.whitelist()
 def make_sales_invoice(source_name, target_doc=None, args=None):
+	if args is None:
+		args = {}
+	if isinstance(args, str):
+		args = json.loads(args)
+
 	doc = frappe.get_doc("Delivery Note", source_name)
 
 	to_make_invoice_qty_map = {}
@@ -997,11 +864,6 @@ def make_sales_invoice(source_name, target_doc=None, args=None):
 	def update_item(source_doc, target_doc, source_parent):
 		target_doc.qty = to_make_invoice_qty_map[source_doc.name]
 
-		if source_doc.serial_no and source_parent.per_billed > 0 and not source_parent.is_return:
-			target_doc.serial_no = get_delivery_note_serial_no(
-				source_doc.item_code, target_doc.qty, source_parent.name
-			)
-
 	def get_pending_qty(item_row):
 		pending_qty = item_row.qty - invoiced_qty_map.get(item_row.name, 0)
 
@@ -1022,6 +884,11 @@ def make_sales_invoice(source_name, target_doc=None, args=None):
 
 		return pending_qty
 
+	def select_item(d):
+		filtered_items = args.get("filtered_children", [])
+		child_filter = d.name in filtered_items if filtered_items else True
+		return child_filter
+
 	doc = get_mapped_doc(
 		"Delivery Note",
 		source_name,
@@ -1038,17 +905,17 @@ def make_sales_invoice(source_name, target_doc=None, args=None):
 					"parent": "delivery_note",
 					"so_detail": "so_detail",
 					"against_sales_order": "sales_order",
-					"serial_no": "serial_no",
 					"cost_center": "cost_center",
 				},
 				"postprocess": update_item,
 				"filter": lambda d: get_pending_qty(d) <= 0
 				if not doc.get("is_return")
 				else get_pending_qty(d) > 0,
+				"condition": select_item,
 			},
 			"Sales Taxes and Charges": {
 				"doctype": "Sales Taxes and Charges",
-				"add_if_empty": True,
+				"reset_value": not (args and args.get("merge_taxes")),
 				"ignore": args.get("merge_taxes") if args else 0,
 			},
 			"Sales Team": {
@@ -1062,10 +929,27 @@ def make_sales_invoice(source_name, target_doc=None, args=None):
 	)
 
 	automatically_fetch_payment_terms = cint(
-		frappe.db.get_single_value("Accounts Settings", "automatically_fetch_payment_terms")
+		frappe.get_single_value("Accounts Settings", "automatically_fetch_payment_terms")
 	)
-	if automatically_fetch_payment_terms:
-		doc.set_payment_schedule()
+
+	if not doc.is_return:
+		so, doctype, fieldname = doc.get_order_details()
+		if (
+			doc.linked_order_has_payment_terms(so, fieldname, doctype)
+			and not automatically_fetch_payment_terms
+		):
+			payment_terms_template = frappe.db.get_value(doctype, so, "payment_terms_template")
+			doc.payment_terms_template = payment_terms_template
+			doc.due_date = get_due_date(
+				doc.posting_date,
+				"Customer",
+				doc.customer,
+				doc.company,
+				template_name=doc.payment_terms_template,
+			)
+
+		elif automatically_fetch_payment_terms:
+			doc.set_payment_schedule()
 
 	return doc
 
@@ -1149,7 +1033,7 @@ def make_packing_slip(source_name, target_doc=None):
 					"batch_no": "batch_no",
 					"description": "description",
 					"qty": "qty",
-					"stock_uom": "stock_uom",
+					"uom": "stock_uom",
 					"name": "dn_detail",
 				},
 				"postprocess": update_item,
@@ -1199,18 +1083,19 @@ def make_shipment(source_name, target_doc=None):
 		# As we are using session user details in the pickup_contact then pickup_contact_person will be session user
 		target.pickup_contact_person = frappe.session.user
 
-		contact = frappe.db.get_value(
-			"Contact", source.contact_person, ["email_id", "phone", "mobile_no"], as_dict=1
-		)
-		delivery_contact_display = f"{source.contact_display}"
-		if contact:
-			if contact.email_id:
-				delivery_contact_display += "<br>" + contact.email_id
-			if contact.phone:
-				delivery_contact_display += "<br>" + contact.phone
-			if contact.mobile_no and not contact.phone:
-				delivery_contact_display += "<br>" + contact.mobile_no
-		target.delivery_contact = delivery_contact_display
+		if source.contact_person:
+			contact = frappe.db.get_value(
+				"Contact", source.contact_person, ["email_id", "phone", "mobile_no"], as_dict=1
+			)
+			delivery_contact_display = f"{source.contact_display}"
+			if contact:
+				if contact.email_id:
+					delivery_contact_display += "<br>" + contact.email_id
+				if contact.phone:
+					delivery_contact_display += "<br>" + contact.phone
+				if contact.mobile_no and not contact.phone:
+					delivery_contact_display += "<br>" + contact.mobile_no
+			target.delivery_contact = delivery_contact_display
 
 		if source.shipping_address_name:
 			target.delivery_address_name = source.shipping_address_name
@@ -1262,7 +1147,7 @@ def make_sales_return(source_name, target_doc=None):
 
 @frappe.whitelist()
 def update_delivery_note_status(docname, status):
-	dn = frappe.get_doc("Delivery Note", docname)
+	dn = frappe.get_lazy_doc("Delivery Note", docname)
 	dn.update_status(status)
 
 
@@ -1311,6 +1196,18 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 			frappe.throw(_("All items have already been received"))
 
 	def update_details(source_doc, target_doc, source_parent):
+		def _validate_address_link(address, link_doctype, link_name):
+			return frappe.db.get_value(
+				"Dynamic Link",
+				{
+					"parent": address,
+					"parenttype": "Address",
+					"link_doctype": link_doctype,
+					"link_name": link_name,
+				},
+				"parent",
+			)
+
 		target_doc.inter_company_invoice_reference = source_doc.name
 		if target_doc.doctype == "Purchase Receipt":
 			target_doc.company = details.get("company")
@@ -1320,13 +1217,34 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 			target_doc.inter_company_reference = source_doc.name
 
 			# Invert the address on target doc creation
-			update_address(target_doc, "supplier_address", "address_display", source_doc.company_address)
-			update_address(
-				target_doc, "shipping_address", "shipping_address_display", source_doc.customer_address
-			)
-			update_address(
-				target_doc, "billing_address", "billing_address_display", source_doc.customer_address
-			)
+			if source_doc.company_address and _validate_address_link(
+				source_doc.company_address, "Supplier", details.get("party")
+			):
+				update_address(target_doc, "supplier_address", "address_display", source_doc.company_address)
+			if source_doc.dispatch_address_name and _validate_address_link(
+				source_doc.dispatch_address_name, "Company", details.get("company")
+			):
+				update_address(
+					target_doc,
+					"dispatch_address",
+					"dispatch_address_display",
+					source_doc.dispatch_address_name,
+				)
+			if source_doc.shipping_address_name and _validate_address_link(
+				source_doc.shipping_address_name, "Company", details.get("company")
+			):
+				update_address(
+					target_doc,
+					"shipping_address",
+					"shipping_address_display",
+					source_doc.shipping_address_name,
+				)
+			if source_doc.customer_address and _validate_address_link(
+				source_doc.customer_address, "Company", details.get("company")
+			):
+				update_address(
+					target_doc, "billing_address", "billing_address_display", source_doc.customer_address
+				)
 
 			update_taxes(
 				target_doc,
@@ -1346,13 +1264,22 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 			target_doc.inter_company_reference = source_doc.name
 
 			# Invert the address on target doc creation
-			update_address(
-				target_doc, "company_address", "company_address_display", source_doc.supplier_address
-			)
-			update_address(
-				target_doc, "shipping_address_name", "shipping_address", source_doc.shipping_address
-			)
-			update_address(target_doc, "customer_address", "address_display", source_doc.shipping_address)
+			if source_doc.supplier_address and _validate_address_link(
+				source_doc.supplier_address, "Company", details.get("company")
+			):
+				update_address(
+					target_doc, "company_address", "company_address_display", source_doc.supplier_address
+				)
+			if source_doc.shipping_address and _validate_address_link(
+				source_doc.shipping_address, "Customer", details.get("party")
+			):
+				update_address(
+					target_doc, "shipping_address_name", "shipping_address", source_doc.shipping_address
+				)
+			if source_doc.shipping_address and _validate_address_link(
+				source_doc.shipping_address, "Customer", details.get("party")
+			):
+				update_address(target_doc, "customer_address", "address_display", source_doc.shipping_address)
 
 			update_taxes(
 				target_doc,
@@ -1380,6 +1307,7 @@ def make_inter_company_transaction(doctype, source_name, target_doc=None):
 				"doctype": target_doctype,
 				"postprocess": update_details,
 				"field_no_map": ["taxes_and_charges", "set_warehouse"],
+				"field_map": {"shipping_address_name": "shipping_address"},
 			},
 			doctype + " Item": {
 				"doctype": target_doctype + " Item",

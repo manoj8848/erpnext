@@ -23,21 +23,16 @@ frappe.ui.form.on("Sales Order", {
 
 		// formatter for material request item
 		frm.set_indicator_formatter("item_code", function (doc) {
-			return doc.stock_qty <= doc.delivered_qty ? "green" : "orange";
-		});
-
-		frm.set_query("company_address", function (doc) {
-			if (!doc.company) {
-				frappe.throw(__("Please set Company"));
+			let color;
+			if (!doc.qty && frm.doc.has_unit_price_items) {
+				color = "yellow";
+			} else if (doc.stock_qty <= doc.delivered_qty) {
+				color = "green";
+			} else {
+				color = "orange";
 			}
 
-			return {
-				query: "frappe.contacts.doctype.address.address.address_query",
-				filters: {
-					link_doctype: "Company",
-					link_name: doc.company,
-				},
-			};
+			return color;
 		});
 
 		frm.set_query("bom_no", "items", function (doc, cdt, cdn) {
@@ -57,8 +52,8 @@ frappe.ui.form.on("Sales Order", {
 		if (frm.doc.docstatus === 1) {
 			if (
 				frm.doc.status !== "Closed" &&
-				flt(frm.doc.per_delivered, 2) < 100 &&
-				flt(frm.doc.per_billed, 2) < 100 &&
+				flt(frm.doc.per_delivered) < 100 &&
+				flt(frm.doc.per_billed) < 100 &&
 				frm.has_perm("write")
 			) {
 				frm.add_custom_button(__("Update Items"), () => {
@@ -111,6 +106,8 @@ frappe.ui.form.on("Sales Order", {
 		}
 
 		if (frm.doc.docstatus === 0) {
+			erpnext.set_unit_price_items_note(frm);
+
 			if (frm.doc.is_internal_customer) {
 				frm.events.get_items_from_internal_purchase_order(frm);
 			}
@@ -160,7 +157,7 @@ frappe.ui.form.on("Sales Order", {
 					target: frm,
 					setters: [
 						{
-							label: "Supplier",
+							label: __("Supplier"),
 							fieldname: "supplier",
 							fieldtype: "Link",
 							options: "Supplier",
@@ -178,41 +175,26 @@ frappe.ui.form.on("Sales Order", {
 		);
 	},
 
-	// When multiple companies are set up. in case company name is changed set default company address
-	company: function (frm) {
-		if (frm.doc.company) {
-			frappe.call({
-				method: "erpnext.setup.doctype.company.company.get_default_company_address",
-				args: {
-					name: frm.doc.company,
-					existing_address: frm.doc.company_address || "",
-				},
-				debounce: 2000,
-				callback: function (r) {
-					if (r.message) {
-						frm.set_value("company_address", r.message);
-					} else {
-						frm.set_value("company_address", "");
-					}
-				},
-			});
-		}
-	},
-
 	onload: function (frm) {
 		if (!frm.doc.transaction_date) {
 			frm.set_value("transaction_date", frappe.datetime.get_today());
 		}
 		erpnext.queries.setup_queries(frm, "Warehouse", function () {
 			return {
-				filters: [["Warehouse", "company", "in", ["", cstr(frm.doc.company)]]],
+				filters: [
+					["Warehouse", "company", "in", ["", cstr(frm.doc.company)]],
+					["Warehouse", "is_group", "=", 0],
+				],
 			};
 		});
 
 		frm.set_query("warehouse", "items", function (doc, cdt, cdn) {
 			let row = locals[cdt][cdn];
 			let query = {
-				filters: [["Warehouse", "company", "in", ["", cstr(frm.doc.company)]]],
+				filters: [
+					["Warehouse", "company", "in", ["", cstr(frm.doc.company)]],
+					["Warehouse", "is_group", "=", 0],
+				],
 			};
 			if (row.item_code) {
 				query.query = "erpnext.controllers.queries.warehouse_query";
@@ -604,7 +586,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						__("Status")
 					);
 
-					if (flt(doc.per_delivered, 2) < 100 || flt(doc.per_billed, 2) < 100) {
+					if (flt(doc.per_delivered) < 100 || flt(doc.per_billed) < 100) {
 						// close
 						this.frm.add_custom_button(__("Close"), () => this.close_sales_order(), __("Status"));
 					}
@@ -621,13 +603,15 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 			}
 			if (doc.status !== "Closed") {
 				if (doc.status !== "On Hold") {
+					const items_are_deliverable = this.frm.doc.items.some(
+						(item) => item.delivered_by_supplier === 0 && item.qty > flt(item.delivered_qty)
+					);
 					allow_delivery =
-						this.frm.doc.items.some(
-							(item) => item.delivered_by_supplier === 0 && item.qty > flt(item.delivered_qty)
-						) && !this.frm.doc.skip_delivery_note;
+						(this.frm.doc.has_unit_price_items || items_are_deliverable) &&
+						!this.frm.doc.skip_delivery_note;
 
 					if (this.frm.has_perm("submit")) {
-						if (flt(doc.per_delivered, 2) < 100 || flt(doc.per_billed, 2) < 100) {
+						if (flt(doc.per_delivered) < 100 || flt(doc.per_billed) < 100) {
 							// hold
 							this.frm.add_custom_button(
 								__("Hold"),
@@ -645,8 +629,8 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 
 					if (
 						(!doc.__onload || !doc.__onload.has_reserved_stock) &&
-						flt(doc.per_picked, 2) < 100 &&
-						flt(doc.per_delivered, 2) < 100 &&
+						flt(doc.per_picked) < 100 &&
+						flt(doc.per_delivered) < 100 &&
 						frappe.model.can_create("Pick List")
 					) {
 						this.frm.add_custom_button(
@@ -664,7 +648,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 
 					// delivery note
 					if (
-						flt(doc.per_delivered, 2) < 100 &&
+						flt(doc.per_delivered) < 100 &&
 						(order_is_a_sale || order_is_a_custom_sale) &&
 						allow_delivery
 					) {
@@ -686,7 +670,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					}
 
 					// sales invoice
-					if (flt(doc.per_billed, 2) < 100 && frappe.model.can_create("Sales Invoice")) {
+					if (flt(doc.per_billed) < 100 && frappe.model.can_create("Sales Invoice")) {
 						this.frm.add_custom_button(
 							__("Sales Invoice"),
 							() => me.make_sales_invoice(),
@@ -697,8 +681,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					// material request
 					if (
 						(!doc.order_type ||
-							((order_is_a_sale || order_is_a_custom_sale) &&
-								flt(doc.per_delivered, 2) < 100)) &&
+							((order_is_a_sale || order_is_a_custom_sale) && flt(doc.per_delivered) < 100)) &&
 						frappe.model.can_create("Material Request")
 					) {
 						this.frm.add_custom_button(
@@ -723,7 +706,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					}
 
 					// maintenance
-					if (flt(doc.per_delivered, 2) < 100 && (order_is_maintenance || order_is_a_custom_sale)) {
+					if (flt(doc.per_delivered) < 100 && (order_is_maintenance || order_is_a_custom_sale)) {
 						if (frappe.model.can_create("Maintenance Visit")) {
 							this.frm.add_custom_button(
 								__("Maintenance Visit"),
@@ -741,7 +724,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					}
 
 					// project
-					if (flt(doc.per_delivered, 2) < 100 && frappe.model.can_create("Project")) {
+					if (flt(doc.per_delivered) < 100 && frappe.model.can_create("Project")) {
 						this.frm.add_custom_button(__("Project"), () => this.make_project(), __("Create"));
 					}
 
@@ -755,8 +738,8 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						if (internal) {
 							let button_label =
 								me.frm.doc.company === me.frm.doc.represents_company
-									? "Internal Purchase Order"
-									: "Inter Company Purchase Order";
+									? __("Internal Purchase Order")
+									: __("Inter Company Purchase Order");
 
 							me.frm.add_custom_button(
 								button_label,
@@ -769,10 +752,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					}
 				}
 				// payment request
-				if (
-					flt(doc.per_billed, precision("per_billed", doc)) <
-					100 + frappe.boot.sysdefaults.over_billing_allowance
-				) {
+				if (flt(doc.per_billed) < 100 + frappe.boot.sysdefaults.over_billing_allowance) {
 					this.frm.add_custom_button(
 						__("Payment Request"),
 						() => this.make_payment_request(),
@@ -801,7 +781,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						target: me.frm,
 						setters: [
 							{
-								label: "Customer",
+								label: __("Customer"),
 								fieldname: "party_name",
 								fieldtype: "Link",
 								options: "Customer",
@@ -813,6 +793,9 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 							docstatus: 1,
 							status: ["!=", "Lost"],
 						},
+						allow_child_item_selection: true,
+						child_fieldname: "items",
+						child_columns: ["item_code", "item_name", "qty", "rate", "amount"],
 					});
 				},
 				__("Get Items From")
@@ -848,7 +831,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 				} else {
 					const fields = [
 						{
-							label: "Items",
+							label: __("Items"),
 							fieldtype: "Table",
 							fieldname: "items",
 							description: __("Select BOM and Qty for Production"),
@@ -857,6 +840,12 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 									fieldtype: "Read Only",
 									fieldname: "item_code",
 									label: __("Item Code"),
+									in_list_view: 1,
+								},
+								{
+									fieldtype: "Read Only",
+									fieldname: "item_name",
+									label: __("Item Name"),
 									in_list_view: 1,
 								},
 								{
@@ -896,8 +885,8 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						fields: fields,
 						primary_action: function () {
 							var data = { items: d.fields_dict.items.grid.get_selected_children() };
-							if (!data) {
-								frappe.throw(__("Please select items"));
+							if (!data.items.length) {
+								frappe.throw(__("Please select atleast one item to continue"));
 							}
 							me.frm.call({
 								method: "make_work_orders",
@@ -1047,7 +1036,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 						items: data,
 						company: me.frm.doc.company,
 						sales_order: me.frm.docname,
-						project: me.frm.project,
+						project: me.frm.doc.project,
 					},
 					freeze: true,
 					callback: function (r) {
@@ -1209,7 +1198,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 				{
 					fieldname: "items_for_po",
 					fieldtype: "Table",
-					label: "Select Items",
+					label: __("Select Items"),
 					fields: [
 						{
 							fieldtype: "Data",
@@ -1237,6 +1226,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 							read_only: 1,
 							fieldname: "uom",
 							label: __("UOM"),
+							options: "UOM",
 							in_list_view: 1,
 						},
 						{
@@ -1249,7 +1239,7 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					],
 				},
 			],
-			primary_action_label: "Create Purchase Order",
+			primary_action_label: __("Create Purchase Order"),
 			primary_action(args) {
 				if (!args) return;
 
@@ -1310,7 +1300,6 @@ erpnext.selling.SalesOrderController = class SalesOrderController extends erpnex
 					let pending_qty = (flt(d.stock_qty) - ordered_qty) / flt(d.conversion_factor);
 					if (pending_qty > 0) {
 						po_items.push({
-							doctype: "Sales Order Item",
 							name: d.name,
 							item_name: d.item_name,
 							item_code: d.item_code,

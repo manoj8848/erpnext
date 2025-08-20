@@ -45,7 +45,6 @@ class Opportunity(TransactionBase, CRMNote):
 		annual_revenue: DF.Currency
 		base_opportunity_amount: DF.Currency
 		base_total: DF.Currency
-		campaign: DF.Link | None
 		city: DF.Data | None
 		company: DF.Link
 		competitors: DF.TableMultiSelect[CompetitorDetail]
@@ -80,13 +79,16 @@ class Opportunity(TransactionBase, CRMNote):
 		phone_ext: DF.Data | None
 		probability: DF.Percent
 		sales_stage: DF.Link | None
-		source: DF.Link | None
 		state: DF.Data | None
 		status: DF.Literal["Open", "Quotation", "Converted", "Lost", "Replied", "Closed"]
 		territory: DF.Link | None
 		title: DF.Data | None
 		total: DF.Currency
 		transaction_date: DF.Date
+		utm_campaign: DF.Link | None
+		utm_content: DF.Data | None
+		utm_medium: DF.Link | None
+		utm_source: DF.Link | None
 		website: DF.Data | None
 		whatsapp: DF.Data | None
 	# end: auto-generated types
@@ -126,6 +128,7 @@ class Opportunity(TransactionBase, CRMNote):
 				link_communications(self.opportunity_from, self.party_name, self)
 
 	def validate(self):
+		self.set_opportunity_type()
 		self.make_new_lead_if_required()
 		self.validate_item_details()
 		self.validate_uom_is_integer("uom", "qty")
@@ -149,6 +152,10 @@ class Opportunity(TransactionBase, CRMNote):
 					self.set(field, value)
 				except Exception:
 					continue
+
+	def set_opportunity_type(self):
+		if self.is_new() and not self.opportunity_type:
+			self.opportunity_type = _("Sales")
 
 	def set_exchange_rate(self):
 		company_currency = frappe.get_cached_value("Company", self.company, "default_currency")

@@ -28,10 +28,6 @@ erpnext.stock.LandedCostVoucher = class LandedCostVoucher extends erpnext.stock.
 				filters: filters,
 			};
 		};
-
-		this.frm.add_fetch("receipt_document", "supplier", "supplier");
-		this.frm.add_fetch("receipt_document", "posting_date", "posting_date");
-		this.frm.add_fetch("receipt_document", "base_grand_total", "grand_total");
 	}
 
 	refresh() {
@@ -148,5 +144,78 @@ frappe.ui.form.on("Landed Cost Taxes and Charges", {
 
 	amount: function (frm, cdt, cdn) {
 		frm.events.set_base_amount(frm, cdt, cdn);
+	},
+});
+
+frappe.ui.form.on("Landed Cost Voucher", {
+	setup(frm) {
+		frm.trigger("setup_queries");
+	},
+
+	setup_queries(frm) {
+		frm.set_query("receipt_document", "purchase_receipts", (doc, cdt, cdn) => {
+			var d = locals[cdt][cdn];
+			if (d.receipt_document_type === "Stock Entry") {
+				return {
+					filters: {
+						docstatus: 1,
+						company: frm.doc.company,
+						purpose: ["in", ["Manufacture", "Repack"]],
+					},
+				};
+			}
+		});
+
+		frm.set_query("vendor_invoice", "vendor_invoices", (doc, cdt, cdn) => {
+			return {
+				query: "erpnext.stock.doctype.landed_cost_voucher.landed_cost_voucher.get_vendor_invoices",
+				filters: {
+					company: doc.company,
+				},
+			};
+		});
+	},
+});
+
+frappe.ui.form.on("Landed Cost Purchase Receipt", {
+	receipt_document(frm, cdt, cdn) {
+		var d = locals[cdt][cdn];
+		if (d.receipt_document) {
+			frappe.call({
+				method: "get_receipt_document_details",
+				doc: frm.doc,
+				args: {
+					receipt_document: d.receipt_document,
+					receipt_document_type: d.receipt_document_type,
+				},
+				callback: function (r) {
+					if (r.message) {
+						$.extend(d, r.message);
+						refresh_field("purchase_receipts");
+					}
+				},
+			});
+		}
+	},
+});
+
+frappe.ui.form.on("Landed Cost Vendor Invoice", {
+	vendor_invoice(frm, cdt, cdn) {
+		var d = locals[cdt][cdn];
+		if (d.vendor_invoice) {
+			frappe.call({
+				method: "get_vendor_invoice_amount",
+				doc: frm.doc,
+				args: {
+					vendor_invoice: d.vendor_invoice,
+				},
+				callback: function (r) {
+					if (r.message) {
+						$.extend(d, r.message);
+						refresh_field("vendor_invoices");
+					}
+				},
+			});
+		}
 	},
 });

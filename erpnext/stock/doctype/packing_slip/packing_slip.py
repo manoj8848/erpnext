@@ -4,6 +4,7 @@
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt
 
 from erpnext.controllers.status_updater import StatusUpdater
@@ -128,11 +129,11 @@ class PackingSlip(StatusUpdater):
 						item.idx
 					)
 				)
-
+			DocType = frappe.qb.DocType("Delivery Note Item" if item.dn_detail else "Packed Item")
 			remaining_qty = frappe.db.get_value(
 				"Delivery Note Item" if item.dn_detail else "Packed Item",
 				{"name": item.dn_detail or item.pi_detail, "docstatus": 0},
-				["sum(qty - packed_qty)"],
+				Sum(DocType.qty - DocType.packed_qty),
 			)
 
 			if remaining_qty is None:
@@ -159,11 +160,10 @@ class PackingSlip(StatusUpdater):
 			self.from_case_no = self.get_recommended_case_no()
 
 		for item in self.items:
-			stock_uom, weight_per_unit, weight_uom = frappe.db.get_value(
-				"Item", item.item_code, ["stock_uom", "weight_per_unit", "weight_uom"]
+			weight_per_unit, weight_uom = frappe.db.get_value(
+				"Item", item.item_code, ["weight_per_unit", "weight_uom"]
 			)
 
-			item.stock_uom = stock_uom
 			if weight_per_unit and not item.net_weight:
 				item.net_weight = weight_per_unit
 			if weight_uom and not item.weight_uom:
@@ -175,7 +175,9 @@ class PackingSlip(StatusUpdater):
 		return (
 			cint(
 				frappe.db.get_value(
-					"Packing Slip", {"delivery_note": self.delivery_note, "docstatus": 1}, ["max(to_case_no)"]
+					"Packing Slip",
+					{"delivery_note": self.delivery_note, "docstatus": 1},
+					[{"MAX": "to_case_no"}],
 				)
 			)
 			+ 1

@@ -23,6 +23,8 @@ class SellingSettings(Document):
 		allow_multiple_items: DF.Check
 		allow_negative_rates_for_items: DF.Check
 		allow_sales_order_creation_for_expired_quotation: DF.Check
+		allow_zero_qty_in_quotation: DF.Check
+		allow_zero_qty_in_sales_order: DF.Check
 		blanket_order_allowance: DF.Float
 		cust_master_name: DF.Literal["Customer Name", "Naming Series", "Auto Name"]
 		customer_group: DF.Link | None
@@ -40,6 +42,7 @@ class SellingSettings(Document):
 		selling_price_list: DF.Link | None
 		so_required: DF.Literal["No", "Yes"]
 		territory: DF.Link | None
+		use_server_side_reactivity: DF.Check
 		validate_selling_price: DF.Check
 	# end: auto-generated types
 
@@ -69,15 +72,15 @@ class SellingSettings(Document):
 		)
 
 	def toggle_hide_tax_id(self):
-		self.hide_tax_id = cint(self.hide_tax_id)
+		_hide_tax_id = cint(self.hide_tax_id)
 
 		# Make property setters to hide tax_id fields
 		for doctype in ("Sales Order", "Sales Invoice", "Delivery Note"):
 			make_property_setter(
-				doctype, "tax_id", "hidden", self.hide_tax_id, "Check", validate_fields_for_doctype=False
+				doctype, "tax_id", "hidden", _hide_tax_id, "Check", validate_fields_for_doctype=False
 			)
 			make_property_setter(
-				doctype, "tax_id", "print_hide", self.hide_tax_id, "Check", validate_fields_for_doctype=False
+				doctype, "tax_id", "print_hide", _hide_tax_id, "Check", validate_fields_for_doctype=False
 			)
 
 	def toggle_editable_rate_for_bundle_items(self):

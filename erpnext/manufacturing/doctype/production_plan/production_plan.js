@@ -9,6 +9,13 @@ frappe.ui.form.on("Production Plan", {
 		});
 	},
 
+	hide_reserve_stock_button(frm) {
+		frm.toggle_display("reserve_stock", false);
+		if (frm.doc.__onload?.enable_stock_reservation) {
+			frm.toggle_display("reserve_stock", true);
+		}
+	},
+
 	setup(frm) {
 		frm.trigger("setup_queries");
 
@@ -16,6 +23,9 @@ frappe.ui.form.on("Production Plan", {
 			"Work Order": "Work Order / Subcontract PO",
 			"Material Request": "Material Request",
 		};
+
+		frm.set_df_property("sub_assembly_items", "cannot_delete_rows", true);
+		frm.set_df_property("mr_items", "cannot_delete_rows", true);
 	},
 
 	setup_queries(frm) {
@@ -33,6 +43,14 @@ frappe.ui.form.on("Production Plan", {
 				filters: {
 					company: doc.company,
 					is_group: 0,
+				},
+			};
+		});
+
+		frm.set_query("sub_assembly_warehouse", function (doc) {
+			return {
+				filters: {
+					company: doc.company,
 				},
 			};
 		});
@@ -87,17 +105,17 @@ frappe.ui.form.on("Production Plan", {
 		if (frm.doc.docstatus === 1) {
 			frm.trigger("show_progress");
 
-			if (frm.doc.status !== "Completed") {
-				frm.add_custom_button(
-					__("Production Plan Summary"),
-					() => {
-						frappe.set_route("query-report", "Production Plan Summary", {
-							production_plan: frm.doc.name,
-						});
-					},
-					__("View")
-				);
+			frm.add_custom_button(
+				__("Production Plan Summary"),
+				() => {
+					frappe.set_route("query-report", "Production Plan Summary", {
+						production_plan: frm.doc.name,
+					});
+				},
+				__("View")
+			);
 
+			if (frm.doc.status !== "Completed") {
 				if (frm.doc.status === "Closed") {
 					frm.add_custom_button(
 						__("Re-open"),
@@ -116,7 +134,9 @@ frappe.ui.form.on("Production Plan", {
 					);
 				}
 
-				if (frm.doc.po_items && frm.doc.status !== "Closed") {
+				let items = frm.events.get_items_for_work_order(frm);
+
+				if (items?.length && frm.doc.status !== "Closed") {
 					frm.add_custom_button(
 						__("Work Order / Subcontract PO"),
 						() => {
@@ -140,12 +160,16 @@ frappe.ui.form.on("Production Plan", {
 					);
 				}
 			}
+
+			if (frm.doc.status !== "Closed") {
+				frm.page.set_inner_btn_group_as_primary(__("Create"));
+			}
 		}
 
-		if (frm.doc.status !== "Closed") {
-			frm.page.set_inner_btn_group_as_primary(__("Create"));
-		}
 		frm.trigger("material_requirement");
+		frm.trigger("hide_reserve_stock_button");
+		frm.trigger("setup_stock_reservation_for_sub_assembly");
+		frm.trigger("setup_stock_reservation_for_raw_materials");
 
 		const projected_qty_formula = ` <table class="table table-bordered" style="background-color: var(--scrollbar-track-color);">
 			<tr><td style="padding-left:25px">
@@ -191,6 +215,90 @@ frappe.ui.form.on("Production Plan", {
 		</table>`;
 
 		set_field_options("projected_qty_formula", projected_qty_formula);
+	},
+
+	get_items_for_work_order(frm) {
+		let items = frm.doc.po_items;
+		if (frm.doc.sub_assembly_items?.length) {
+			items = [...items, ...frm.doc.sub_assembly_items];
+		}
+
+		let has_items =
+			items.filter((item) => {
+				if (item.planned_qty) {
+					return item.planned_qty > item.ordered_qty;
+				} else {
+					return item.qty > (item.received_qty || item.ordered_qty);
+				}
+			}) || [];
+
+		return has_items;
+	},
+
+	has_unreserved_stock(frm, table, qty_field = "required_qty") {
+		let has_unreserved_stock = frm.doc[table].some(
+			(item) => flt(item[qty_field]) > flt(item.stock_reserved_qty)
+		);
+
+		return has_unreserved_stock;
+	},
+
+	has_reserved_stock(frm, table) {
+		let has_reserved_stock = frm.doc[table].some((item) => flt(item.stock_reserved_qty) > 0);
+
+		return has_reserved_stock;
+	},
+
+	setup_stock_reservation_for_sub_assembly(frm) {
+		if (frm.doc.docstatus === 1 && frm.doc.reserve_stock) {
+			if (frm.events.has_unreserved_stock(frm, "sub_assembly_items")) {
+				frm.add_custom_button(
+					__("Reserve for Sub-assembly"),
+					() => erpnext.stock_reservation.make_entries(frm, "sub_assembly_items"),
+					__("Stock Reservation")
+				);
+			}
+
+			if (frm.events.has_reserved_stock(frm, "sub_assembly_items")) {
+				frm.add_custom_button(
+					__("Unreserve for Sub-assembly"),
+					() => erpnext.stock_reservation.unreserve_stock(frm),
+					__("Stock Reservation")
+				);
+
+				frm.add_custom_button(
+					__("Reserved Stock for Sub-assembly"),
+					() => erpnext.stock_reservation.show_reserved_stock(frm, "sub_assembly_items"),
+					__("Stock Reservation")
+				);
+			}
+		}
+	},
+
+	setup_stock_reservation_for_raw_materials(frm) {
+		if (frm.doc.docstatus === 1 && frm.doc.reserve_stock) {
+			if (frm.events.has_unreserved_stock(frm, "mr_items", "required_bom_qty")) {
+				frm.add_custom_button(
+					__("Reserve for Raw Materials"),
+					() => erpnext.stock_reservation.make_entries(frm, "mr_items"),
+					__("Stock Reservation")
+				);
+			}
+
+			if (frm.events.has_reserved_stock(frm, "mr_items")) {
+				frm.add_custom_button(
+					__("Unreserve for Raw Materials"),
+					() => erpnext.stock_reservation.unreserve_stock(frm),
+					__("Stock Reservation")
+				);
+
+				frm.add_custom_button(
+					__("Reserved Stock for Raw Materials"),
+					() => erpnext.stock_reservation.show_reserved_stock(frm, "mr_items"),
+					__("Stock Reservation")
+				);
+			}
+		}
 	},
 
 	close_open_production_plan(frm, close = false) {
@@ -277,7 +385,7 @@ frappe.ui.form.on("Production Plan", {
 		frm.clear_table("prod_plan_references");
 
 		frappe.call({
-			method: "get_items",
+			method: "combine_so_items",
 			freeze: true,
 			doc: frm.doc,
 			callback: function () {
@@ -334,7 +442,7 @@ frappe.ui.form.on("Production Plan", {
 
 		frm.set_value("consider_minimum_order_qty", 0);
 
-		if (frm.doc.ignore_existing_ordered_qty) {
+		if (!frm.doc.ignore_existing_ordered_qty) {
 			frm.events.get_items_for_material_requests(frm);
 		} else {
 			const title = __("Transfer Materials For Warehouse {0}", [frm.doc.for_warehouse]);
@@ -562,6 +670,28 @@ frappe.ui.form.on("Production Plan Sales Order", {
 frappe.ui.form.on("Production Plan Sub Assembly Item", {
 	fg_warehouse(frm, cdt, cdn) {
 		erpnext.utils.copy_value_in_all_rows(frm.doc, cdt, cdn, "sub_assembly_items", "fg_warehouse");
+
+		let row = locals[cdt][cdn];
+		if (row.fg_warehouse && row.production_item) {
+			let child_row = {
+				item_code: row.production_item,
+				warehouse: row.fg_warehouse,
+			};
+
+			frappe.call({
+				method: "erpnext.manufacturing.doctype.production_plan.production_plan.get_bin_details",
+				args: {
+					row: child_row,
+					company: frm.doc.company,
+					for_warehouse: row.fg_warehouse,
+				},
+				callback: function (r) {
+					if (r.message && r.message.length) {
+						frappe.model.set_value(cdt, cdn, "actual_qty", r.message[0].actual_qty);
+					}
+				},
+			});
+		}
 	},
 });
 

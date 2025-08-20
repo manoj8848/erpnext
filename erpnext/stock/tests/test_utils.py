@@ -1,7 +1,7 @@
 import json
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from erpnext.stock.utils import scan_barcode
 
@@ -57,7 +57,7 @@ class StockTestMixin:
 				self.assertEqual(exp_value, act_value, msg=f"{k} doesn't match \n{exp_gle}\n{act_gle}")
 
 
-class TestStockUtilities(FrappeTestCase, StockTestMixin):
+class TestStockUtilities(IntegrationTestCase, StockTestMixin):
 	def test_barcode_scanning(self):
 		simple_item = self.make_item(properties={"barcodes": [{"barcode": "12399"}]})
 		self.assertEqual(scan_barcode("12399")["item_code"], simple_item.name)
@@ -81,3 +81,44 @@ class TestStockUtilities(FrappeTestCase, StockTestMixin):
 		self.assertEqual(serial_scan["serial_no"], serial.name)
 		self.assertEqual(serial_scan["has_batch_no"], 0)
 		self.assertEqual(serial_scan["has_serial_no"], 1)
+
+	def test_barcode_scanning_of_warehouse(self):
+		warehouse = frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "Test Warehouse for Barcode",
+				"company": "_Test Company",
+			}
+		).insert()
+
+		warehouse_2 = frappe.get_doc(
+			{
+				"doctype": "Warehouse",
+				"warehouse_name": "Test Warehouse for Barcode 2",
+				"company": "_Test Company",
+			}
+		).insert()
+
+		warehouse_scan = scan_barcode(warehouse.name)
+		self.assertEqual(warehouse_scan["warehouse"], warehouse.name)
+
+		item_with_warehouse = self.make_item(
+			properties={
+				"item_defaults": [{"company": "_Test Company", "default_warehouse": warehouse.name}],
+				"barcodes": [{"barcode": "w12345"}],
+			}
+		)
+
+		item_scan = scan_barcode("w12345")
+		self.assertEqual(item_scan["item_code"], item_with_warehouse.name)
+		self.assertEqual(item_scan.get("default_warehouse"), None)
+
+		ctx = {"company": "_Test Company"}
+		item_scan_with_ctx = scan_barcode("w12345", ctx=ctx)
+		self.assertEqual(item_scan_with_ctx["item_code"], item_with_warehouse.name)
+		self.assertEqual(item_scan_with_ctx["default_warehouse"], warehouse.name)
+
+		ctx = {"company": "_Test Company", "set_warehouse": warehouse_2.name}
+		item_scan_with_ctx = scan_barcode("w12345", ctx=ctx)
+		self.assertEqual(item_scan_with_ctx["item_code"], item_with_warehouse.name)
+		self.assertEqual(item_scan_with_ctx["default_warehouse"], warehouse_2.name)

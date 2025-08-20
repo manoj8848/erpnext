@@ -18,13 +18,16 @@ erpnext.timesheet.timer = function (frm, row, timestamp = 0) {
 			{ fieldtype: "HTML", fieldname: "timer_html" },
 		],
 	});
-
 	if (row) {
 		dialog.set_values({
 			activity_type: row.activity_type,
 			project: row.project,
 			task: row.task,
 			expected_hours: row.expected_hours,
+		});
+	} else {
+		dialog.set_values({
+			project: frm.doc.parent_project,
 		});
 	}
 	dialog.get_field("timer_html").$wrapper.append(get_timer_html());
@@ -89,7 +92,7 @@ erpnext.timesheet.control_timer = function (frm, dialog, row, timestamp = 0) {
 			let d = moment(row.from_time);
 			if (row.expected_hours) {
 				d.add(row.expected_hours, "hours");
-				row.to_time = d.format(frappe.defaultDatetimeFormat);
+				row.to_time = frappe.datetime.get_datetime_as_string(d);
 			}
 			frm.refresh_field("time_logs");
 			frm.save();
@@ -117,8 +120,7 @@ erpnext.timesheet.control_timer = function (frm, dialog, row, timestamp = 0) {
 		grid_row.doc.project = args.project;
 		grid_row.doc.task = args.task;
 		grid_row.doc.expected_hours = args.expected_hours;
-		grid_row.doc.hours = currentIncrement / 3600;
-		grid_row.doc.to_time = frappe.datetime.now_datetime();
+		grid_row.doc.to_time = frappe.datetime.get_datetime_as_string();
 		grid_row.refresh();
 		frm.dirty();
 		frm.save();

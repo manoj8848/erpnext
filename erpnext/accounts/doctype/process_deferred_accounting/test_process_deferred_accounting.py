@@ -1,9 +1,9 @@
 # Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-
 import unittest
 
 import frappe
+from frappe.tests import IntegrationTestCase
 
 from erpnext.accounts.doctype.account.test_account import create_account
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
@@ -13,7 +13,7 @@ from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
 from erpnext.stock.doctype.item.test_item import create_item
 
 
-class TestProcessDeferredAccounting(unittest.TestCase):
+class TestProcessDeferredAccounting(IntegrationTestCase):
 	def test_creation_of_ledger_entry_on_submit(self):
 		"""test creation of gl entries on submission of document"""
 		change_acc_settings(acc_frozen_upto="2023-05-31", book_deferred_entries_based_on="Months")
@@ -40,6 +40,13 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		si.save()
 		si.submit()
 
+		original_gle = [
+			["Debtors - _TC", 3000.0, 0, "2023-07-01"],
+			[deferred_account, 0.0, 3000, "2023-07-01"],
+		]
+
+		check_gl_entries(self, si.name, original_gle, "2023-07-01")
+
 		process_deferred_accounting = frappe.get_doc(
 			dict(
 				doctype="Process Deferred Accounting",
@@ -63,6 +70,12 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		]
 
 		check_gl_entries(self, si.name, expected_gle, "2023-07-01")
+
+		# cancel the process deferred accounting document
+		process_deferred_accounting.cancel()
+
+		# check if gl entries are cancelled
+		check_gl_entries(self, si.name, original_gle, "2023-07-01")
 		change_acc_settings()
 
 	def test_pda_submission_and_cancellation(self):

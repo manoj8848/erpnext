@@ -2,14 +2,15 @@
 // License: GNU General Public License v3. See license.txt
 
 frappe.provide("erpnext");
-cur_frm.email_field = "email_id";
-
+if (this.frm) {
+	this.frm.email_field = "email_id";
+}
 erpnext.LeadController = class LeadController extends frappe.ui.form.Controller {
 	setup() {
 		this.frm.make_methods = {
-			Customer: this.make_customer,
-			Quotation: this.make_quotation,
-			Opportunity: this.make_opportunity,
+			Customer: this.make_customer.bind(this),
+			Quotation: this.make_quotation.bind(this),
+			Opportunity: this.make_opportunity.bind(this),
 		};
 
 		// For avoiding integration issues.
@@ -127,8 +128,8 @@ erpnext.LeadController = class LeadController extends frappe.ui.form.Controller 
 					fieldname: "prospect_name",
 					fieldtype: "Data",
 					default: frm.doc.company_name,
-					reqd: 1,
 					depends_on: "create_prospect",
+					mandatory_depends_on: "create_prospect",
 				}
 			);
 		}
@@ -238,5 +239,6 @@ erpnext.LeadController = class LeadController extends frappe.ui.form.Controller 
 		crm_activities.refresh();
 	}
 };
-
-extend_cscript(cur_frm.cscript, new erpnext.LeadController({ frm: cur_frm }));
+if (this.frm) {
+	extend_cscript(this.frm.cscript, new erpnext.LeadController({ frm: this.frm }));
+}

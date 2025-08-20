@@ -36,11 +36,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 		me.setup_warehouse_query();
 
 		me.frm.set_query("target_item_code", function () {
-			if (me.frm.doc.entry_type == "Capitalization") {
-				return erpnext.queries.item({ is_stock_item: 0, is_fixed_asset: 1 });
-			} else {
-				return erpnext.queries.item({ is_stock_item: 1, is_fixed_asset: 0 });
-			}
+			return erpnext.queries.item({ is_stock_item: 0, is_fixed_asset: 1 });
 		});
 
 		me.frm.set_query("target_asset", function () {
@@ -51,7 +47,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 
 		me.frm.set_query("asset", "asset_items", function () {
 			var filters = {
-				status: ["not in", ["Draft", "Scrapped", "Sold", "Capitalized", "Decapitalized"]],
+				status: ["not in", ["Draft", "Scrapped", "Sold", "Capitalized"]],
 				docstatus: 1,
 			};
 
@@ -138,23 +134,25 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 	}
 
 	target_asset() {
-		if (
-			this.frm.doc.target_asset &&
-			this.frm.doc.capitalization_method === "Choose a WIP composite asset"
-		) {
+		if (this.frm.doc.target_asset) {
 			this.set_consumed_stock_items_tagged_to_wip_composite_asset(this.frm.doc.target_asset);
 			this.get_target_asset_details();
 		}
 	}
 
-	set_consumed_stock_items_tagged_to_wip_composite_asset(asset) {
+	set_consumed_stock_items_tagged_to_wip_composite_asset(target_asset) {
 		var me = this;
 
-		if (asset) {
+		if (target_asset) {
 			return me.frm.call({
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_items_tagged_to_wip_composite_asset",
 				args: {
-					asset: asset,
+					params: {
+						target_asset: target_asset,
+						finance_book: me.frm.doc.finance_book,
+						posting_date: me.frm.doc.posting_date,
+						posting_time: me.frm.doc.posting_time,
+					},
 				},
 				callback: function (r) {
 					if (!r.exc && r.message) {
@@ -280,7 +278,6 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 		if (me.frm.doc.target_item_code) {
 			return me.frm.call({
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_target_item_details",
-				child: me.frm.doc,
 				args: {
 					item_code: me.frm.doc.target_item_code,
 					company: me.frm.doc.company,
@@ -300,7 +297,6 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 		if (me.frm.doc.target_asset) {
 			return me.frm.call({
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_target_asset_details",
-				child: me.frm.doc,
 				args: {
 					asset: me.frm.doc.target_asset,
 					company: me.frm.doc.company,
@@ -322,7 +318,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_consumed_stock_item_details",
 				child: row,
 				args: {
-					args: {
+					ctx: {
 						item_code: row.item_code,
 						warehouse: row.warehouse,
 						stock_qty: flt(row.stock_qty),
@@ -350,7 +346,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_consumed_asset_details",
 				child: row,
 				args: {
-					args: {
+					ctx: {
 						asset: row.asset,
 						doctype: me.frm.doc.doctype,
 						name: me.frm.doc.name,
@@ -377,7 +373,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 				method: "erpnext.assets.doctype.asset_capitalization.asset_capitalization.get_service_item_details",
 				child: row,
 				args: {
-					args: {
+					ctx: {
 						item_code: row.item_code,
 						qty: flt(row.qty),
 						expense_account: row.expense_account,
@@ -403,7 +399,7 @@ erpnext.assets.AssetCapitalization = class AssetCapitalization extends erpnext.s
 					args: {
 						item_code: item.item_code,
 						warehouse: cstr(item.warehouse),
-						qty: flt(item.stock_qty),
+						qty: -1 * flt(item.stock_qty),
 						serial_no: item.serial_no,
 						posting_date: me.frm.doc.posting_date,
 						posting_time: me.frm.doc.posting_time,

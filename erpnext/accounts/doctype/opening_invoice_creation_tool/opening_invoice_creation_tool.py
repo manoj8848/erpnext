@@ -11,6 +11,7 @@ from frappe.utils.background_jobs import enqueue, is_job_enqueued
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import (
 	get_accounting_dimensions,
 )
+from erpnext.stock.utils import get_default_stock_uom
 
 
 class OpeningInvoiceCreationTool(Document):
@@ -172,7 +173,7 @@ class OpeningInvoiceCreationTool(Document):
 			income_expense_account_field = (
 				"income_account" if row.party_type == "Customer" else "expense_account"
 			)
-			default_uom = frappe.db.get_single_value("Stock Settings", "stock_uom") or "Nos"
+			default_uom = get_default_stock_uom()
 			rate = flt(row.outstanding_amount) / flt(row.qty)
 
 			item_dict = frappe._dict(
@@ -228,7 +229,7 @@ class OpeningInvoiceCreationTool(Document):
 		else:
 			from frappe.utils.scheduler import is_scheduler_inactive
 
-			if is_scheduler_inactive() and not frappe.flags.in_test:
+			if is_scheduler_inactive() and not frappe.in_test:
 				frappe.throw(_("Scheduler is inactive. Cannot import data."), title=_("Scheduler Inactive"))
 
 			job_id = f"opening_invoice::{self.name}"
@@ -241,7 +242,7 @@ class OpeningInvoiceCreationTool(Document):
 					event="opening_invoice_creation",
 					job_id=job_id,
 					invoices=invoices,
-					now=frappe.conf.developer_mode or frappe.flags.in_test,
+					now=frappe.conf.developer_mode or frappe.in_test,
 				)
 
 

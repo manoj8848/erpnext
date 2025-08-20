@@ -11,7 +11,6 @@
  "field_order": [
   "customer_section",
   "column_break0",
-  "title",
   "naming_series",
   "customer",
   "customer_name",
@@ -25,6 +24,7 @@
   "po_date",
   "company",
   "skip_delivery_note",
+  "has_unit_price_items",
   "amended_from",
   "accounting_dimensions_section",
   "cost_center",
@@ -40,6 +40,7 @@
   "ignore_pricing_rule",
   "sec_warehouse",
   "scan_barcode",
+  "last_scanned_warehouse",
   "column_break_28",
   "set_warehouse",
   "reserve_stock",
@@ -113,8 +114,9 @@
   "dispatch_address",
   "col_break46",
   "company_address",
-  "column_break_92",
   "company_address_display",
+  "column_break_92",
+  "company_contact_person",
   "payment_schedule_section",
   "payment_terms_section",
   "payment_terms_template",
@@ -159,10 +161,13 @@
   "additional_info_section",
   "is_internal_customer",
   "represents_company",
+  "column_break_yvzv",
+  "utm_source",
+  "utm_campaign",
+  "utm_medium",
+  "utm_content",
   "column_break_152",
-  "source",
   "inter_company_order_reference",
-  "campaign",
   "party_account_currency",
   "connections_tab"
  ],
@@ -181,18 +186,6 @@
    "hide_seconds": 1,
    "oldfieldtype": "Column Break",
    "width": "50%"
-  },
-  {
-   "allow_on_submit": 1,
-   "default": "{customer_name}",
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "label": "Title",
-   "no_copy": 1,
-   "print_hide": 1
   },
   {
    "fieldname": "naming_series",
@@ -357,7 +350,6 @@
    "options": "fa fa-bullhorn"
   },
   {
-   "allow_on_submit": 1,
    "fieldname": "customer_address",
    "fieldtype": "Link",
    "hide_days": 1,
@@ -438,7 +430,6 @@
    "width": "50%"
   },
   {
-   "allow_on_submit": 1,
    "fieldname": "shipping_address_name",
    "fieldtype": "Link",
    "hide_days": 1,
@@ -1151,7 +1142,8 @@
    "label": "Project",
    "oldfieldname": "project",
    "oldfieldtype": "Link",
-   "options": "Project"
+   "options": "Project",
+   "search_index": 1
   },
   {
    "fieldname": "party_account_currency",
@@ -1164,28 +1156,6 @@
    "options": "Currency",
    "print_hide": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "source",
-   "fieldtype": "Link",
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "label": "Source",
-   "oldfieldname": "source",
-   "oldfieldtype": "Select",
-   "options": "Lead Source",
-   "print_hide": 1
-  },
-  {
-   "fieldname": "campaign",
-   "fieldtype": "Link",
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "label": "Campaign",
-   "oldfieldname": "campaign",
-   "oldfieldtype": "Link",
-   "options": "Campaign",
-   "print_hide": 1
   },
   {
    "collapsible": 1,
@@ -1463,6 +1433,7 @@
    "hide_days": 1,
    "hide_seconds": 1,
    "label": "Auto Repeat",
+   "no_copy": 1,
    "options": "Auto Repeat"
   },
   {
@@ -1656,13 +1627,74 @@
    "no_copy": 1,
    "options": "Not Requested\nRequested\nPartially Paid\nFully Paid",
    "print_hide": 1
+  },
+  {
+   "fieldname": "column_break_yvzv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "utm_medium",
+   "fieldtype": "Link",
+   "label": "Medium",
+   "options": "UTM Medium",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "utm_content",
+   "fieldtype": "Data",
+   "label": "Content",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "utm_source",
+   "fieldtype": "Link",
+   "hide_days": 1,
+   "hide_seconds": 1,
+   "label": "Source",
+   "oldfieldname": "source",
+   "oldfieldtype": "Select",
+   "options": "UTM Source",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "utm_campaign",
+   "fieldtype": "Link",
+   "hide_days": 1,
+   "hide_seconds": 1,
+   "label": "Campaign",
+   "oldfieldname": "campaign",
+   "oldfieldtype": "Link",
+   "options": "UTM Campaign",
+   "print_hide": 1
+  },
+  {
+   "fieldname": "company_contact_person",
+   "fieldtype": "Link",
+   "label": "Company Contact Person",
+   "options": "Contact",
+   "print_hide": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "has_unit_price_items",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Has Unit Price Items",
+   "no_copy": 1
+  },
+  {
+   "depends_on": "eval: doc.last_scanned_warehouse",
+   "fieldname": "last_scanned_warehouse",
+   "fieldtype": "Data",
+   "is_virtual": 1,
+   "label": "Last Scanned Warehouse"
   }
  ],
  "icon": "fa fa-file-text",
  "idx": 105,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-05-27 18:51:54.905804",
+ "modified": "2025-07-28 12:14:29.760988",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Sales Order",
@@ -1731,6 +1763,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "status,transaction_date,customer,customer_name, territory,order_type,company",
  "show_name_in_global_search": 1,
  "sort_field": "creation",

@@ -36,9 +36,9 @@ class OpportunitySummaryBySalesStage:
 			self.columns.append(
 				{
 					"label": _("Source"),
-					"fieldname": "source",
+					"fieldname": "utm_source",
 					"fieldtype": "Link",
-					"options": "Lead Source",
+					"options": "UTM Source",
 					"width": 200,
 				}
 			)
@@ -69,7 +69,7 @@ class OpportunitySummaryBySalesStage:
 
 		based_on = {
 			"Opportunity Owner": "_assign",
-			"Source": "source",
+			"Source": "utm_source",
 			"Opportunity Type": "opportunity_type",
 		}[self.filters.get("based_on")]
 
@@ -128,7 +128,7 @@ class OpportunitySummaryBySalesStage:
 		for based_on, data in self.formatted_data.items():
 			row_based_on = {
 				"Opportunity Owner": "opportunity_owner",
-				"Source": "source",
+				"Source": "utm_source",
 				"Opportunity Type": "opportunity_type",
 			}[self.filters.get("based_on")]
 
@@ -148,12 +148,17 @@ class OpportunitySummaryBySalesStage:
 
 			based_on = {
 				"Opportunity Owner": "_assign",
-				"Source": "source",
+				"Source": "utm_source",
 				"Opportunity Type": "opportunity_type",
 			}[self.filters.get("based_on")]
 
 			if self.filters.get("based_on") == "Opportunity Owner":
-				if d.get(based_on) == "[]" or d.get(based_on) is None or d.get(based_on) == "Not Assigned":
+				if (
+					d.get(based_on) == "[]"
+					or d.get(based_on) is None
+					or d.get(based_on) == "Not Assigned"
+					or d.get(based_on) == ""
+				):
 					assignments = ["Not Assigned"]
 				else:
 					assignments = json.loads(d.get(based_on))
@@ -188,7 +193,7 @@ class OpportunitySummaryBySalesStage:
 			filters.append({"opportunity_type": self.filters.get("opportunity_type")})
 
 		if self.filters.get("opportunity_source"):
-			filters.append({"source": self.filters.get("opportunity_source")})
+			filters.append({"utm_source": self.filters.get("opportunity_source")})
 
 		if self.filters.get("status"):
 			filters.append({"status": ("in", self.filters.get("status"))})

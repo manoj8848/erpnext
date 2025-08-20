@@ -2,6 +2,13 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Pick List", {
+	after_save(frm) {
+		setTimeout(() => {
+			// Added to fix the issue of locations table not getting updated after save
+			frm.reload_doc();
+		}, 500);
+	},
+
 	setup: (frm) => {
 		frm.ignore_doctypes_on_cancel_all = ["Serial and Batch Bundle"];
 
@@ -13,6 +20,14 @@ frappe.ui.form.on("Pick List", {
 			"Delivery Note": "Delivery Note",
 			"Stock Entry": "Stock Entry",
 		};
+
+		frm.set_query("warehouse", "locations", () => {
+			return {
+				filters: {
+					company: frm.doc.company,
+				},
+			};
+		});
 
 		frm.set_query("parent_warehouse", () => {
 			return {
@@ -84,41 +99,49 @@ frappe.ui.form.on("Pick List", {
 			});
 		}
 	},
+
+	pick_manually: (frm) => {
+		frm.trigger("update_warehouse_property");
+	},
+
+	update_warehouse_property: (frm) => {
+		frm.fields_dict.locations.grid.update_docfield_property(
+			"warehouse",
+			"read_only",
+			!frm.doc.pick_manually
+		);
+	},
+
 	get_item_locations: (frm) => {
 		// Button on the form
 		frm.events.set_item_locations(frm, false);
 	},
 	refresh: (frm) => {
 		frm.trigger("add_get_items_button");
+		frm.trigger("update_warehouse_property");
 		if (frm.doc.docstatus === 1) {
-			frappe
-				.xcall("erpnext.stock.doctype.pick_list.pick_list.target_document_exists", {
-					pick_list_name: frm.doc.name,
-					purpose: frm.doc.purpose,
-				})
-				.then((target_document_exists) => {
-					frm.set_df_property("locations", "allow_on_submit", target_document_exists ? 0 : 1);
+			const status_completed = frm.doc.status === "Completed";
+			frm.set_df_property("locations", "allow_on_submit", status_completed ? 0 : 1);
 
-					if (target_document_exists) return;
+			if (!status_completed) {
+				frm.add_custom_button(__("Update Current Stock"), () =>
+					frm.trigger("update_pick_list_stock")
+				);
 
-					frm.add_custom_button(__("Update Current Stock"), () =>
-						frm.trigger("update_pick_list_stock")
+				if (frm.doc.purpose === "Delivery") {
+					frm.add_custom_button(
+						__("Create Delivery Note"),
+						() => frm.trigger("create_delivery_note"),
+						__("Create")
 					);
-
-					if (frm.doc.purpose === "Delivery") {
-						frm.add_custom_button(
-							__("Delivery Note"),
-							() => frm.trigger("create_delivery_note"),
-							__("Create")
-						);
-					} else {
-						frm.add_custom_button(
-							__("Stock Entry"),
-							() => frm.trigger("create_stock_entry"),
-							__("Create")
-						);
-					}
-				});
+				} else {
+					frm.add_custom_button(
+						__("Create Stock Entry"),
+						() => frm.trigger("create_stock_entry"),
+						__("Create")
+					);
+				}
+			}
 
 			if (frm.doc.purpose === "Delivery" && frm.doc.status === "Open") {
 				if (frm.doc.__onload && frm.doc.__onload.has_unreserved_stock) {

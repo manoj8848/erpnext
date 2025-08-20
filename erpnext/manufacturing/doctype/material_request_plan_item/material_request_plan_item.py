@@ -21,7 +21,13 @@ class MaterialRequestPlanItem(Document):
 		item_code: DF.Link
 		item_name: DF.Data | None
 		material_request_type: DF.Literal[
-			"", "Purchase", "Material Transfer", "Material Issue", "Manufacture", "Customer Provided"
+			"",
+			"Purchase",
+			"Material Transfer",
+			"Material Issue",
+			"Manufacture",
+			"Subcontracting",
+			"Customer Provided",
 		]
 		min_order_qty: DF.Float
 		ordered_qty: DF.Float
@@ -36,6 +42,7 @@ class MaterialRequestPlanItem(Document):
 		safety_stock: DF.Float
 		sales_order: DF.Link | None
 		schedule_date: DF.Date | None
+		stock_reserved_qty: DF.Float
 		uom: DF.Link | None
 		warehouse: DF.Link
 	# end: auto-generated types

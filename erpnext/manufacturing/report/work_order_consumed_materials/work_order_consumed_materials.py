@@ -29,6 +29,9 @@ def get_data(report_filters):
 		if d.consumed_qty and d.consumed_qty > d.required_qty:
 			d.extra_consumed_qty = d.consumed_qty - d.required_qty
 
+		if d.is_additional_item:
+			d.extra_consumed_qty = d.consumed_qty
+
 		if d.extra_consumed_qty or not report_filters.show_extra_consumed_materials:
 			wo_items.setdefault((d.name, d.production_item), []).append(d)
 
@@ -50,7 +53,11 @@ def get_returned_materials(work_orders):
 
 	raw_materials = frappe.get_all(
 		"Stock Entry",
-		fields=["`tabStock Entry Detail`.`item_code`", "`tabStock Entry Detail`.`qty`"],
+		fields=[
+			"`tabStock Entry`.`work_order`",
+			"`tabStock Entry Detail`.`item_code`",
+			"`tabStock Entry Detail`.`qty`",
+		],
 		filters=[
 			["Stock Entry", "is_return", "=", 1],
 			["Stock Entry Detail", "docstatus", "=", 1],
@@ -59,12 +66,14 @@ def get_returned_materials(work_orders):
 	)
 
 	for d in raw_materials:
-		raw_materials_qty[d.item_code] += d.qty
+		key = (d.work_order, d.item_code)
+		raw_materials_qty[key] += d.qty
 
 	for row in work_orders:
 		row.returned_qty = 0.0
-		if raw_materials_qty.get(row.raw_material_item_code):
-			row.returned_qty = raw_materials_qty.get(row.raw_material_item_code)
+		key = (row.parent, row.raw_material_item_code)
+		if raw_materials_qty.get(key):
+			row.returned_qty = raw_materials_qty.get(key)
 
 
 def get_fields():
@@ -75,6 +84,7 @@ def get_fields():
 		"`tabWork Order Item`.`required_qty`",
 		"`tabWork Order Item`.`transferred_qty`",
 		"`tabWork Order Item`.`consumed_qty`",
+		"`tabWork Order Item`.`is_additional_item`",
 		"`tabWork Order`.`status`",
 		"`tabWork Order`.`name`",
 		"`tabWork Order`.`production_item`",

@@ -13,7 +13,7 @@ def get():
 				_("Bank Accounts"): {"account_type": "Bank", "is_group": 1},
 				_("Cash In Hand"): {_("Cash"): {"account_type": "Cash"}, "account_type": "Cash"},
 				_("Loans and Advances (Assets)"): {
-					_("Employee Advances"): {},
+					_("Employee Advances"): {"account_type": "Payable"},
 				},
 				_("Securities and Deposits"): {_("Earnest Money"): {}},
 				_("Stock Assets"): {
@@ -72,6 +72,7 @@ def get():
 				_("Write Off"): {},
 				_("Exchange Gain/Loss"): {},
 				_("Gain/Loss on Asset Disposal"): {},
+				_("Impairment"): {},
 			},
 			"root_type": "Expense",
 		},
@@ -104,6 +105,7 @@ def get():
 			_("Dividends Paid"): {"account_type": "Equity"},
 			_("Opening Balance Equity"): {"account_type": "Equity"},
 			_("Retained Earnings"): {"account_type": "Equity"},
+			_("Revaluation Surplus"): {"account_type": "Equity"},
 			"root_type": "Equity",
 		},
 	}
