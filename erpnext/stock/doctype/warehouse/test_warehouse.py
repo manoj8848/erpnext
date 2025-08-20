@@ -54,6 +54,12 @@ class TestWarehouse(FrappeTestCase):
 
 	def test_naming(self):
 		company = "Wind Power LLC"
+		if not frappe.db.exists("Company", "Wind Power LLC"):
+			company = frappe.new_doc("Company")
+			company.company_name = "Wind Power LLC"
+			company.default_currency = "INR"
+			company.insert()
+   
 		warehouse_name = "Named Warehouse - WP"
 		wh = frappe.get_doc(doctype="Warehouse", warehouse_name=warehouse_name, company=company).insert()
 		self.assertEqual(wh.name, warehouse_name)
