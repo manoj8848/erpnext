@@ -547,6 +547,60 @@ class TestPOSInvoiceMergeLog(unittest.TestCase):
 			frappe.db.sql("delete from `tabPOS Profile`")
 			frappe.db.sql("delete from `tabPOS Invoice`")
 
+	def test_separate_consolidated_invoice_for_different_accounting_dimensions(self):
+		"""
+		Creating 3 POS Invoices where first POS Invoice has different Cost Center than the other two.
+		Consolidate the Invoices.
+		Check whether the first POS Invoice is consolidated with a separate Sales Invoice than the other two.
+		Check whether the second and third POS Invoice are consolidated with the same Sales Invoice.
+		"""
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+
+		frappe.db.sql("delete from `tabPOS Invoice`")
+
+		create_cost_center(cost_center_name="_Test POS Cost Center 1", is_group=0)
+		create_cost_center(cost_center_name="_Test POS Cost Center 2", is_group=0)
+
+		try:
+			test_user, pos_profile = init_user_and_profile()
+
+			pos_inv = create_pos_invoice(rate=300, do_not_submit=1)
+			pos_inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 300})
+			pos_inv.cost_center = "_Test POS Cost Center 1 - _TC"
+			pos_inv.save()
+			pos_inv.submit()
+
+			pos_inv2 = create_pos_invoice(rate=3200, do_not_submit=1)
+			pos_inv2.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 3200})
+			pos_inv.cost_center = "_Test POS Cost Center 2 - _TC"
+			pos_inv2.save()
+			pos_inv2.submit()
+
+			pos_inv3 = create_pos_invoice(rate=2300, do_not_submit=1)
+			pos_inv3.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 2300})
+			pos_inv.cost_center = "_Test POS Cost Center 2 - _TC"
+			pos_inv3.save()
+			pos_inv3.submit()
+
+			consolidate_pos_invoices()
+
+			pos_inv.load_from_db()
+			self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv.consolidated_invoice))
+
+			pos_inv2.load_from_db()
+			self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv2.consolidated_invoice))
+
+			self.assertFalse(pos_inv.consolidated_invoice == pos_inv3.consolidated_invoice)
+
+			pos_inv3.load_from_db()
+			self.assertTrue(frappe.db.exists("Sales Invoice", pos_inv3.consolidated_invoice))
+
+			self.assertTrue(pos_inv2.consolidated_invoice == pos_inv3.consolidated_invoice)
+		finally:
+			frappe.set_user("Administrator")
+			frappe.db.sql("delete from `tabPOS Profile`")
+			frappe.db.sql("delete from `tabPOS Invoice`")
+
 	def test_check_scheduler_status_TC_ACC_340(self):
 		frappe.flags.in_test = False
 
@@ -741,7 +795,7 @@ class TestPOSInvoiceMergeLog(unittest.TestCase):
 
 		unconsolidate_pos_invoices(closing_entry)
 
-	def test_enqueue_job(self):
+	def test_enqueue_job_TC_ACC_515(self):
 		test_user, pos_profile = init_user_and_profile()
 		pos_profile_doc = frappe.get_doc("POS Profile", pos_profile.name)
 		pos_profile_doc.allow_partial_payment = 1
@@ -772,38 +826,46 @@ class TestPOSInvoiceMergeLog(unittest.TestCase):
 
 		self.assertIsInstance(msg, str)
 
-	def test_merge_pos_invoice_into(self):
-		test_user, pos_profile = init_user_and_profile()
-		pos_profile_doc = frappe.get_doc("POS Profile", pos_profile.name)
-		pos_profile_doc.allow_partial_payment = 1
-		frappe.db.set_value("POS Profile", pos_profile_doc.name, "cost_center", None)
-		pos_profile_doc.reload()
+	def test_merge_pos_invoice_into_TC_ACC_516(self):
+		try:
+			test_user, pos_profile = init_user_and_profile()
+			pos_profile_doc = frappe.get_doc("POS Profile", pos_profile.name)
+			pos_profile_doc.allow_partial_payment = 1
+			frappe.db.set_value("POS Profile", pos_profile_doc.name, "cost_center", None)
+			pos_profile_doc.reload()
 
-		inv = create_pos_invoice(qty=1, rate=70, do_not_save=True, pos_profile=pos_profile)
-		inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 70})
-		inv.save(ignore_permissions=True)
+			inv = create_pos_invoice(qty=1, rate=70, do_not_save=True, pos_profile=pos_profile)
+			inv.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 70})
+			inv.save(ignore_permissions=True)
 
-		accounting_dimensions = [
-			frappe._dict(
-				fieldname="cost_center", label="Cost Center", mandatory_for_pl=1, mandatory_for_bs=0
-			),
-		]
-		accounting_dimensions_fields = [d.fieldname for d in accounting_dimensions]
+			accounting_dimensions = [
+				frappe._dict(
+					fieldname="cost_center", label="Cost Center", mandatory_for_pl=1, mandatory_for_bs=0
+				),
+			]
+			accounting_dimensions_fields = [d.fieldname for d in accounting_dimensions]
 
-		with self.assertRaises(frappe.ValidationError):
-			dimension_values = frappe.db.get_value(
-				"POS Profile", {"name": inv.pos_profile}, accounting_dimensions_fields, as_dict=1
-			)
-			for dimension in accounting_dimensions:
-				dimension_value = dimension_values.get(dimension.fieldname)
-				if not dimension_value and (dimension.mandatory_for_pl or dimension.mandatory_for_bs):
-					frappe.throw(
-						_("Please set Accounting Dimension {} in {}").format(
-							frappe.bold(dimension.label),
-							frappe.get_desk_link("POS Profile", inv.pos_profile),
+			with self.assertRaises(frappe.ValidationError):
+				dimension_values = frappe.db.get_value(
+					"POS Profile", {"name": inv.pos_profile}, accounting_dimensions_fields, as_dict=1
+				)
+				for dimension in accounting_dimensions:
+					dimension_value = dimension_values.get(dimension.fieldname)
+					if not dimension_value and (dimension.mandatory_for_pl or dimension.mandatory_for_bs):
+						frappe.throw(
+							_("Please set Accounting Dimension {} in {}").format(
+								frappe.bold(dimension.label),
+								frappe.get_desk_link("POS Profile", inv.pos_profile),
+							)
 						)
-					)
-				inv.set(dimension.fieldname, dimension_value)
+					inv.set(dimension.fieldname, dimension_value)
+
+		finally:
+			frappe.flags.in_test = False
+			frappe.set_user("Administrator")
+			frappe.db.sql("delete from `tabPOS Profile`")
+			frappe.db.sql("delete from `tabPOS Invoice`")
+			frappe.db.sql("delete from `tabPOS Invoice Merge Log`")
 
 
 def make_merge_log(invoices):
