@@ -51,6 +51,7 @@
   "column_break_42",
   "free_item_uom",
   "round_free_qty",
+  "enforce_free_item_qty",
   "dont_enforce_free_item_qty",
   "is_recursive",
   "recurse_for",
@@ -628,13 +629,20 @@
    "fieldname": "has_priority",
    "fieldtype": "Check",
    "label": "Has Priority"
-},
-{
- "default": "0",
- "depends_on": "eval:doc.price_or_product_discount == 'Product'",
- "fieldname": "dont_enforce_free_item_qty",
- "fieldtype": "Check",
- "label": "Don't Enforce Free Item Qty"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.price_or_product_discount == 'Product'",
+   "fieldname": "enforce_free_item_qty",
+   "fieldtype": "Check",
+   "label": "Enforce Free Item Qty"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.price_or_product_discount == 'Product'",
+   "fieldname": "dont_enforce_free_item_qty",
+   "fieldtype": "Check",
+   "label": "Don't Enforce Free Item Qty"
 }
  ],
  "icon": "fa fa-gift",

@@ -15,7 +15,7 @@ class PackingSlip(StatusUpdater):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.packing_slip_item.packing_slip_item import PackingSlipItem
@@ -129,16 +129,18 @@ class PackingSlip(StatusUpdater):
 					)
 				)
 
-			item_table = "tabDelivery Note Item" if item.dn_detail else "tabPacked Item"  # Corrected table names
+			item_table = (
+				"tabDelivery Note Item" if item.dn_detail else "tabPacked Item"
+			)  # Corrected table names
 			item_name = item.dn_detail or item.pi_detail
 
 			query = f"""
-				SELECT SUM(qty - packed_qty) AS remaining_qty 
+				SELECT SUM(qty - packed_qty) AS remaining_qty
 				FROM `{item_table}`
 				WHERE `name` = %s AND `docstatus` = 0
 			"""
 			remaining_qty = frappe.db.sql(query, (item_name,), as_dict=True)
-			remaining_qty = remaining_qty[0]['remaining_qty'] if remaining_qty else None
+			remaining_qty = remaining_qty[0]["remaining_qty"] if remaining_qty else None
 
 			if remaining_qty is None:
 				frappe.throw(
@@ -159,8 +161,6 @@ class PackingSlip(StatusUpdater):
 					)
 				)
 
-
-
 	def set_missing_values(self):
 		if not self.from_case_no:
 			self.from_case_no = self.get_recommended_case_no()
@@ -177,20 +177,19 @@ class PackingSlip(StatusUpdater):
 
 	def get_recommended_case_no(self):
 		"""Returns the next case no. for a new packing slip for a delivery note"""
-    
+
 		packing_slips = frappe.get_all(
-        	"Packing Slip",
+			"Packing Slip",
 			filters={"delivery_note": self.delivery_note, "docstatus": 1},
 			fields=["to_case_no"],
 			order_by="to_case_no desc",
-			limit=1
-    	)
-    
+			limit=1,
+		)
+
 		if packing_slips:
 			return cint(packing_slips[0].to_case_no) + 1
 
 		return 1
-
 
 	def calculate_net_total_pkg(self):
 		self.net_weight_uom = self.items[0].weight_uom if self.items else None
@@ -218,22 +217,26 @@ class PackingSlip(StatusUpdater):
 def item_details(doctype, txt, searchfield, start, page_len, filters):
 	from erpnext.controllers.queries import get_match_cond
 
-	return frappe.db.sql(
-		"""
+	match_cond = get_match_cond(doctype)
+
+	query = f"""
 		SELECT name, item_name, description
 		FROM `tabItem`
-		WHERE name in (
-					SELECT item_code
-					FROM `tabDelivery Note Item`
-					WHERE parent = %s
-				)
-			AND {0} LIKE %s {1}
+		WHERE name IN (
+			SELECT item_code
+			FROM `tabDelivery Note Item`
+			WHERE parent = %s
+		)
+		AND {searchfield} LIKE %s {match_cond}
 		LIMIT %s OFFSET %s
-		""".format(searchfield, get_match_cond(doctype)),
+	"""
+
+	return frappe.db.sql(
+		query,
 		(
 			(filters or {}).get("delivery_note"),
 			f"%{txt}%",
 			page_len,
 			start,
-		)
+		),
 	)

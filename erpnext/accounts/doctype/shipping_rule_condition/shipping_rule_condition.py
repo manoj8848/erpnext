@@ -13,7 +13,7 @@ class ShippingRuleCondition(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from_value: DF.Float

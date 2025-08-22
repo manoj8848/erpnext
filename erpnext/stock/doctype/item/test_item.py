@@ -3,15 +3,14 @@
 
 
 import json
+import random
+import re
 
 import frappe
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.test_runner import make_test_objects
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import add_days, today
-import re
-import random
-from erpnext.stock.doctype.warehouse.warehouse import convert_to_group_or_ledger
 
 from erpnext.controllers.item_variant import (
 	InvalidItemAttributeValueError,
@@ -29,6 +28,7 @@ from erpnext.stock.doctype.item.item import (
 	validate_is_stock_item,
 )
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+from erpnext.stock.doctype.warehouse.warehouse import convert_to_group_or_ledger
 from erpnext.stock.get_item_details import get_item_details
 
 test_ignore = ["BOM"]
@@ -71,11 +71,12 @@ def make_item(item_code=None, properties=None, uoms=None, barcode=None):
 				"barcode": barcode,
 			},
 		)
-	if 'india_compliance' in frappe.get_installed_apps():
+	if "india_compliance" in frappe.get_installed_apps():
 		from india_compliance.gst_india.utils import get_hsn_settings
+
 		valid_hsn_length = get_hsn_settings()
 
-		gst_hsn_code = frappe.db.get_all("GST HSN Code", pluck = "name")
+		gst_hsn_code = frappe.db.get_all("GST HSN Code", pluck="name")
 		for code in gst_hsn_code:
 			if len(code) in valid_hsn_length[1]:
 				item.gst_hsn_code = code
@@ -650,7 +651,8 @@ class TestItem(FrappeTestCase):
 		"Check if specific columns have indexes in the database"
 
 		# Query to retrieve all indexed columns for the `tabItem` table (converted to lowercase)
-		indices = frappe.db.sql("""
+		indices = frappe.db.sql(
+			"""
 			SELECT
 				a.attname AS column_name
 			FROM
@@ -659,7 +661,9 @@ class TestItem(FrappeTestCase):
 				pg_attribute a ON a.attnum = ANY(i.indkey)
 			WHERE
 				i.indrelid = '"tabItem"'::regclass
-		""", as_dict=1)
+		""",
+			as_dict=1,
+		)
 
 		# Collect indexed columns
 		indexed_columns = {index["column_name"] for index in indices}
@@ -671,8 +675,6 @@ class TestItem(FrappeTestCase):
 		missing_columns = expected_columns - indexed_columns
 		if missing_columns:
 			self.fail(f"Expected database indexes on these columns: {', '.join(missing_columns)}")
-
-
 
 	def test_attribute_completions(self):
 		expected_attrs = {"Small", "Extra Small", "Extra Large", "Large", "2XL", "Medium"}
@@ -914,12 +916,13 @@ class TestItem(FrappeTestCase):
 
 	def test_cr_item_TC_SCK_128(self):
 		from frappe.utils import random_string
+
 		item_fields1 = {
 			"item_name": f"_Test-{random_string(5)}",
 			"valuation_rate": 100,
 			"has_batch_no": 1,
 			"has_expiry_date": 1,
-			"shelf_life_in_days": 30
+			"shelf_life_in_days": 30,
 		}
 		item = make_item(item_fields1["item_name"], item_fields1)
 		self.assertEqual(item.has_batch_no, 1)
@@ -930,10 +933,8 @@ class TestItem(FrappeTestCase):
 		item = make_item(
 			"_Test Template Item",
 			{
-				"variant_based_on":"Item Attribute",
-				"attributes": [
-					{"attribute": "Test Size"}
-				],
+				"variant_based_on": "Item Attribute",
+				"attributes": [{"attribute": "Test Size"}],
 				"has_variants": 1,
 			},
 		)
@@ -943,6 +944,7 @@ class TestItem(FrappeTestCase):
 
 	def test_auto_reorder_item_TC_SCK_126(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
 		group_warehouse = frappe.get_doc("Warehouse", create_warehouse("TestGroup"))
 		convert_to_group_or_ledger(group_warehouse.name)
 		group_warehouse.reload()
@@ -952,14 +954,16 @@ class TestItem(FrappeTestCase):
 			{
 				"reorder_levels": [
 					{
-						"warehouse_group":group_warehouse.name,
-						"warehouse":create_warehouse("Test Store", {"parent_warehouse":group_warehouse.name}),
-						"warehouse_reorder_level":100,
-						"warehouse_reorder_qty":200,
-						"material_request_type":"Purchase"
+						"warehouse_group": group_warehouse.name,
+						"warehouse": create_warehouse(
+							"Test Store", {"parent_warehouse": group_warehouse.name}
+						),
+						"warehouse_reorder_level": 100,
+						"warehouse_reorder_qty": 200,
+						"material_request_type": "Purchase",
 					}
 				]
-			}
+			},
 		)
 		self.assertEqual(item.reorder_levels[0].warehouse_group, group_warehouse.name)
 		self.assertEqual(item.reorder_levels[0].warehouse_reorder_level, 100)
@@ -968,12 +972,13 @@ class TestItem(FrappeTestCase):
 
 	def test_cr_item_TC_SCK_129(self):
 		from frappe.utils import random_string
+
 		item_fields1 = {
 			"item_name": f"_Test-{random_string(5)}",
 			"valuation_rate": 100,
 			"has_serial_no": 1,
 			"has_expiry_date": 1,
-			"shelf_life_in_days": 30
+			"shelf_life_in_days": 30,
 		}
 		item = make_item(item_fields1["item_name"], item_fields1)
 		self.assertEqual(item.has_serial_no, 1)
@@ -982,39 +987,53 @@ class TestItem(FrappeTestCase):
 
 	def test_cr_item_TC_SCK_130(self):
 		from frappe.utils import random_string
+
 		item_fields1 = {
 			"item_name": f"_Test-{random_string(5)}",
 			"is_stock_item": 0,
 			"valuation_rate": 100,
-			"shelf_life_in_days": 30
+			"shelf_life_in_days": 30,
 		}
 		item = make_item(item_fields1["item_name"], item_fields1)
 		self.assertEqual(item.is_stock_item, 0)
 		self.assertEqual(item.shelf_life_in_days, 30)
 
 	def test_create_item_with_opening_stock_TC_SCK_229(self):
-		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 		from frappe.utils import random_string
+
+		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
 		item_fields1 = {
 			"item_name": f"_Test-{random_string(5)}",
 			"is_stock_item": 1,
-			"item_group":"Raw Material",
-			"opening_stock":100,
+			"item_group": "Raw Material",
+			"opening_stock": 100,
 			"valuation_rate": 200,
-			"standard_rate":300,
-			"item_defaults": [{'company': "_Test Company", 'default_warehouse': create_warehouse("Stores-test", properties=None, company="_Test Company")}],
+			"standard_rate": 300,
+			"item_defaults": [
+				{
+					"company": "_Test Company",
+					"default_warehouse": create_warehouse(
+						"Stores-test", properties=None, company="_Test Company"
+					),
+				}
+			],
 		}
 		item = make_item(item_fields1["item_name"], item_fields1)
-		self.assertEqual(item.standard_rate, 300)		
-		self.assertTrue(
-			frappe.db.get_value("Stock Entry Detail", {"item_code": item.name}, "parent")
-		)
+		self.assertEqual(item.standard_rate, 300)
+		self.assertTrue(frappe.db.get_value("Stock Entry Detail", {"item_code": item.name}, "parent"))
 		se = frappe.db.get_value("Stock Entry Detail", {"item_code": item.name}, "parent")
-		self.assertEqual(frappe.db.get_value("Stock Ledger Entry", {"item_code": item.name, "voucher_no": se}, "actual_qty"), 100)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Stock Ledger Entry", {"item_code": item.name, "voucher_no": se}, "actual_qty"
+			),
+			100,
+		)
 		self.assertEqual(frappe.db.get_value("Item Price", {"item_code": item.name}, "price_list_rate"), 300)
 
 	def test_item_cr_TC_SCK_153(self):
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
 		if not frappe.db.exists("Company", "_Test Company"):
 			company = frappe.new_doc("Company")
 			company.company_name = "_Test Company"
@@ -1024,7 +1043,14 @@ class TestItem(FrappeTestCase):
 			"item_name": "Ball point Pen1",
 			"is_stock_item": 1,
 			"stock_uom": "Box",
-			"item_defaults": [{'company': "_Test Company", 'default_warehouse': create_warehouse("Stores-test", properties=None, company="_Test Company")}],
+			"item_defaults": [
+				{
+					"company": "_Test Company",
+					"default_warehouse": create_warehouse(
+						"Stores-test", properties=None, company="_Test Company"
+					),
+				}
+			],
 		}
 		item = make_item("Ball point Pen1", item_fields)
 		self.assertEqual(item.name, "Ball point Pen1")
@@ -1042,13 +1068,14 @@ class TestItem(FrappeTestCase):
 		self.assertEqual(itm_grp.parent_item_group, "Test Parent Item Group")
 
 	def tearDown(self):
-        # Cleanup created price lists
-		if frappe.db.exists("Item Group", 'Software'):
-			frappe.delete_doc("Item Group", 'Software')
-	
+		# Cleanup created price lists
+		if frappe.db.exists("Item Group", "Software"):
+			frappe.delete_doc("Item Group", "Software")
+
 	def test_cr_item_alternative_TC_SCK_150(self):
 		from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
 		from erpnext.manufacturing.doctype.work_order.test_work_order import make_wo_order_test_record
+
 		if not frappe.db.exists("Company", "_Test Company"):
 			company = frappe.new_doc("Company")
 			company.company_name = "_Test Company"
@@ -1059,13 +1086,13 @@ class TestItem(FrappeTestCase):
 			"item_name": "_Test Item150",
 			"is_stock_item": 1,
 			"valuation_rate": 500,
-			"allow_alternative_item": 1
+			"allow_alternative_item": 1,
 		}
 		alt_item_fields = {
 			"item_name": "_Test Alt Item",
 			"is_stock_item": 1,
 			"valuation_rate": 500,
-			"allow_alternative_item": 1
+			"allow_alternative_item": 1,
 		}
 		bot_item_fields = {
 			"item_name": "_Test Bom Item",
@@ -1076,51 +1103,70 @@ class TestItem(FrappeTestCase):
 		alt_item = make_item("_Test Alt Item", alt_item_fields)
 		bom_item = make_item("_Test Bom Item", bot_item_fields)
 
-		if not frappe.db.exists("Item Alternative", {"item_code": item.name, "alternative_item_code": alt_item.name}):
-			alt_1 = frappe.get_doc({
-				"doctype": "Item Alternative",
-				"item_code": item.name,
-				"alternative_item_code": alt_item.name,
-				"is_two_way": 1
-			})
+		if not frappe.db.exists(
+			"Item Alternative", {"item_code": item.name, "alternative_item_code": alt_item.name}
+		):
+			alt_1 = frappe.get_doc(
+				{
+					"doctype": "Item Alternative",
+					"item_code": item.name,
+					"alternative_item_code": alt_item.name,
+					"is_two_way": 1,
+				}
+			)
 			alt_1.insert()
 
-		if not frappe.db.exists("Item Alternative", {"item_code": alt_item.name, "alternative_item_code": item.name}):
-			alt_2 = frappe.get_doc({
-				"doctype": "Item Alternative",
-				"item_code": alt_item.name,
-				"alternative_item_code": item.name,
-				"is_two_way": 1
-			})
+		if not frappe.db.exists(
+			"Item Alternative", {"item_code": alt_item.name, "alternative_item_code": item.name}
+		):
+			alt_2 = frappe.get_doc(
+				{
+					"doctype": "Item Alternative",
+					"item_code": alt_item.name,
+					"alternative_item_code": item.name,
+					"is_two_way": 1,
+				}
+			)
 			alt_2.insert()
 
 		if not frappe.db.exists("BOM", {"item": item.name}):
 			bom = make_bom(
-			item=item.name,
-			company= company,
-			raw_materials=[bom_item.name, alt_item.name],
-			is_active=1,
-			is_default=1,
-			do_not_submit=True,
-		)
+				item=item.name,
+				company=company,
+				raw_materials=[bom_item.name, alt_item.name],
+				is_active=1,
+				is_default=1,
+				do_not_submit=True,
+			)
 		self.assertTrue(frappe.db.exists("BOM", bom.name))
 
-		wo = make_wo_order_test_record(company= company,production_item=item.name,bom_no=frappe.get_value("BOM", {"item": bom_item.name}, "name") ,qty=10)
+		wo = make_wo_order_test_record(
+			company=company,
+			production_item=item.name,
+			bom_no=frappe.get_value("BOM", {"item": bom_item.name}, "name"),
+			qty=10,
+		)
 
 		wo.reload()
 		wo.alternate_item = alt_item.name
 		wo.save()
 		self.assertEqual(wo.alternate_item, alt_item.name, "Alternative item not found in Work Order")
-	
+
 	@change_settings("Stock Settings", {"valuation_method": "FIFO"})
 	def test_default_valuation_method_TC_SCK_180(self):
 		expected_valuation_method = "FIFO"
 		updated_stock_settings = frappe.get_doc("Stock Settings")
-		self.assertEqual(updated_stock_settings.valuation_method, expected_valuation_method, "Valuation method not set correctly in Stock Settings")
+		self.assertEqual(
+			updated_stock_settings.valuation_method,
+			expected_valuation_method,
+			"Valuation method not set correctly in Stock Settings",
+		)
 
 	def test_create_stock_entry_with_batch_TC_SCK_155(self):
 		from datetime import datetime, timedelta
+
 		from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
+
 		if not frappe.db.exists("Company", "_Test Company"):
 			company = frappe.new_doc("Company")
 			company.company_name = "_Test Company"
@@ -1135,15 +1181,18 @@ class TestItem(FrappeTestCase):
 			"batch_number_series": "BATCH-Item-.####",
 			"create_new_batch": 1,
 			"has_expiry_date": 1,
-			"shelf_life_in_days": 365
+			"shelf_life_in_days": 365,
 		}
 		item = make_item("_Test Item155", item_fields)
 		se = make_stock_entry(
-			item_code=item.name, target=create_warehouse("_Test Stores", company="_Test Company"), qty=10, purpose="Material Receipt"
+			item_code=item.name,
+			target=create_warehouse("_Test Stores", company="_Test Company"),
+			qty=10,
+			purpose="Material Receipt",
 		)
 		expiry = se.posting_date + timedelta(days=365)
 		self.assertEqual(se.docstatus, 1, "Stock Entry not submitted successfully")
-        # Fetch batch details
+		# Fetch batch details
 		batch = frappe.get_last_doc("Batch", filters={"item": item.name})
 		self.assertIsNotNone(batch, "Batch not created")
 		self.assertEqual(str(batch.expiry_date), str(expiry), "Expiry date mismatch in batch")
@@ -1151,6 +1200,7 @@ class TestItem(FrappeTestCase):
 	def test_cr_item_alternative_TC_SCK_149(self):
 		from erpnext.manufacturing.doctype.production_plan.test_production_plan import make_bom
 		from erpnext.manufacturing.doctype.work_order.test_work_order import make_wo_order_test_record
+
 		if not frappe.db.exists("Company", "_Test Company"):
 			company = frappe.new_doc("Company")
 			company.company_name = "_Test Company"
@@ -1166,7 +1216,7 @@ class TestItem(FrappeTestCase):
 			"item_name": "_Test Alt Item",
 			"is_stock_item": 1,
 			"valuation_rate": 500,
-			"allow_alternative_item": 1
+			"allow_alternative_item": 1,
 		}
 		bot_item_fields = {
 			"item_name": "_Test Bom Item",
@@ -1179,26 +1229,39 @@ class TestItem(FrappeTestCase):
 
 		if not frappe.db.exists("BOM", {"item": item.name}):
 			bom = make_bom(
-			item=item.name,
-			company= company,
-			raw_materials=[bom_item.name, alt_item.name],
-			is_active=1,
-			is_default=1,
-			do_not_submit=True,
-		)
+				item=item.name,
+				company=company,
+				raw_materials=[bom_item.name, alt_item.name],
+				is_active=1,
+				is_default=1,
+				do_not_submit=True,
+			)
 		self.assertTrue(frappe.db.exists("BOM", bom.name))
 		bom = frappe.get_list("BOM", filters={"item": item.name, "is_active": 1}, limit_page_length=1)
 		self.assertGreater(len(bom), 0, "BOM not found for the item")
 
-		wo = make_wo_order_test_record(company= company,production_item=item.name,bom_no=bom[0].name ,qty=10)
+		wo = make_wo_order_test_record(company=company, production_item=item.name, bom_no=bom[0].name, qty=10)
 
 		wo_items = frappe.get_doc("Work Order", wo.name).required_items
 		alt_item_found = any(item.item_code == alt_item.name for item in wo_items)
 		self.assertTrue(alt_item_found, "Alternative item not found in Work Order")
+		wo.reload()
+
+		from frappe.utils import flt
+
+		# Round amounts to avoid float precision issues before submission
+		for item in wo.required_items:
+			item.amount = flt(item.amount, 9)
+			item.rate = flt(item.rate, 9)
+
+		wo.save()  # Save the changes
 
 		wo.submit()
+
 		self.assertTrue(frappe.db.exists("Work Order", wo.name))
-		alternate_item_in_wo = next((item.item_code for item in wo_items if item.item_code == alt_item.name), None)
+		alternate_item_in_wo = next(
+			(item.item_code for item in wo_items if item.item_code == alt_item.name), None
+		)
 		self.assertEqual(alternate_item_in_wo, alt_item.name, "Alternative item not found in Work Order")
 
 	def test_set_valuation_method_for_item_TC_SCK_179(self):
@@ -1206,11 +1269,379 @@ class TestItem(FrappeTestCase):
 			"item_name": "_Test Book Valuation Method",
 			"stock_uom": "Nos",
 			"is_stock_item": 1,
-			"valuation_method": "FIFO"
+			"valuation_method": "FIFO",
 		}
 		item = make_item("_Test Book", item_fields)
 		self.assertEqual(item.name, "_Test Book")
 		self.assertEqual(item.valuation_method, "FIFO")
+
+	def test_validate_customer_provided_part_valuation_rate_TC_SCK_425(self):
+		item_fields = {
+			"is_stock_item": 1,
+			"is_customer_provided_item": 1,
+			"is_purchase_item": 0,
+			"valuation_rate": 100,
+		}
+		msg = '"Customer Provided Item" cannot have Valuation Rate'
+		with self.assertRaises(frappe.ValidationError) as e:
+			make_item("_test_valuation_rate_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
+
+	def test_validate_customer_provided_part_is_purchase_item_TC_SCK_426(self):
+		item_fields = {
+			"is_stock_item": 1,
+			"is_customer_provided_item": 1,
+			"is_purchase_item": 1,
+		}
+		msg = '"Customer Provided Item" cannot be Purchase Item also'
+		with self.assertRaises(frappe.ValidationError) as e:
+			make_item("_test_purchase_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
+
+	def test_validate_set_opening_stock_TC_SCK_427(self):
+		item_fields = {
+			"is_stock_item": 1,
+			"is_customer_provided_item": 0,
+			"standard_rate": 0,
+			"valuation_rate": 0,
+			"has_serial_no": 0,
+			"has_batch_no": 0,
+			"opening_stock": 1,
+		}
+		msg = frappe._("Valuation Rate is mandatory if Opening Stock entered")
+		with self.assertRaises(frappe.ValidationError) as e:
+			make_item("_test_opening_stock_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
+
+	def test_validate_naming_series_for_dot_TC_SCK_428(self):
+		item_fields = {
+			"is_stock_item": 1,
+			"serial_no_series": "SRS###",
+		}
+
+		msg = frappe._("Invalid naming series (. missing) for Serial Number Series")
+		with self.assertRaises(frappe.ValidationError) as e:
+			make_item("_test_naming_series_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
+
+	def test_validate_naming_series_for_hash_TC_SCK_429(self):
+		item_fields = {
+			"is_stock_item": 1,
+			"serial_no_series": "SRS. ###",
+		}
+		msg = frappe._("Invalid naming series (avoid spaces between '.' and '#') for Serial Number Series.")
+		with self.assertRaises(frappe.ValidationError) as e:
+			make_item("_test_naming_series_item", item_fields)
+
+		self.assertIn(msg, str(e.exception))
+
+	def test_update_bom_item_description_TC_SCK_430(self):
+		item = make_item("_test-item-for-bom", {"is_stock_item": 1})
+		item.description = "Initial Description"
+		item.save()
+
+		bom = frappe.get_doc(
+			{
+				"doctype": "BOM",
+				"item": item.name,
+				"quantity": 1,
+				"is_active": 1,
+				"is_default": 1,
+				"items": [{"item_code": item.name, "qty": 1, "rate": 100}],
+			}
+		)
+		bom.insert()
+		bom.submit()
+
+		item.reload()
+		item.description = "Updated BOM Description"
+		item.save()
+
+		item.update_bom_item_desc()
+
+		bom_desc = frappe.db.get_value("BOM", bom.name, "description")
+		bom_item_desc = frappe.db.get_value(
+			"BOM Item", {"parent": bom.name, "item_code": item.name}, "description"
+		)
+		explosion_desc = frappe.db.get_value(
+			"BOM Explosion Item", {"parent": bom.name, "item_code": item.name}, "description"
+		)
+
+		self.assertEqual(bom_desc, "Updated BOM Description")
+		self.assertEqual(bom_item_desc, "Updated BOM Description")
+		self.assertEqual(explosion_desc, "Updated BOM Description")
+
+	def test_deleted_attribute_in_template_raises_error_TC_SCK_431(self):
+		create_attribute("Color", ["Red", "Blue"])
+		create_attribute("Size", ["S", "M", "L"])
+
+		template = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_variant_attr",
+				"item_group": "All Item Groups",
+				"has_variants": 1,
+				"attributes": [
+					{"attribute": "Color", "attribute_value": "Red"},
+					{"attribute": "Size", "attribute_value": "M"},
+				],
+			}
+		)
+		if "india_compliance" in frappe.get_installed_apps():
+			template.gst_hsn_code = get_hsn()
+		template.insert(ignore_permissions=True)
+		variant = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_variant_attr1",
+				"item_group": "All Item Groups",
+				"variant_of": template.name,
+				"attributes": [
+					{"attribute": "Color", "attribute_value": "Red"},
+					{"attribute": "Size", "attribute_value": "M"},
+				],
+			}
+		)
+		if "india_compliance" in frappe.get_installed_apps():
+			variant.gst_hsn_code = get_hsn()
+		variant.insert(ignore_permissions=True)
+
+		template.reload()
+		template.set("attributes", [])
+		template.append("attributes", {"attribute": "Color", "attribute_values": ["Red", "Blue"]})
+		msg = frappe._("The following deleted attributes exist in Variants but not in the Template.")
+		with self.assertRaises(frappe.ValidationError) as cm:
+			template.save()
+		self.assertIn(msg, str(cm.exception))
+
+	def test_item_autoname_with_naming_series_TC_SCK_432(self):
+		frappe.db.set_default("item_naming_by", "Naming Series")
+		template = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_variant_template",
+				"item_name": "Test Variant Template",
+				"stock_uom": "Nos",
+				"item_group": "All Item Groups",
+				"has_variants": 1,
+				"attributes": [{"attribute": "Color", "attribute_value": "Red"}],
+			}
+		)
+		if "india_compliance" in frappe.get_installed_apps():
+			template.gst_hsn_code = get_hsn()
+		template.insert(ignore_permissions=True)
+
+		variant = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "Variant Without Item Code",
+				"variant_of": template.name,
+				"stock_uom": "Nos",
+				"item_group": "All Item Groups",
+				"attributes": [{"attribute": "Color", "attribute_value": "Red"}],
+			}
+		)
+		if "india_compliance" in frappe.get_installed_apps():
+			template.gst_hsn_code = get_hsn()
+
+		variant.autoname()
+
+		# set name as item code
+		self.assertEqual(variant.name, "Variant Without Item Code")
+
+	def test_update_template_tables_TC_SCK_433(self):
+		create_tax_accounts()
+		frappe.db.set_default("item_naming_by", "Naming Series")
+
+		if not frappe.db.exists("Item Tax Template", "Standard Tax Template - _TC"):
+			tax_template = frappe.get_doc(
+				{
+					"doctype": "Item Tax Template",
+					"title": "Standard Tax Template",
+					"gst_rate": 18,
+					"company": "_Test Company",
+					"item_tax_template_name": "Standard Tax Template",
+					"taxes": [
+						{"tax_type": "CGST - _TC", "tax_rate": 9},
+						{"tax_type": "SGST - _TC", "tax_rate": 9},
+					],
+					"gst_category": "Taxable",
+				}
+			)
+			tax_template.insert(ignore_permissions=True)
+
+		template = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_template_tables",
+				"item_name": "Template Tables",
+				"item_group": "All Item Groups",
+				"stock_uom": "Nos",
+				"gst_hsn_code": get_hsn(),
+				"has_variants": 1,
+				"taxes": [
+					{
+						"item_tax_template": "Standard Tax Template - _TC",
+						"charge_type": "On Net Total",
+						"account_head": "CGST - _TC",
+						"maximum_net_rate": 9,
+					},
+				],
+				"reorder_levels": [
+					{
+						"warehouse": "_Test Warehouse - _TC",
+						"warehouse_reorder_level": 10,
+						"warehouse_reorder_qty": 25,
+						"material_request_type": "Purchase",
+					}
+				],
+				"attributes": [{"attribute": "Color", "attribute_value": "Red"}],
+			}
+		).insert(ignore_permissions=True)
+
+		item = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_update_template_tables",
+				"item_name": "Test Copy From Template",
+				"variant_of": template.name,
+				"item_group": "All Item Groups",
+				"stock_uom": "Nos",
+				"gst_hsn_code": get_hsn(),
+				"item_tax_template": "Standard Tax Template",
+			}
+		)
+
+		item.update_template_tables()
+
+		self.assertEqual(len(item.taxes), 1)
+		self.assertEqual(item.taxes[0].maximum_net_rate, 9)
+		self.assertEqual(len(item.reorder_levels), 1)
+		self.assertEqual(item.reorder_levels[0].warehouse_reorder_qty, 25)
+
+	def test_after_rename_with_merge_TC_SCK_434(self):
+		old_item = make_item("_test_old_item", {"stock_uom": "Nos"})
+
+		new_item = make_item("_test_new_item", {"stock_uom": "Nos"})
+		if not frappe.db.exists("Account", "Test Tax Account - _TC"):
+			frappe.get_doc(
+				{
+					"doctype": "Account",
+					"account_name": "Test Tax Account",
+					"parent_account": "Duties and Taxes - _TC",  # Change suffix to match your company abbreviation
+					"company": "_Test Company",
+					"is_group": 0,
+					"account_type": "Tax",
+				}
+			).insert()
+		invoice = frappe.get_doc(
+			{
+				"doctype": "Sales Invoice",
+				"customer": "_Test Customer",
+				"company": "_Test Company",
+				"items": [{"item_code": old_item.name, "qty": 1, "rate": 100}],
+				"taxes": [
+					{
+						"charge_type": "On Net Total",
+						"account_head": "Test Tax Account - _TC",
+						"description": "Test Tax",
+						"item_wise_tax_detail": json.dumps({old_item.name: ["10.0", "INR"]}),
+					}
+				],
+			}
+		).insert()
+
+		item_doc = frappe.get_doc("Item", new_item.name)
+		item_doc.after_rename(old_item.name, new_item.name, merge=True)
+
+		invoice.reload()
+		tax_detail = json.loads(invoice.taxes[0].item_wise_tax_detail)
+		assert new_item.name in tax_detail
+		assert old_item.name not in tax_detail
+		assert frappe.db.get_value("Item", new_item.name, "item_code") == new_item.name
+
+	def test_validate_properties_before_merge_fail_TC_SCK_435(self):
+		item_1 = make_item(
+			"_test_item_merge_1",
+			{"stock_uom": "Nos", "is_stock_item": 1, "has_serial_no": 0, "has_batch_no": 0},
+		)
+		item_2 = make_item(
+			"_test_item_merge_2",
+			{"stock_uom": "Box", "is_stock_item": 1, "has_serial_no": 0, "has_batch_no": 0},
+		)
+		with self.assertRaises(frappe.ValidationError) as e:
+			item_1.validate_properties_before_merge(item_2.name)
+		self.assertIn("To merge, following properties must be same for both items", str(e.exception))
+
+	def test_validate_duplicate_product_bundles_before_merge_pass_TC_SCK_436(self):
+		from erpnext.stock.doctype.item.test_item import make_item
+
+		item_1 = make_item("_test_item_bundle_1", {"stock_uom": "Nos", "is_stock_item": 0})
+		item_2 = make_item("_test_item_bundle_2", {"stock_uom": "Nos", "is_stock_item": 0})
+
+		frappe.get_doc(
+			{
+				"doctype": "Product Bundle",
+				"new_item_code": item_1.name,
+				"items": [{"item_code": item_1.name, "qty": 1}],
+			}
+		).insert()
+
+		frappe.get_doc(
+			{
+				"doctype": "Product Bundle",
+				"new_item_code": item_2.name,
+				"items": [{"item_code": item_2.name, "qty": 1}],
+			}
+		).insert()
+		with self.assertRaises(frappe.ValidationError) as e:
+			item_1.validate_duplicate_product_bundles_before_merge(item_1.name, item_2.name)
+		self.assertIn("Please delete Product Bundle", str(e.exception))
+
+	def test_update_variants_TC_SCK_437(self):
+		from erpnext.stock.doctype.item.item import update_variants
+
+		create_attribute("Color", ["Red", "Blue"])
+		create_attribute("Size", ["S", "M", "L"])
+		template = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_variant_attr" + frappe.generate_hash(length=2),
+				"item_group": "All Item Groups",
+				"gst_hsn_code": get_hsn(),
+				"has_variants": 1,
+				"attributes": [
+					{"attribute": "Color", "attribute_value": "Red"},
+					{"attribute": "Size", "attribute_value": "M"},
+				],
+			}
+		).insert(ignore_permissions=True)
+
+		variant = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "_test_variant_attr" + frappe.generate_hash(length=2),
+				"item_group": "All Item Groups",
+				"gst_hsn_code": get_hsn(),
+				"variant_of": template.name,
+				"attributes": [
+					{"attribute": "Color", "attribute_value": "Red"},
+					{"attribute": "Size", "attribute_value": "M"},
+				],
+			}
+		)
+		variant.insert(ignore_permissions=True)
+		variants = [variant.name]
+
+		update_variants(variants, template, publish_progress=True)
+
+		variant.reload()
+		assert variant.stock_uom == template.stock_uom
+
 
 def set_item_variant_settings(fields):
 	doc = frappe.get_doc("Item Variant Settings")
@@ -1244,6 +1675,7 @@ def create_item(
 	buying_cost_center=None,
 	selling_cost_center=None,
 	company="_Test Company",
+	has_batch_no=0,
 ):
 	if not frappe.db.exists("Item", item_code):
 		item = frappe.new_doc("Item")
@@ -1252,6 +1684,7 @@ def create_item(
 		item.description = item_code
 		item.item_group = "All Item Groups"
 		item.stock_uom = stock_uom
+		item.has_batch_no = has_batch_no
 		item.is_stock_item = is_stock_item
 		item.is_fixed_asset = is_fixed_asset
 		item.asset_category = asset_category
@@ -1269,8 +1702,8 @@ def create_item(
 				"buying_cost_center": buying_cost_center,
 			},
 		)
-		
-		if 'india_compliance' in frappe.get_installed_apps():
+
+		if "india_compliance" in frappe.get_installed_apps():
 			gst_hsn_code = "11112222"
 			if not frappe.db.exists("GST HSN Code", gst_hsn_code):
 				gst_hsn_code = frappe.new_doc("GST HSN Code")
@@ -1283,3 +1716,76 @@ def create_item(
 	else:
 		item = frappe.get_doc("Item", item_code)
 	return item
+
+
+def create_attribute(name, values):
+	existing = frappe.db.get("Item Attribute", name)
+	if existing:
+		attr_doc = frappe.get_doc("Item Attribute", name)
+		existing_values = {v.attribute_value for v in attr_doc.item_attribute_values}
+		existing_abbrs = {v.abbr for v in attr_doc.item_attribute_values if v.abbr}
+
+		for v in values:
+			if v not in existing_values:
+				abbr = v[:1].upper()
+				counter = 1
+				while abbr in existing_abbrs:
+					abbr = f"{v[:1].upper()}{counter}"
+					counter += 1
+				attr_doc.append("item_attribute_values", {"attribute_value": v, "abbr": abbr})
+				existing_abbrs.add(abbr)
+		attr_doc.save()
+	else:
+		abbrs = set()
+		value_rows = []
+		for v in values:
+			abbr = v[:1].upper()
+			counter = 1
+			while abbr in abbrs:
+				abbr = f"{v[:1].upper()}{counter}"
+				counter += 1
+			value_rows.append({"attribute_value": v, "abbr": abbr})
+			abbrs.add(abbr)
+
+		frappe.get_doc(
+			{"doctype": "Item Attribute", "attribute_name": name, "item_attribute_values": value_rows}
+		).insert()
+
+
+def get_hsn(hsn="14455767"):
+	if not frappe.db.exists("GST HSN Code", hsn):
+		gst_hsn_code = frappe.new_doc("GST HSN Code")
+		gst_hsn_code.hsn_code = hsn
+		gst_hsn_code.save()
+		return gst_hsn_code.name
+	else:
+		return hsn
+
+
+def create_tax_accounts():
+	from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+
+	create_company()
+	if not frappe.db.exists("Account", "CGST - _TC"):
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"account_name": "CGST",
+				"company": "_Test Company",
+				"parent_account": "Duties and Taxes - _TC",
+				"account_type": "Tax",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True)
+
+	if not frappe.db.exists("Account", "SGST - _TC"):
+		frappe.get_doc(
+			{
+				"doctype": "Account",
+				"account_name": "SGST",
+				"company": "_Test Company",
+				"parent_account": "Duties and Taxes - _TC",
+				"account_type": "Tax",
+				"is_group": 0,
+			}
+		).insert(ignore_permissions=True)

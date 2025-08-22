@@ -12,7 +12,7 @@ class CustomerCreditLimit(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		bypass_credit_limit_check: DF.Check

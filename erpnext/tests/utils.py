@@ -24,7 +24,7 @@ def create_test_contact_and_address():
 			"address_type": "Office",
 			"address_line1": "Station Road",
 			"city": "_Test City",
-			"state": "Test State",
+			"state": "Maharashtra",
 			"country": "India",
 			"links": [{"link_doctype": "Customer", "link_name": "_Test Customer"}],
 		}

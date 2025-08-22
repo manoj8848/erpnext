@@ -44,20 +44,22 @@ class SalesInvoice(SellingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
+		from frappe.types import DF
+
 		from erpnext.accounts.doctype.discount_terms.discount_terms import DiscountTerms
 		from erpnext.accounts.doctype.payment_schedule.payment_schedule import PaymentSchedule
 		from erpnext.accounts.doctype.pricing_rule_detail.pricing_rule_detail import PricingRuleDetail
 		from erpnext.accounts.doctype.sales_invoice_advance.sales_invoice_advance import SalesInvoiceAdvance
 		from erpnext.accounts.doctype.sales_invoice_item.sales_invoice_item import SalesInvoiceItem
 		from erpnext.accounts.doctype.sales_invoice_payment.sales_invoice_payment import SalesInvoicePayment
-		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import SalesInvoiceTimesheet
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
-		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import SalesInvoiceTimesheet
-		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import SalesTaxesandCharges
+		from erpnext.accounts.doctype.sales_invoice_timesheet.sales_invoice_timesheet import (
+			SalesInvoiceTimesheet,
+		)
+		from erpnext.accounts.doctype.sales_taxes_and_charges.sales_taxes_and_charges import (
+			SalesTaxesandCharges,
+		)
 		from erpnext.stock.doctype.packed_item.packed_item import PackedItem
-		from frappe.types import DF
-		from frappe.types import DF
 
 		account_for_change_amount: DF.Link | None
 		additional_discount_account: DF.Link | None
@@ -168,7 +170,22 @@ class SalesInvoice(SellingController):
 		shipping_address_name: DF.Link | None
 		shipping_rule: DF.Link | None
 		source: DF.Link | None
-		status: DF.Literal["", "Draft", "Return", "Credit Note Issued", "Submitted", "Paid", "Partly Paid", "Unpaid", "Unpaid and Discounted", "Partly Paid and Discounted", "Overdue and Discounted", "Overdue", "Cancelled", "Internal Transfer"]
+		status: DF.Literal[
+			"",
+			"Draft",
+			"Return",
+			"Credit Note Issued",
+			"Submitted",
+			"Paid",
+			"Partly Paid",
+			"Unpaid",
+			"Unpaid and Discounted",
+			"Partly Paid and Discounted",
+			"Overdue and Discounted",
+			"Overdue",
+			"Cancelled",
+			"Internal Transfer",
+		]
 		subscription: DF.Link | None
 		tax_category: DF.Link | None
 		tax_id: DF.Data | None
@@ -268,7 +285,7 @@ class SalesInvoice(SellingController):
 			self.validate_warehouse()
 			self.update_current_stock()
 			self.validate_delivery_note()
-		
+
 		is_deferred_invoice = any(d.get("enable_deferred_revenue") for d in self.get("items"))
 
 		# validate service stop date to lie in between start and end date
@@ -309,7 +326,7 @@ class SalesInvoice(SellingController):
 			and not self.is_consolidated
 		):
 			validate_loyalty_points(self, self.loyalty_points)
-		
+
 		self.allow_write_off_only_on_pos()
 		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
@@ -379,7 +396,9 @@ class SalesInvoice(SellingController):
 		account_currency = account.account_currency
 
 		if customer_currency != account_currency:
-			frappe.throw(f"Party Account <strong>{self.debit_to}</strong> currency ({account_currency}) and document currency ({customer_currency}) should be the same")
+			frappe.throw(
+				f"Party Account <strong>{self.debit_to}</strong> currency ({account_currency}) and document currency ({customer_currency}) should be the same"
+			)
 
 		self.set_account_for_mode_of_payment()
 		self.set_paid_amount()
@@ -433,7 +452,6 @@ class SalesInvoice(SellingController):
 
 		if not cint(self.is_pos) == 1 and not self.is_return:
 			self.update_against_document_in_jv()
-
 
 		if frappe.db.get_single_value("Selling Settings", "sales_update_frequency") == "Each Transaction":
 			update_company_current_month_sales(self.company)
@@ -607,7 +625,6 @@ class SalesInvoice(SellingController):
 		if validate_against_credit_limit:
 			check_credit_limit(self.customer, self.company, bypass_credit_limit_check_at_sales_order)
 
-
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		pos = self.set_pos_fields(for_validate)
@@ -619,12 +636,12 @@ class SalesInvoice(SellingController):
 			)
 		if not self.due_date and self.customer:
 			self.due_date = get_due_date(
- 				self.posting_date,
- 				"Customer",
- 				self.customer,
- 				self.company,
- 				template_name=self.payment_terms_template,
- 			)
+				self.posting_date,
+				"Customer",
+				self.customer,
+				self.company,
+				template_name=self.payment_terms_template,
+			)
 
 		super().set_missing_values(for_validate)
 
@@ -640,7 +657,6 @@ class SalesInvoice(SellingController):
 				"campaign": pos.get("campaign"),
 				"allow_print_before_pay": pos.get("allow_print_before_pay"),
 			}
-
 
 	def on_update_after_submit(self):
 		fields_to_check = [
@@ -676,7 +692,6 @@ class SalesInvoice(SellingController):
 	def set_account_for_mode_of_payment(self):
 		for payment in self.payments:
 			payment.account = get_bank_cash_account(payment.mode_of_payment, self.company).get("account")
-
 
 	def set_pos_fields(self, for_validate=False):
 		"""Set retail related fields from POS Profiles"""
@@ -821,25 +836,19 @@ class SalesInvoice(SellingController):
 		)
 
 	def validate_with_previous_doc(self):
-		compare_fields_pr_item = [["customer", "="],["company", "="],["currency", "="]]
+		compare_fields_pr_item = [["customer", "="], ["company", "="], ["currency", "="]]
 		if "projects" in frappe.get_installed_apps():
 			compare_fields_pr_item.append(["project", "="])
 		super().validate_with_previous_doc(
 			{
-				"Sales Order": {
-					"ref_dn_field": "sales_order",
-					"compare_fields": compare_fields_pr_item
-				},
+				"Sales Order": {"ref_dn_field": "sales_order", "compare_fields": compare_fields_pr_item},
 				"Sales Order Item": {
 					"ref_dn_field": "so_detail",
 					"compare_fields": [["item_code", "="], ["uom", "="], ["conversion_factor", "="]],
 					"is_child_table": True,
 					"allow_duplicate_prev_row_id": True,
 				},
-				"Delivery Note": {
-					"ref_dn_field": "delivery_note",
-					"compare_fields": compare_fields_pr_item
-				},
+				"Delivery Note": {"ref_dn_field": "delivery_note", "compare_fields": compare_fields_pr_item},
 				"Delivery Note Item": {
 					"ref_dn_field": "dn_detail",
 					"compare_fields": [["item_code", "="], ["uom", "="], ["conversion_factor", "="]],
@@ -936,8 +945,7 @@ class SalesInvoice(SellingController):
 	def allow_write_off_only_on_pos(self):
 		if not self.is_pos and self.write_off_account:
 			self.write_off_account = None
-	
-	
+
 	def validate_write_off_account(self):
 		if flt(self.write_off_amount) and not self.write_off_account:
 			self.write_off_account = frappe.get_cached_value("Company", self.company, "write_off_account")
@@ -1159,8 +1167,8 @@ class SalesInvoice(SellingController):
 								else flt(amount, tax.precision("tax_amount_after_discount_amount"))
 							),
 							"credit_in_transaction_currency": flt(
- 								amount, tax.precision("tax_amount_after_discount_amount")
- 							),
+								amount, tax.precision("tax_amount_after_discount_amount")
+							),
 							"cost_center": tax.cost_center,
 						},
 						account_currency,
@@ -1220,7 +1228,9 @@ class SalesInvoice(SellingController):
 							),
 							"credit_in_transaction_currency": flt(amount, item.precision("net_amount")),
 							"cost_center": item.cost_center,
-							"project": item.project or self.get("project") if "projects" in frappe.get_installed_apps() else "",
+							"project": item.project or self.get("project")
+							if "projects" in frappe.get_installed_apps()
+							else "",
 						},
 						account_currency,
 						item=item,
@@ -1352,7 +1362,9 @@ class SalesInvoice(SellingController):
 							else self.name,
 							"against_voucher_type": self.doctype,
 							"cost_center": self.cost_center,
-							"project": self.get("project") if "projects" in frappe.get_installed_apps() else "",
+							"project": self.get("project")
+							if "projects" in frappe.get_installed_apps()
+							else "",
 						},
 						self.party_account_currency,
 						item=self,
@@ -1398,8 +1410,8 @@ class SalesInvoice(SellingController):
 							else flt(self.write_off_amount, self.precision("write_off_amount"))
 						),
 						"credit_in_transaction_currency": flt(
- 							self.write_off_amount, self.precision("write_off_amount")
- 						),
+							self.write_off_amount, self.precision("write_off_amount")
+						),
 						"against_voucher": self.return_against if cint(self.is_return) else self.name,
 						"against_voucher_type": self.doctype,
 						"cost_center": self.cost_center,
@@ -1421,8 +1433,8 @@ class SalesInvoice(SellingController):
 							else flt(self.write_off_amount, self.precision("write_off_amount"))
 						),
 						"debit_in_transaction_currency": flt(
- 							self.write_off_amount, self.precision("write_off_amount")
- 						),
+							self.write_off_amount, self.precision("write_off_amount")
+						),
 						"cost_center": self.cost_center or self.write_off_cost_center or default_cost_center,
 					},
 					write_off_account_currency,
@@ -1468,8 +1480,8 @@ class SalesInvoice(SellingController):
 							self.rounding_adjustment, self.precision("rounding_adjustment")
 						),
 						"credit_in_transaction_currency": flt(
- 							self.rounding_adjustment, self.precision("rounding_adjustment")
- 						),
+							self.rounding_adjustment, self.precision("rounding_adjustment")
+						),
 						"credit": flt(
 							self.base_rounding_adjustment, self.precision("base_rounding_adjustment")
 						),
@@ -1747,7 +1759,6 @@ class SalesInvoice(SellingController):
 			self.db_set("status", self.status, update_modified=update_modified)
 
 
-
 def get_total_in_party_account_currency(doc):
 	total_fieldname = "grand_total" if doc.disable_rounded_total else "rounded_total"
 	if doc.party_account_currency != doc.currency:
@@ -1771,12 +1782,12 @@ def is_overdue(doc, total):
 	)
 
 	payable_amount = flt(
- 		sum(
- 			payment.get(payment_amount_field)
- 			for payment in doc.payment_schedule
- 			if getdate(payment.due_date) < today
- 		),
- 		doc.precision("outstanding_amount"),
+		sum(
+			payment.get(payment_amount_field)
+			for payment in doc.payment_schedule
+			if getdate(payment.due_date) < today
+		),
+		doc.precision("outstanding_amount"),
 	)
 
 	return flt(total - outstanding_amount, doc.precision("outstanding_amount")) < payable_amount

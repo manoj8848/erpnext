@@ -8,8 +8,9 @@ import frappe
 from frappe import _, bold
 from frappe.core.doctype.role.role import get_users
 from frappe.model.document import Document
-from frappe.utils import add_days, cint, flt, formatdate, get_datetime, getdate
 from frappe.query_builder.functions import Sum
+from frappe.utils import add_days, cint, flt, formatdate, get_datetime, getdate
+
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.controllers.item_variant import ItemTemplateCannotHaveStock
 from erpnext.stock.doctype.inventory_dimension.inventory_dimension import get_inventory_dimensions
@@ -24,8 +25,10 @@ class StockFreezeError(frappe.ValidationError):
 class BackDatedStockTransaction(frappe.ValidationError):
 	pass
 
+
 class InventoryDimensionNegativeStockError(frappe.ValidationError):
 	pass
+
 
 exclude_from_linked_with = True
 
@@ -36,7 +39,7 @@ class StockLedgerEntry(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		actual_qty: DF.Float
@@ -108,7 +111,7 @@ class StockLedgerEntry(Document):
 		dimensions = self._get_inventory_dimensions()
 		if not dimensions:
 			return
-		
+
 		flt_precision = cint(frappe.db.get_default("float_precision")) or 2
 
 		for dimension, values in dimensions.items():
@@ -117,6 +120,7 @@ class StockLedgerEntry(Document):
 			diff = flt(available_qty + flt(self.actual_qty), flt_precision)  # qty after current transaction
 			if diff < 0 and abs(diff) > 0.0001:
 				self.throw_validation_error(diff, dimension, dimension_value)
+
 	def get_available_qty_after_prev_transaction(self, dimension, dimension_value):
 		sle = frappe.qb.DocType("Stock Ledger Entry")
 		available_qty = (
@@ -132,9 +136,8 @@ class StockLedgerEntry(Document):
 			)
 		).run()
 
-
 		return available_qty[0][0] or 0
-	
+
 	def throw_validation_error(self, diff, dimension, dimension_value):
 		msg = _(
 			"{0} units of {1} are required in {2} with the inventory dimension: {3} ({4}) on {5} {6} for {7} to complete the transaction."

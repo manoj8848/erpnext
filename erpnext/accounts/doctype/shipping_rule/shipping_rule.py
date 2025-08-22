@@ -30,7 +30,7 @@ class ShippingRule(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.shipping_rule_condition.shipping_rule_condition import (

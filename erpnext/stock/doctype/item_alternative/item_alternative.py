@@ -13,7 +13,7 @@ class ItemAlternative(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		alternative_item_code: DF.Link | None

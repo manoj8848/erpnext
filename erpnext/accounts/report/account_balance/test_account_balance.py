@@ -52,6 +52,51 @@ class TestAccountBalance(unittest.TestCase):
 
 		self.assertEqual(expected_data, report[1])
 
+	def test_account_balance_TC_ACC_365(self):
+		filters = {
+			"company": "_Test Company",
+			"report_date": getdate(),
+			"root_type": "Income",
+		}
+
+		make_sales_invoice_1()
+
+		_, data = execute(filters)
+
+		# Build a dict by account for easy lookup
+		by_account = {d["account"]: d for d in data}
+
+		expected = {
+			"Direct Income - _TC": {"currency": "INR", "balance": -100.0},
+			"Income - _TC": {"currency": "INR", "balance": -100.0},
+			"Indirect Income - _TC": {"currency": "INR", "balance": 0.0},
+			"Sales - _TC": {"currency": "INR", "balance": -100.0},
+			"Service - _TC": {"currency": "INR", "balance": 0.0},
+			"_Test Account Sales - _TC": {"currency": "INR", "balance": 0.0},
+		}
+
+		for acc, exp in expected.items():
+			self.assertIn(acc, by_account, f"Missing account in report: {acc}")
+			self.assertEqual(exp["currency"], by_account[acc]["currency"], f"Currency mismatch for {acc}")
+
+		unexpected_nonzero = [
+			(a, r["balance"]) for a, r in by_account.items()
+			if a not in expected and abs(r["balance"]) > 1e-9
+		]
+		self.assertFalse(unexpected_nonzero, f"Unexpected non-zero balances present: {unexpected_nonzero}")
+
+def make_sales_invoice_1():
+	frappe.set_user("Administrator")
+	create_sales_invoice(
+		company="_Test Company",
+		customer="_Test Customer",
+		warehouse="Finished Goods - _TC",
+		debit_to="Debtors - _TC",
+		income_account="Sales - _TC",
+		expense_account="Cost of Goods Sold - _TC",
+		cost_center="Main - _TC",
+		items=[{"item_code": "_Test Item", "qty": 1, "rate": 100, "warehouse": "Finished Goods - _TC"}],
+	)
 
 def make_sales_invoice():
 	frappe.set_user("Administrator")

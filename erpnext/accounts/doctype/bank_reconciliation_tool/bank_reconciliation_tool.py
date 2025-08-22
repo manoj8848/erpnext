@@ -10,9 +10,10 @@ from frappe.model.document import Document
 from frappe.query_builder.custom import ConstantColumn
 from frappe.query_builder.functions import Sum
 from frappe.utils import cint, flt
-from erpnext.accounts.party import get_party_account
+
 from erpnext import get_default_cost_center
 from erpnext.accounts.doctype.bank_transaction.bank_transaction import get_total_allocated_amount
+from erpnext.accounts.party import get_party_account
 from erpnext.accounts.report.bank_reconciliation_statement.bank_reconciliation_statement import (
 	get_amounts_not_reflected_in_system,
 	get_entries,
@@ -27,7 +28,7 @@ class BankReconciliationTool(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		account_currency: DF.Link | None
@@ -391,8 +392,8 @@ def auto_reconcile_vouchers(
 			from_reference_date,
 			to_reference_date,
 		)
- 
- 
+
+
 def start_auto_reconcile(
 	bank_transactions, from_date, to_date, filter_by_reference_date, from_reference_date, to_reference_date
 ):
@@ -517,6 +518,7 @@ def subtract_allocations(gl_account, vouchers):
 
 		copied.append(voucher)
 	return copied
+
 
 def get_allocated_amount(voucher_allocated_amounts, voucher, gl_account):
 	if not (voucher_details := voucher_allocated_amounts.get((voucher.get("doctype"), voucher.get("name")))):
@@ -797,12 +799,23 @@ def get_je_matching_query(
 	je = frappe.qb.DocType("Journal Entry")
 	jea = frappe.qb.DocType("Journal Entry Account")
 
-
 	amount_field = f"{cr_or_dr}_in_account_currency"
 
 	filter_by_date = je.posting_date.between(from_date, to_date)
 	if cint(filter_by_reference_date):
 		filter_by_date = je.cheque_date.between(from_reference_date, to_reference_date)
+
+	groupby_fields = [je.name]
+	if frappe.db.db_type == "postgres":
+		groupby_fields = [
+			je.name,
+			je.cheque_no,
+			je.cheque_date,
+			je.pay_to_recd_from,
+			jea.party_type,
+			je.posting_date,
+			jea.account_currency,
+		]
 
 	subquery = (
 		frappe.qb.from_(jea)
@@ -824,7 +837,7 @@ def get_je_matching_query(
 		.where(je.clearance_date.isnull())
 		.where(jea.account == common_filters.bank_account)
 		.where(filter_by_date)
-		.groupby(je.name)
+		.groupby(*groupby_fields)
 		.orderby(je.cheque_date if cint(filter_by_reference_date) else je.posting_date)
 	)
 

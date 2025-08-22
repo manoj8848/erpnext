@@ -304,7 +304,68 @@ class TestInvoiceDiscounting(unittest.TestCase):
 
 		inv.reload()
 		self.assertEqual(inv.outstanding_amount, 0)
+  
+	def test_validate_method_executes_TC_ACC_339(self):
+		from erpnext.accounts.doctype.cost_center.test_cost_center import create_cost_center
+		create_cost_center(cost_center_name="_Test Cost Center", company="_Test Company")
 
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
+		get_or_create_fiscal_year()
+  
+		inv = create_sales_invoice(rate=500)
+
+		inv_disc = create_invoice_discounting(
+			[inv.name],
+			do_not_submit=True, 
+			accounts_receivable_credit=self.ar_credit,
+			accounts_receivable_discounted=self.ar_discounted,
+			accounts_receivable_unpaid=self.ar_unpaid,
+			short_term_loan=self.short_term_loan,
+			bank_charges_account=self.bank_charges_account,
+			bank_account=self.bank_account,
+		)
+
+		inv_disc.validate()
+		self.assertEqual(inv_disc.total_amount, flt(inv.outstanding_amount))
+		self.assertIsNotNone(inv_disc.loan_end_date)
+
+	def test_on_submit_executes_TC_ACC_379(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
+		get_or_create_fiscal_year()
+  
+		inv = create_sales_invoice(rate=400)
+
+		inv_disc = create_invoice_discounting(
+			[inv.name],
+			do_not_submit=True, 
+			accounts_receivable_credit=self.ar_credit,
+			accounts_receivable_discounted=self.ar_discounted,
+			accounts_receivable_unpaid=self.ar_unpaid,
+			short_term_loan=self.short_term_loan,
+			bank_charges_account=self.bank_charges_account,
+			bank_account=self.bank_account,
+		)
+
+		inv_disc.on_submit()
+		self.assertEqual(inv_disc.total_amount, flt(inv.outstanding_amount))
+
+	def test_on_cancel_executes_TC_ACC_380(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
+		get_or_create_fiscal_year()
+  
+		inv = create_sales_invoice(rate=400)
+  
+		inv_disc = create_invoice_discounting(
+			[inv.name],
+			accounts_receivable_credit=self.ar_credit,
+			accounts_receivable_discounted=self.ar_discounted,
+			accounts_receivable_unpaid=self.ar_unpaid,
+			short_term_loan=self.short_term_loan,
+			bank_charges_account=self.bank_charges_account,
+			bank_account=self.bank_account,
+		)
+
+		inv_disc.on_cancel()
 
 def create_invoice_discounting(invoices, **args):
 	args = frappe._dict(args)

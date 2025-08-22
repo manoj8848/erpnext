@@ -13,7 +13,7 @@ from frappe.utils import add_days, add_to_date, flt, today
 
 from erpnext.accounts.doctype.gl_entry.gl_entry import rename_gle_sle_docs
 from erpnext.stock.doctype.delivery_note.test_delivery_note import create_delivery_note
-from erpnext.stock.doctype.item.test_item import make_item
+from erpnext.stock.doctype.item.test_item import create_item, make_item
 from erpnext.stock.doctype.landed_cost_voucher.test_landed_cost_voucher import (
 	create_landed_cost_voucher,
 )
@@ -22,10 +22,15 @@ from erpnext.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bundle 
 	make_serial_batch_bundle,
 )
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
-from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import BackDatedStockTransaction
+from erpnext.stock.doctype.stock_ledger_entry.stock_ledger_entry import (
+	BackDatedStockTransaction,
+	StockLedgerEntry,
+	on_doctype_update,
+)
 from erpnext.stock.doctype.stock_reconciliation.test_stock_reconciliation import (
 	create_stock_reconciliation,
 )
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.stock_ledger import get_previous_sle
 from erpnext.stock.tests.test_utils import StockTestMixin
 
@@ -33,7 +38,13 @@ from erpnext.stock.tests.test_utils import StockTestMixin
 class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 	def setUp(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
+
 		create_company()
+
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+
+		get_or_create_fiscal_year("_Test Company")
+
 		items = create_items()
 		reset("Stock Entry")
 
@@ -199,6 +210,12 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 
 		self.assertEqual(outgoing_rate, 100)
 		self.assertEqual(stock_value_difference, -200)
+		frappe.db.set_value(
+			"Company",
+			"_Test Company",
+			"expenses_included_in_valuation",
+			"Expenses Included In Valuation - _TC",
+		)
 
 		create_landed_cost_voucher("Purchase Receipt", pr.name, pr.company)
 
@@ -592,6 +609,7 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 	def test_batch_wise_valuation_across_warehouse(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_company
 		from erpnext.selling.doctype.sales_order.test_sales_order import get_or_create_fiscal_year
+
 		create_company()
 		get_or_create_fiscal_year("_Test Company")
 		item_code, warehouses, batches = setup_item_valuation_test()
@@ -1094,6 +1112,9 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 		self.addCleanup(frappe.flags.pop, "dont_execute_stock_reposts")
 
 		item = make_item().name
+		item = frappe.get_doc("Item", item)
+		item.valuation_rate = 100
+		item.save()
 		warehouse = "_Test Warehouse - _TC"
 
 		posting_date = "2022-01-01"
@@ -1385,6 +1406,93 @@ class TestStockLedgerEntry(FrappeTestCase, StockTestMixin):
 			item_code=item_code, source=warehouse, qty=470.84, rate=100, posting_date=add_days(today(), -1)
 		)
 
+	def test_cannot_cancel_sle_directly_TC_SCK_359(self):
+		warehouse = create_warehouse(warehouse_name="_Test Warehouse", company="_Test Company")
+
+		if not frappe.db.exists("Item", "_Test Item"):
+			create_item("_Test Item", warehouse=warehouse, company="_Test Company")
+
+		# Create a stock entry that will generate SLE
+		stock_entry = make_stock_entry(
+			item_code="_Test Item",
+			qty=1,
+			target=warehouse,
+			basic_rate=100,
+			stock_entry_type="Material Receipt",
+		)
+
+		# Get the corresponding SLE
+		sle_name = frappe.db.get_value(
+			"Stock Ledger Entry", {"voucher_type": "Stock Entry", "voucher_no": stock_entry.name}, "name"
+		)
+		sle = frappe.get_doc("Stock Ledger Entry", sle_name)
+
+		# Validate that cancelling an SLE raises the correct error
+		with self.assertRaises(
+			frappe.ValidationError, msg="Individual Stock Ledger Entry cannot be cancelled"
+		):
+			sle.on_cancel()
+
+	def test_on_doctype_update_adds_indexes_TC_SCK_360(self):
+		# Call the function
+		on_doctype_update()
+
+	def test_validate_backdated_stock_transaction_TC_SCK_391(self):
+		from erpnext.stock.doctype.stock_settings.stock_settings import StockSettings
+
+		# Setup
+		frappe.set_user("Administrator")
+		warehouse = create_warehouse("_Test WH Time Auth", company="_Test Company")
+
+		item_code = "_Test Item TimeAuth"
+		if not frappe.db.exists("Item", item_code):
+			create_item(item_code, warehouse=warehouse)
+
+		# Assign a role in Stock Settings
+		role = "Stock Manager"
+		settings = frappe.get_doc("Stock Settings")
+		settings.role_allowed_to_create_edit_back_dated_transactions = role
+		settings.save()
+
+		# Create a test user who is NOT authorized
+		test_user = "unauth_user@example.com"
+		if not frappe.db.exists("User", test_user):
+			frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": test_user,
+					"first_name": "Unauth",
+					"roles": [{"role": "Employee"}],
+				}
+			).insert(ignore_permissions=True)
+
+		# Create a valid recent Stock Entry
+		se = make_stock_entry(
+			item_code=item_code, qty=1, target=warehouse, basic_rate=100, stock_entry_type="Material Receipt"
+		)
+		se.submit()
+
+		# Simulate a Stock Ledger Entry for a backdated transaction
+		frappe.set_user(test_user)
+
+		# Use earlier posting date/time to simulate backdated entry
+		backdated_sle = frappe.new_doc("Stock Ledger Entry")
+		backdated_sle.item_code = item_code
+		backdated_sle.warehouse = warehouse
+		backdated_sle.posting_date = "2020-01-01"
+		backdated_sle.posting_time = "00:00:00"
+		backdated_sle.is_cancelled = 0
+		backdated_sle.docstatus = 1
+
+		# Validate and assert exception is raised
+		with self.assertRaises(BackDatedStockTransaction) as e:
+			StockLedgerEntry.validate_with_last_transaction_posting_time(backdated_sle)
+
+		exception_msg = str(e.exception)
+		self.assertIn("Last Stock Transaction for item", exception_msg)
+		self.assertIn("You are not authorized", exception_msg)
+		self.assertIn("Please contact any of the following users", exception_msg)
+
 
 def create_repack_entry(**args):
 	args = frappe._dict(args)
@@ -1546,12 +1654,12 @@ def create_delivery_note_entries_for_batchwise_item_valuation_test(dn_entry_list
 def fetch_sle_details_for_doc_list(doc_list, columns, as_dict=1):
 	return frappe.db.sql(
 		f"""
-		SELECT { ', '.join(columns)}
+		SELECT {', '.join(columns)}
 		FROM `tabStock Ledger Entry`
 		WHERE
 			voucher_no IN %(voucher_nos)s
-			and docstatus = 1
-		ORDER BY timestamp(posting_date, posting_time) ASC, CREATION ASC
+			AND docstatus = 1
+		ORDER BY (posting_date + posting_time) ASC, creation ASC
 	""",
 		dict(voucher_nos=[doc.name for doc in doc_list]),
 		as_dict=as_dict,

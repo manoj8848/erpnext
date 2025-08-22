@@ -11,7 +11,7 @@ class StockReconciliationItem(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		allow_zero_valuation_rate: DF.Check

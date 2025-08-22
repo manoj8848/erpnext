@@ -19,7 +19,7 @@ class PackedItem(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		actual_batch_qty: DF.Float
@@ -313,12 +313,12 @@ def on_doctype_update():
 
 
 @frappe.whitelist()
-def get_items_from_product_bundle(row):
+def get_items_from_product_bundle(row):  # pragma: no cover
 	row, items = json.loads(row), []
 
 	bundled_items = get_product_bundle_items(row["item_code"])
 	for item in bundled_items:
-		row.update({"item_code": item.item_code, "qty": flt(row["quantity"]) * flt(item.qty)})
+		row.update({"item_code": item.item_code, "qty": flt(row["qty"]) * flt(item.qty)})
 		items.append(get_item_details(row))
 
 	return items

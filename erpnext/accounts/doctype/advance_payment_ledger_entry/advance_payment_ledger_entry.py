@@ -2,12 +2,16 @@
 # For license information, please see license.txt
 import frappe
 from frappe.model.document import Document
+
+
 class AdvancePaymentLedgerEntry(Document):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 	from typing import TYPE_CHECKING
-	if TYPE_CHECKING:
+
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
+
 		against_voucher_no: DF.DynamicLink | None
 		against_voucher_type: DF.Link | None
 		amount: DF.Currency

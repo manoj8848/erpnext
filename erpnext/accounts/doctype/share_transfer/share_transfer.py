@@ -20,7 +20,7 @@ class ShareTransfer(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		amended_from: DF.Link | None

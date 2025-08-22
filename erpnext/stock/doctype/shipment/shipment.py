@@ -17,7 +17,7 @@ class Shipment(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.shipment_delivery_note.shipment_delivery_note import (
@@ -97,7 +97,7 @@ class Shipment(Document):
 
 	def set_total_weight(self):
 		self.total_weight = self.get_total_weight()
- 
+
 	def get_total_weight(self):
 		return sum(flt(parcel.weight) * parcel.count for parcel in self.shipment_parcel if parcel.count > 0)
 

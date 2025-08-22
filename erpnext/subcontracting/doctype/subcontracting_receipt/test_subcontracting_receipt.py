@@ -1426,6 +1426,32 @@ class TestSubcontractingReceipt(FrappeTestCase):
 
 		frappe.db.set_single_value("Stock Settings", "use_serial_batch_fields", 1)
 
+	def test_subcontracting_receipt_return_TC_S_197(self):
+		sco = get_subcontracting_order()
+		rm_items = get_rm_items(sco.supplied_items)
+		itemwise_details = make_stock_in_entry(rm_items=rm_items)
+		make_stock_transfer_entry(
+			sco_no=sco.name,
+			rm_items=rm_items,
+			itemwise_details=copy.deepcopy(itemwise_details),
+		)
+		scr1 = make_subcontracting_receipt(sco.name)
+		scr1.save()
+		scr1.submit()
+
+		from erpnext.subcontracting.doctype.subcontracting_receipt.subcontracting_receipt import make_subcontract_return
+		scr1_return = make_subcontract_return(scr1.name)
+		scr1_return.save()
+		scr1_return.submit()
+
+		scr1.load_from_db()
+		scr1_return.load_from_db()
+		
+		self.assertEqual(scr1_return.is_return, 1)
+		self.assertEqual(scr1_return.status, "Return")
+		self.assertIsNotNone(scr1_return.items[0].bom)
+		self.assertEqual(scr1.items[0].returned_qty, scr1.items[0].qty)
+
 
 def make_return_subcontracting_receipt(**args):
 	args = frappe._dict(args)

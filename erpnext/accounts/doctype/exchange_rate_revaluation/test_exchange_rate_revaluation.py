@@ -4,14 +4,20 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
-from frappe.utils import add_days, flt, today ,get_date_str
+from frappe.utils import add_days, flt, today ,get_date_str, getdate
 
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
+from frappe.exceptions import ValidationError
 
 class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
 	def setUp(self):
+		create_warehouse(warehouse_name="_Test Warehouse")
+
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
+		get_or_create_fiscal_year()
+  
 		self.create_company()
 		self.create_usd_receivable_account()
 		self.create_item()
@@ -735,6 +741,98 @@ class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
 			posting_date=pe.posting_date,
 			voucher_type="Journal Entry"
 		)
+  
+	def test_validate_rounding_loss_allowance_TC_ACC_320(self):
+		err = frappe.get_doc({
+			"doctype": "Exchange Rate Revaluation",
+			"company": self.company,
+			"rounding_loss_allowance": 2,  # Invalid (>1)
+			"accounts": [
+				{
+					"account": "Debtors - {}".format(self.company_abbr),
+					"new_exchange_rate": 1.5
+				}
+			]
+		})
+
+		with self.assertRaises(ValidationError) as cm:
+			err.save()
+
+		self.assertIn(
+			"Rounding Loss Allowance should be between 0 and 1",
+			str(cm.exception)
+    	)
+  
+	def test_remove_accounts_without_gain_loss_TC_ACC_321(self):
+		err_doc = frappe.get_doc({
+			"doctype": "Exchange Rate Revaluation",
+			"company": self.company,
+			"posting_date": getdate(),   # 👈 ensures it's inside current FY
+			"accounts": [
+				frappe._dict(account=f"Debtors - {self.company_abbr}", gain_loss=0),
+				frappe._dict(account=f"Creditors - {self.company_abbr}", gain_loss=None),
+			]
+		})
+
+		with self.assertRaises(ValidationError) as cm:
+			err_doc.remove_accounts_without_gain_loss()
+
+		self.assertIn(
+			"At least one account with exchange gain or loss is required",
+			str(cm.exception)
+		)
+  
+	def test_throw_invalid_response_message_coverage_TC_ACC_322(self):
+		doc = frappe.get_doc({
+			"doctype": "Exchange Rate Revaluation",
+			"company": "_Test Company",
+			"rounding_loss_allowance": 0.01,
+			"accounts": [
+				frappe._dict(account="Cash In Hand - _TC", balance_in_base_currency=0, new_balance_in_base_currency=0, gain_loss=0, new_exchange_rate=0.5),
+			]
+		}).insert()
+
+		accounts_data = doc.get_accounts_data()
+
+		self.assertEqual(accounts_data, [])
+
+	def test_get_for_unrealized_gain_loss_account_throws_TC_ACC_323(self):
+		company_name = "_Test Company No GainLoss Account"
+		if not frappe.db.exists("Company", company_name):
+			frappe.get_doc({
+				"doctype": "Company",
+				"company_name": company_name,
+				"abbr": "TCA",
+				"default_currency": "INR"
+			}).insert()
+
+		doc = frappe.get_doc({
+			"doctype": "Exchange Rate Revaluation",
+			"company": company_name,
+			"accounts": [
+				frappe._dict(account="Cash In Hand - _TC", balance_in_base_currency=0, new_balance_in_base_currency=0, gain_loss=0, new_exchange_rate=0.5),
+			]
+		}).insert()
+
+		with self.assertRaises(ValidationError) as cm:
+			doc.get_for_unrealized_gain_loss_account()
+
+		self.assertIn("Please set Unrealized Exchange Gain/Loss Account", str(cm.exception))
+  
+	def test_get_accounts_data_triggers_throw_invalid_response_message_TC_ACC_336(self):
+		doc = frappe.get_doc({
+			"doctype": "Exchange Rate Revaluation",
+			"company": "_Test Company",
+			"posting_date": getdate(),
+			"rounding_loss_allowance": 0.01,
+			"accounts": [
+				frappe._dict(account="Cash In Hand - _TC", balance_in_base_currency=0, new_balance_in_base_currency=0, gain_loss=0, new_exchange_rate=0.5),
+			]
+		}).insert()
+
+		accounts_data = doc.get_accounts_data()
+
+		self.assertEqual(accounts_data, [])
     
 
 def gain_loss_account(company:str):

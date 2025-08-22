@@ -25,7 +25,7 @@ class InventoryDimension(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		apply_to_all_doctypes: DF.Check
@@ -240,11 +240,11 @@ class InventoryDimension(Document):
 
 		filter_custom_fields = {}
 		ignore_doctypes = [
- 			"Serial and Batch Bundle",
- 			"Serial and Batch Entry",
- 			"Pick List Item",
- 			"Maintenance Visit Purpose",
- 		]
+			"Serial and Batch Bundle",
+			"Serial and Batch Entry",
+			"Pick List Item",
+			"Maintenance Visit Purpose",
+		]
 
 		if custom_fields:
 			for doctype, fields in custom_fields.items():
@@ -259,7 +259,6 @@ class InventoryDimension(Document):
 						filter_custom_fields.setdefault(doctype, []).append(field)
 
 		create_custom_fields(filter_custom_fields)
-
 
 	def add_transfer_field(self, doctype, dimension_fields):
 		if doctype not in [

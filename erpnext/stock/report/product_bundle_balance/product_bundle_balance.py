@@ -23,7 +23,11 @@ def execute(filters=None):
 	for parent_item in parent_items:
 		parent_item_detail = item_details[parent_item]
 
-		required_items = pb_details[parent_item]
+		if parent_item in pb_details:
+			required_items = pb_details[parent_item]
+			# rest of the logic
+		else:
+			continue
 		warehouse_company_map = {}
 		for child_item in required_items:
 			child_item_balance = stock_balance.get(child_item.item_code, frappe._dict())

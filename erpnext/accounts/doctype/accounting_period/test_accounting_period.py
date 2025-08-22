@@ -41,6 +41,89 @@ class TestAccountingPeriod(unittest.TestCase):
 		for d in frappe.get_all("Accounting Period"):
 			frappe.delete_doc("Accounting Period", d.name)
 
+	def test_get_doctypes_for_closing_TC_ACC_229(self):
+		frappe.flags.in_test = True
+		# Patch frappe.get_hooks safely
+		original_get_hooks = frappe.get_hooks
+		frappe.get_hooks = (
+			lambda hook_name: ["Sales Invoice", "Purchase Invoice"]
+			if hook_name == "period_closing_doctypes"
+			else []
+		)
+
+		ap = frappe.new_doc("Accounting Period")
+
+		docs_for_closing = ap.get_doctypes_for_closing()
+
+		# Assertion: verify returned list structure
+		self.assertEqual(len(docs_for_closing), 2)
+		self.assertIn({"document_type": "Sales Invoice", "closed": 1}, docs_for_closing)
+		self.assertIn({"document_type": "Purchase Invoice", "closed": 1}, docs_for_closing)
+
+		# Restore original get_hooks after test
+		frappe.get_hooks = original_get_hooks
+		frappe.flags.in_test = False
+
+	def test_bootstrap_doctypes_for_closing_TC_ACC_230(self):
+		from types import SimpleNamespace
+
+		frappe.flags.in_test = True
+		# Create test Accounting Period doc
+		ap = frappe.new_doc("Accounting Period")
+		ap.company = "_Test Company"
+		ap.start_date = "2024-01-01"
+		ap.end_date = "2024-12-31"
+		ap.status = "Open"
+		ap.set("closed_documents", [])
+
+		# Patch get_doctypes_for_closing to return object-like list
+		ap.get_doctypes_for_closing = lambda: [
+			SimpleNamespace(document_type="Sales Invoice", closed=1),
+			SimpleNamespace(document_type="Purchase Invoice", closed=1),
+		]
+
+		# Call bootstrap method
+		ap.bootstrap_doctypes_for_closing()
+
+		# Assertions: verify child table populated
+		self.assertEqual(len(ap.closed_documents), 2)
+		document_types = [d.document_type for d in ap.closed_documents]
+		self.assertIn("Sales Invoice", document_types)
+		self.assertIn("Purchase Invoice", document_types)
+		frappe.flags.in_test = False
+
+	def test_validate_accounting_period_on_doc_save_TC_ACC_231(self):
+		from erpnext.accounts.doctype.accounting_period.accounting_period import (
+			validate_accounting_period_on_doc_save,
+		)
+
+		frappe.flags.in_test = True
+
+		# Create dummy Bank Clearance doc
+		class DummyDoc:
+			doctype = "Bank Clearance"
+			company = "_Test Company"
+
+		validate_accounting_period_on_doc_save(DummyDoc())
+
+		# Create dummy Asset doc
+		class DummyDoc:
+			doctype = "Asset"
+			company = "_Test Company"
+			is_existing_asset = True
+
+		# Create dummy Asset doc with available_for_use_date
+		validate_accounting_period_on_doc_save(DummyDoc())
+
+		class DummyDoc:
+			doctype = "Asset"
+			company = "_Test Company"
+			is_existing_asset = False
+			available_for_use_date = "2024-06-01"
+
+		validate_accounting_period_on_doc_save(DummyDoc())
+		frappe.flags.in_test = False
+
 
 def create_accounting_period(**args):
 	args = frappe._dict(args)

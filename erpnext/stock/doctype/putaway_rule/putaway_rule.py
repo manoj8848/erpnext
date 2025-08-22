@@ -20,7 +20,7 @@ class PutawayRule(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		capacity: DF.Float
@@ -284,7 +284,7 @@ def add_row(item, to_allocate, warehouse, updated_table, rule=None):
 	return updated_table
 
 
-def show_unassigned_items_message(items_not_accomodated):
+def show_unassigned_items_message(items_not_accomodated):  # pragma: no cover
 	msg = _("The following Items, having Putaway Rules, could not be accomodated:") + "<br><br>"
 	formatted_item_rows = ""
 

@@ -536,38 +536,25 @@ def get_party_gle_account(party_type, party, company):
 
 def validate_party_gle_currency(party_type, party, company, party_account_currency=None):
 	"""Validate party account currency with existing GL Entry's currency"""
-	if not party_account_currency:
-		party_account_currency = get_party_account_currency(party_type, party, company)
-
-	existing_gle_currency = get_party_gle_currency(party_type, party, company)
-
-	if existing_gle_currency and party_account_currency != existing_gle_currency:
-		frappe.throw(
-			_(
-				"{0} {1} has accounting entries in currency {2} for company {3}. Please select a receivable or payable account with currency {2}."
-			).format(
-				frappe.bold(party_type),
-				frappe.bold(party),
-				frappe.bold(existing_gle_currency),
-				frappe.bold(company),
-			),
-			InvalidAccountCurrency,
-		)
+	# Removed validation for party account currency for multicurrency support 
+	return
 
 
 def validate_party_accounts(doc):
 	from erpnext.controllers.accounts_controller import validate_account_head
 
 	companies = []
+	accounts_by_company = {}
 
 	for account in doc.get("accounts"):
 		if account.company in companies:
-			frappe.throw(
-				_("There can only be 1 Account per Company in {0} {1}").format(doc.doctype, doc.name),
-				DuplicatePartyAccountError,
-			)
+			# Allow multiple accounts per company for multi-currency support
+			if account.company not in accounts_by_company:
+				accounts_by_company[account.company] = []
+			accounts_by_company[account.company].append(account.account)
 		else:
 			companies.append(account.company)
+			accounts_by_company[account.company] = [account.account]
 
 		party_account_currency = frappe.get_cached_value("Account", account.account, "account_currency")
 		if frappe.db.get_default("Company"):
@@ -595,6 +582,20 @@ def validate_party_accounts(doc):
 			validate_account_head(account.idx, account.account, account.company)
 		if account.advance_account:
 			validate_account_head(account.idx, account.advance_account, account.company)
+
+	# Validate account currencies are different for same company
+	for company, accounts in accounts_by_company.items():
+		if len(accounts) > 1:
+			currencies = []
+			for account in accounts:
+				currency = frappe.get_cached_value("Account", account, "account_currency")
+				if currency in currencies:
+					frappe.throw(
+						_("Multiple accounts with same currency ({0}) not allowed for company {1}").format(
+							currency, company
+						)
+					)
+				currencies.append(currency)
 
 
 @frappe.whitelist()

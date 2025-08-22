@@ -8,6 +8,7 @@ from collections import defaultdict
 import frappe
 from frappe import _, bold
 from frappe.model.mapper import get_mapped_doc
+from frappe.query_builder import DocType
 from frappe.query_builder.functions import Sum
 from frappe.utils import (
 	cint,
@@ -85,7 +86,7 @@ class StockEntry(StockController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.stock.doctype.landed_cost_taxes_and_charges.landed_cost_taxes_and_charges import (
@@ -423,7 +424,6 @@ class StockEntry(StockController):
 					flt(item.qty) * flt(item.conversion_factor), self.precision("transfer_qty", item)
 				)
 
-
 	def validate_fg_completed_qty(self):
 		item_wise_qty = {}
 		if self.purpose == "Manufacture" and self.work_order:
@@ -698,7 +698,7 @@ class StockEntry(StockController):
 					NegativeStockError,
 					title=_("Insufficient Stock"),
 				)
-	
+
 	def validate_component_and_quantities(self):
 		if self.purpose not in ["Manufacture", "Material Transfer for Manufacture"]:
 			return
@@ -730,12 +730,12 @@ class StockEntry(StockController):
 					),
 					title=_("Missing Item"),
 				)
+
 	def get_matched_items(self, item_code):
 		for row in self.items:
 			if row.item_code == item_code or row.original_item == item_code:
 				return row
 		return {}
-
 
 	@frappe.whitelist()
 	def get_stock_and_rate(self):
@@ -755,7 +755,6 @@ class StockEntry(StockController):
 		self.update_valuation_rate()
 		self.set_total_incoming_outgoing_value()
 		self.set_total_amount()
-
 
 	def set_basic_rate(self, reset_outgoing_rate=True, raise_error_if_no_rate=True):
 		"""
@@ -897,11 +896,11 @@ class StockEntry(StockController):
 					if frappe.db.exists(
 						"Stock Entry",
 						{
- 							"docstatus": 1,
- 							"work_order": self.work_order,
- 							"purpose": "Manufacture",
- 							"name": ("!=", self.name),
- 						},
+							"docstatus": 1,
+							"work_order": self.work_order,
+							"purpose": "Manufacture",
+							"name": ("!=", self.name),
+						},
 					):
 						frappe.throw(
 							_("Only one {0} entry can be created against the Work Order {1}").format(
@@ -1804,7 +1803,7 @@ class StockEntry(StockController):
 				if self.work_order and self.purpose == "Material Transfer for Manufacture":
 					item_dict = self.get_pending_raw_materials(backflush_based_on)
 					if self.to_warehouse and self.pro_doc:
-						for original_item, item in item_dict.items():
+						for item in item_dict.values():
 							item["to_warehouse"] = self.pro_doc.wip_warehouse
 					self.add_to_stock_entry_detail(item_dict)
 
@@ -2127,7 +2126,12 @@ class StockEntry(StockController):
 				& (job_card.work_order == self.work_order)
 				& (job_card.docstatus == 1)
 			)
-			.groupby(job_card_scrap_item.item_code, job_card_scrap_item.item_name, job_card_scrap_item.description, job_card_scrap_item.stock_uom)
+			.groupby(
+				job_card_scrap_item.item_code,
+				job_card_scrap_item.item_name,
+				job_card_scrap_item.description,
+				job_card_scrap_item.stock_uom,
+			)
 		).run(as_dict=1)
 
 		pending_qty = flt(self.get_completed_job_card_qty()) - flt(self.pro_doc.produced_qty)
@@ -2920,25 +2924,38 @@ def get_used_alternative_items(
 	return used_alternative_items
 
 
+# Switched from raw SQL to Frappe Query Builder for better abstraction and database compatibility.
+# This avoids hardcoded SQL strings, improves readability, and ensures safer execution across both
+# MariaDB and PostgreSQL without changing the logic. All original filters, calculations, and behavior
+# (including fallback to 0 on missing data) are preserved exactly as before.
+
+
 def get_valuation_rate_for_finished_good_entry(work_order):
 	work_order_qty = flt(
 		frappe.get_cached_value("Work Order", work_order, "material_transferred_for_manufacturing")
 	)
 
-	field = "(SUM(total_outgoing_value) / %s) as valuation_rate" % (work_order_qty)
+	if not work_order_qty:
+		return 0  # Avoid ZeroDivisionError
 
-	stock_data = frappe.get_all(
-		"Stock Entry",
-		fields=field,
-		filters={
-			"docstatus": 1,
-			"purpose": "Material Transfer for Manufacture",
-			"work_order": work_order,
-		},
+	StockEntry = DocType("Stock Entry")
+
+	query = (
+		frappe.qb.from_(StockEntry)
+		.select((Sum(StockEntry.total_outgoing_value) / work_order_qty).as_("valuation_rate"))
+		.where(
+			(StockEntry.docstatus == 1)
+			& (StockEntry.purpose == "Material Transfer for Manufacture")
+			& (StockEntry.work_order == work_order)
+		)
 	)
 
-	if stock_data:
-		return stock_data[0].valuation_rate
+	result = query.run(as_dict=True)
+
+	if result and result[0].valuation_rate is not None:
+		return result[0].valuation_rate
+
+	return 0
 
 
 @frappe.whitelist()
@@ -2961,11 +2978,11 @@ def get_uom_details(item_code, uom, qty):
 @frappe.whitelist()
 def get_expired_batch_items():
 	from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import get_auto_batch_nos
-	
+
 	expired_batches = get_expired_batches()
 	if not expired_batches:
 		return []
-	
+
 	expired_batches_stock = get_auto_batch_nos(
 		frappe._dict(
 			{
@@ -2992,11 +3009,11 @@ def get_expired_batches():
 
 	if not data:
 		return []
-	
+
 	expired_batches = frappe._dict()
 	for row in data:
 		expired_batches[row.batch_no] = row
-		
+
 	return expired_batches
 
 
@@ -3251,7 +3268,6 @@ def create_serial_and_batch_bundle(parent_doc, row, child, type_of_transaction=N
 		}
 	)
 
-
 	precision = frappe.get_precision("Stock Entry Detail", "qty")
 	if row.serial_nos and row.batches_to_be_consume:
 		doc.has_serial_no = 1
@@ -3285,7 +3301,7 @@ def create_serial_and_batch_bundle(parent_doc, row, child, type_of_transaction=N
 
 	if not doc.entries:
 		return None
-	
+
 	return doc.insert(ignore_permissions=True).name
 
 

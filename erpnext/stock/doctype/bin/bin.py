@@ -15,7 +15,7 @@ class Bin(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		actual_qty: DF.Float
@@ -297,6 +297,7 @@ def update_qty(bin_name, args):
 		},
 		update_modified=True,
 	)
+
 
 def get_actual_qty(item_code, warehouse):
 	sle = frappe.qb.DocType("Stock Ledger Entry")

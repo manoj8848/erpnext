@@ -11,7 +11,7 @@ class RepostAccountingLedgerSettings(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.repost_allowed_types.repost_allowed_types import RepostAllowedTypes

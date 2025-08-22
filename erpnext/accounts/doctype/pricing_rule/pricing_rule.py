@@ -23,13 +23,18 @@ class PricingRule(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
-		from erpnext.accounts.doctype.pricing_rule_brand.pricing_rule_brand import PricingRuleBrand
-		from erpnext.accounts.doctype.pricing_rule_item_code.pricing_rule_item_code import PricingRuleItemCode
-		from erpnext.accounts.doctype.pricing_rule_item_group.pricing_rule_item_group import PricingRuleItemGroup
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
-		applicable_for: DF.Literal["", "Customer", "Customer Group", "Territory", "Supplier", "Supplier Group"]
+		from erpnext.accounts.doctype.pricing_rule_brand.pricing_rule_brand import PricingRuleBrand
+		from erpnext.accounts.doctype.pricing_rule_item_code.pricing_rule_item_code import PricingRuleItemCode
+		from erpnext.accounts.doctype.pricing_rule_item_group.pricing_rule_item_group import (
+			PricingRuleItemGroup,
+		)
+
+		applicable_for: DF.Literal[
+			"", "Customer", "Customer Group", "Territory", "Supplier", "Supplier Group"
+		]
 		apply_discount_on: DF.Literal["Grand Total", "Net Total"]
 		apply_discount_on_rate: DF.Check
 		apply_multiple_pricing_rules: DF.Check
@@ -47,6 +52,7 @@ class PricingRule(Document):
 		disable: DF.Check
 		discount_amount: DF.Currency
 		discount_percentage: DF.Float
+		enforce_free_item_qty: DF.Check
 		dont_enforce_free_item_qty: DF.Check
 		for_price_list: DF.Link | None
 		free_item: DF.Link | None
@@ -70,7 +76,29 @@ class PricingRule(Document):
 		other_item_code: DF.Link | None
 		other_item_group: DF.Link | None
 		price_or_product_discount: DF.Literal["Price", "Product"]
-		priority: DF.Literal["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"]
+		priority: DF.Literal[
+			"",
+			"1",
+			"2",
+			"3",
+			"4",
+			"5",
+			"6",
+			"7",
+			"8",
+			"9",
+			"10",
+			"11",
+			"12",
+			"13",
+			"14",
+			"15",
+			"16",
+			"17",
+			"18",
+			"19",
+			"20",
+		]
 		promotional_scheme: DF.Link | None
 		promotional_scheme_id: DF.Data | None
 		rate: DF.Currency
@@ -419,7 +447,7 @@ def get_pricing_rule_for_item(args, doc=None, for_validate=False):
 			if pricing_rule.coupon_code_based == 1:
 				if not args.coupon_code:
 					continue
-				
+
 				coupon_code = frappe.db.get_value(
 					doctype="Coupon Code", filters={"pricing_rule": pricing_rule.name}, fieldname="name"
 				)
@@ -610,7 +638,7 @@ def remove_pricing_rule_for_item(pricing_rules, item_details, item_code=None, ra
 			if pricing_rule.margin_type in ["Percentage", "Amount"]:
 				item_details.margin_rate_or_amount = 0.0
 				item_details.margin_type = None
-		elif pricing_rule.get("free_item") and not pricing_rule.get("dont_enforce_free_item_qty"):
+		elif pricing_rule.get("free_item") and pricing_rule.get("enforce_free_item_qty"):
 			item_details.remove_free_item = (
 				item_code if pricing_rule.get("same_item") else pricing_rule.get("free_item")
 			)

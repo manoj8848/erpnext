@@ -51,3 +51,29 @@ class TestPartySpecificItem(FrappeTestCase):
 		)
 		for item in items:
 			self.assertEqual(item[2], self.item.item_group)
+
+	def test_duplicate_entry_TC_B_199(self):
+		party_specific_item_1 = get_party_specific_item(
+			party_type="Customer",
+			party=self.customer.name,
+			restrict_based_on="Item",
+			based_on_value=self.item.name,
+		)
+		party_specific_item_1.insert(ignore_permissions=True)
+
+		party_specific_item_2 = get_party_specific_item(
+			party_type="Customer",
+			party=self.customer.name,
+			restrict_based_on="Item",
+			based_on_value=self.item.name,
+		)
+		self.assertRaises(frappe.ValidationError, party_specific_item_2.save)
+
+def get_party_specific_item(**args):
+	doc = frappe.new_doc("Party Specific Item")
+	doc.party_type = args.get("party_type")
+	doc.party = args.get("party")
+	doc.restrict_based_on = args.get("restrict_based_on")
+	doc.based_on_value = args.get("based_on_value")
+
+	return doc

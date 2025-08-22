@@ -29,7 +29,7 @@ class PaymentReconciliation(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.payment_reconciliation_allocation.payment_reconciliation_allocation import (
@@ -372,7 +372,6 @@ class PaymentReconciliation(Document):
 		non_reconciled_invoices = sorted(
 			non_reconciled_invoices, key=lambda k: k["posting_date"] or getdate(nowdate())
 		)
-		
 
 		self.add_invoice_entries(non_reconciled_invoices)
 
@@ -754,10 +753,21 @@ class PaymentReconciliation(Document):
 		"""
 
 		fields_to_include = [
-			"reference_type", "reference_name", "reference_row", "invoice_type",
-			"invoice_number", "allocated_amount", "unreconciled_amount", "amount",
-			"is_advance", "difference_amount", "gain_loss_posting_date",
-			"difference_account", "exchange_rate", "currency", "cost_center"
+			"reference_type",
+			"reference_name",
+			"reference_row",
+			"invoice_type",
+			"invoice_number",
+			"allocated_amount",
+			"unreconciled_amount",
+			"amount",
+			"is_advance",
+			"difference_amount",
+			"gain_loss_posting_date",
+			"difference_account",
+			"exchange_rate",
+			"currency",
+			"cost_center",
 		]
 
 		pay_rec = frappe.new_doc("Payment Reconciliation Record")

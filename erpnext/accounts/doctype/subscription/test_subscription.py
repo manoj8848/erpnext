@@ -14,9 +14,13 @@ from frappe.utils.data import (
 	get_date_str,
 	getdate,
 	nowdate,
+	today,
 )
 
+from erpnext.accounts.doctype.payment_entry.test_payment_entry import make_test_item
 from erpnext.accounts.doctype.subscription.subscription import get_prorata_factor
+from erpnext.accounts.doctype.subscription_plan.test_subscription_plan import get_subscription_plan
+from erpnext.selling.doctype.customer.test_customer import get_customer_dict
 
 test_dependencies = ("UOM", "Item Group", "Item")
 
@@ -534,22 +538,28 @@ class TestSubscription(FrappeTestCase):
 		self.assertEqual(len(subscription.invoices), 0)
 
 	def test_subscription_plan_with_subscription_TC_ACC_085(self):
-			create_plan(plan_name="_Test Plan For PI", cost=900, currency="INR")
+		create_plan(plan_name="_Test Plan For PI", cost=900, currency="INR")
 
-			subscription = create_subscription(
-				start_date=nowdate(),
-				party_type="Supplier",
-				party="_Test Supplier",
-				plans=[{"plan": "_Test Plan For PI", "qty": 1}],
-				generate_invoice_at="Beginning of the current subscription period",
-				generate_new_invoices_past_due_date=1,
-				submit_invoice=1,
-			)
-			self.assertEqual(subscription.plans[0].plan, "_Test Plan For PI")
-    
+		subscription = create_subscription(
+			start_date=nowdate(),
+			party_type="Supplier",
+			party="_Test Supplier",
+			plans=[{"plan": "_Test Plan For PI", "qty": 1}],
+			generate_invoice_at="Beginning of the current subscription period",
+			generate_new_invoices_past_due_date=1,
+			submit_invoice=1,
+		)
+		self.assertEqual(subscription.plans[0].plan, "_Test Plan For PI")
+
 	def test_subscription_plan_with_template_for_pi_TC_ACC_086(self):
+		company = "_Test Company"
+		company_doc = frappe.get_doc("Company", company)
+		if not company_doc.stock_received_but_not_billed:
+			company_doc.stock_received_but_not_billed = "Stock Received But Not Billed - _TC"
+			company_doc.save()
 		create_plan(plan_name="_Test Plan For PI", cost=900, currency="INR")
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+
 		get_or_create_fiscal_year("_Test Company")
 		subscription = create_subscription(
 			start_date=nowdate(),
@@ -567,10 +577,10 @@ class TestSubscription(FrappeTestCase):
 		self.assertEqual(invoice.status, "Unpaid")
 		self.assertEqual(invoice.supplier, "_Test Supplier")
 
-		
 	def test_subscription_plan_with_template_for_si_TC_ACC_087(self):
 		create_plan(plan_name="_Test Plan For SI", cost=900, currency="INR")
 		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+
 		get_or_create_fiscal_year("_Test Company")
 		subscription = create_subscription(
 			start_date=nowdate(),
@@ -587,12 +597,158 @@ class TestSubscription(FrappeTestCase):
 		invoice = frappe.get_doc("Sales Invoice", subscription.invoices[0].name)
 		self.assertEqual(invoice.status, "Unpaid")
 		self.assertEqual(invoice.customer, "_Test Customer")
-		
 
-  
+	def test_cancel_subscription_status_TC_ACC_220(self):
+		get_subscription = create_subscription()
+		self.assertEqual(get_subscription.status, "Active")
+
+		get_subscription.cancel_subscription_at_period_end()
+		self.assertEqual(get_subscription.status, "Cancelled")
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			get_subscription.cancel_subscription()
+		self.assertIn("subscription is already cancelled.", str(cm.exception))
+
+	def test_force_fetch_subscription_updates_TC_ACC_221(self):
+		item = make_test_item("__Test Subscription Item")
+		customer = frappe.get_doc(get_customer_dict("__Test Subscription Customer_")).insert(
+			ignore_permissions=True
+		)
+		subscription_plan = get_subscription_plan(item.item_code)
+		args = {
+			"customer": customer.name,
+			"start_date": today(),
+			"plans": [{"plan": subscription_plan.name, "qty": 1}],
+		}
+
+		# 1. Beginning
+		subscription_1 = create_subscription(**args)
+		subscription_1.generate_invoice_at = "Beginning of the current subscription period"
+		subscription_1.save()
+		subscription_1.run_method("force_fetch_subscription_updates")
+
+		si_1 = frappe.get_last_doc("Sales Invoice")
+		self.assertEqual(si_1.subscription, subscription_1.name)
+		self.assertEqual(getdate(si_1.posting_date), getdate(subscription_1.start_date))
+
+		# 2. End
+		args.update({"end_date": add_days(today(), 1)})
+		subscription_2 = create_subscription(**args)
+		subscription_2.generate_invoice_at = "End of the current subscription period"
+		subscription_2.save()
+		subscription_2.run_method("force_fetch_subscription_updates")
+
+		si_2 = frappe.get_last_doc("Sales Invoice")
+		self.assertEqual(si_2.subscription, subscription_2.name)
+		self.assertEqual(getdate(si_2.posting_date), getdate(subscription_2.end_date))
+
+		# 3. Days before
+		subscription_3 = create_subscription(**args)
+		subscription_3.generate_invoice_at = "Days before the current subscription period"
+		subscription_3.number_of_days = 3
+		subscription_3.save()
+		subscription_3.run_method("force_fetch_subscription_updates")
+
+		si_3 = frappe.get_last_doc("Sales Invoice")
+		self.assertEqual(si_3.subscription, subscription_3.name)
+		self.assertEqual(getdate(si_3.posting_date), getdate(add_days(today(), -3)))
+
+	def test_process_all_subscription_TC_ACC_222(self):
+		from unittest.mock import patch
+
+		from .subscription import process_all
+
+		with patch("frappe.db.commit"):
+			subscription = create_subscription()
+			process_all(subscription=subscription.name)
+			self.assertEqual(subscription.status, "Active")
+
+	def test_set_subscription_status_TC_ACC_223(self):
+		item = make_test_item("__Test Subscription Item")
+		customer = frappe.get_doc(get_customer_dict("__Test Subscription Customer_")).insert(
+			ignore_permissions=True
+		)
+		subscription_plan = get_subscription_plan(item.item_code)
+
+		args = {
+			"customer": customer.name,
+			"start_date": today(),
+			"plans": [{"plan": subscription_plan.name, "qty": 1}],
+		}
+
+		get_subscription = create_subscription(**args)
+		get_subscription.set("end_date", add_days(today(), 1))
+		self.assertEqual(get_subscription.status, "Active")
+
+		get_subscription.set_subscription_status(posting_date=add_days(today(), 2))
+		self.assertEqual(get_subscription.status, "Completed")
+
+	def test_validata_subscription_end_date_TC_ACC_224(self):
+		item = make_test_item("__Test Subscription Item")
+		customer = frappe.get_doc(get_customer_dict("__Test Subscription Customer_")).insert(
+			ignore_permissions=True
+		)
+		subscription_plan = get_subscription_plan(item.item_code)
+
+		args = {
+			"customer": customer.name,
+			"start_date": today(),
+			"plans": [{"plan": subscription_plan.name, "qty": 1}],
+		}
+
+		get_subscription = create_subscription(**args)
+		get_subscription.end_date = today()
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			get_subscription.save()
+		self.assertIn(
+			f"Subscription End Date must be after {get_subscription.end_date} as per the subscription plan",
+			str(cm.exception),
+		)
+
+	def test_validate_trial_period_TC_ACC_225(self):
+		item = make_test_item("__Test Subscription Item")
+		customer = frappe.get_doc(get_customer_dict("__Test Subscription Customer_")).insert(
+			ignore_permissions=True
+		)
+		subscription_plan = get_subscription_plan(item.item_code)
+
+		args = {
+			"customer": customer.name,
+			"start_date": today(),
+			"plans": [{"plan": subscription_plan.name, "qty": 1}],
+		}
+
+		get_subscription = create_subscription(**args)
+		get_subscription.trial_period_start = today()
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			get_subscription.save()
+		self.assertIn("Both Trial Period Start Date and Trial Period End Date must be set", str(cm.exception))
+
+	def test_validate_trail_period_start_date_TC_ACC_226(self):
+		item = make_test_item("__Test Subscription Item")
+		customer = frappe.get_doc(get_customer_dict("__Test Subscription Customer_")).insert(
+			ignore_permissions=True
+		)
+		subscription_plan = get_subscription_plan(item.item_code)
+
+		args = {
+			"customer": customer.name,
+			"start_date": today(),
+			"plans": [{"plan": subscription_plan.name, "qty": 1}],
+		}
+
+		get_subscription = create_subscription(**args)
+		get_subscription.trial_period_start = add_days(today(), 1)
+		get_subscription.trial_period_end = add_days(today(), 2)
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			get_subscription.save()
+		self.assertIn("Trial Period Start date cannot be after Subscription Start Date", str(cm.exception))
+
 
 def make_plans():
-	
 	create_plan(plan_name="_Test Plan Name", cost=900, currency="INR")
 	create_plan(plan_name="_Test Plan Name 2", cost=1999, currency="INR")
 	create_plan(

@@ -5,10 +5,11 @@
 import json
 
 import frappe
-from frappe import _
+from frappe import _, qb
 from frappe.core.doctype.communication.email import make
 from frappe.desk.form.load import get_attachments
 from frappe.model.mapper import get_mapped_doc
+from frappe.query_builder import DocType
 from frappe.utils import get_url
 from frappe.utils.print_format import download_pdf
 from frappe.utils.user import get_user_fullname
@@ -27,10 +28,15 @@ class RequestforQuotation(BuyingController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
-		from erpnext.buying.doctype.request_for_quotation_item.request_for_quotation_item import RequestforQuotationItem
-		from erpnext.buying.doctype.request_for_quotation_supplier.request_for_quotation_supplier import RequestforQuotationSupplier
+	if TYPE_CHECKING:  # pragma: no cover
 		from frappe.types import DF
+
+		from erpnext.buying.doctype.request_for_quotation_item.request_for_quotation_item import (
+			RequestforQuotationItem,
+		)
+		from erpnext.buying.doctype.request_for_quotation_supplier.request_for_quotation_supplier import (
+			RequestforQuotationSupplier,
+		)
 
 		amended_from: DF.Link | None
 		billing_address: DF.Link | None
@@ -389,10 +395,10 @@ def make_supplier_quotation_from_rfq(source_name, target_doc=None, for_supplier=
 			"Request for Quotation Item": {
 				"doctype": "Supplier Quotation Item",
 				"field_map": {
- 					"name": "request_for_quotation_item",
- 					"parent": "request_for_quotation",
- 					"project_name": "project",
- 				},
+					"name": "request_for_quotation_item",
+					"parent": "request_for_quotation",
+					"project_name": "project",
+				},
 			},
 		},
 		target_doc,
@@ -493,27 +499,32 @@ def get_pdf(
 
 @frappe.whitelist()
 def get_item_from_material_requests_based_on_supplier(source_name, target_doc=None):
-	mr_items_list = frappe.db.sql(
-		"""
-		SELECT
-			mr.name, mr_item.item_code
-		FROM
-			`tabItem` as item,
-			`tabItem Supplier` as item_supp,
-			`tabMaterial Request Item` as mr_item,
-			`tabMaterial Request`  as mr
-		WHERE item_supp.supplier = %(supplier)s
-			AND item.name = item_supp.parent
-			AND mr_item.parent = mr.name
-			AND mr_item.item_code = item.name
-			AND mr.status != "Stopped"
-			AND mr.material_request_type = "Purchase"
-			AND mr.docstatus = 1
-			AND mr.per_ordered < 99.99""",
-		{"supplier": source_name},
-		as_dict=1,
+	# Define DocTypes
+	item = DocType("Item")
+	item_supp = DocType("Item Supplier")
+	mr_item = DocType("Material Request Item")
+	mr = DocType("Material Request")
+
+	# Build the query
+	query = (
+		qb.from_(item)
+		.inner_join(item_supp)
+		.on(item.name == item_supp.parent)
+		.inner_join(mr_item)
+		.on(mr_item.item_code == item.name)
+		.inner_join(mr)
+		.on(mr_item.parent == mr.name)
+		.select(mr.name, mr_item.item_code)
+		.where(
+			(item_supp.supplier == source_name)
+			& (mr.status != "Stopped")
+			& (mr.material_request_type == "Purchase")
+			& (mr.docstatus == 1)
+			& (mr.per_ordered < 99.99)
+		)
 	)
 
+	mr_items_list = query.run(as_dict=True)
 	material_requests = {}
 	for d in mr_items_list:
 		material_requests.setdefault(d.name, []).append(d.item_code)

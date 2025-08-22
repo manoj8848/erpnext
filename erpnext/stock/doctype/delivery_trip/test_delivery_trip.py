@@ -2,7 +2,10 @@
 # See license.txt
 
 
+from datetime import datetime
+
 import frappe
+from frappe.contacts.doctype.contact.test_contact import create_contact
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, flt, now_datetime, nowdate
 
@@ -24,6 +27,102 @@ class TestDeliveryTrip(FrappeTestCase):
 		address = create_address(driver)
 
 		self.delivery_trip = create_delivery_trip(driver, address)
+
+	def test_on_save_and_cancel_TC_SCK_306(self):
+		from erpnext.stock.doctype.delivery_trip.delivery_trip import get_contact_display, get_driver_email
+
+		employee = frappe.get_doc(
+			{
+				"doctype": "Employee",
+				"first_name": "Newton Scmander",
+				"middle_name": "Scmander",
+				"date_of_birth": datetime.strptime("21-04-1981", "%d-%m-%Y").strftime("%Y-%m-%d"),
+				"gender": "Male",
+				"date_of_joining": frappe.utils.now(),
+				"status": "Active",
+				"company": "_Test Company",
+				"prefered_email": "Test@example.com",
+			}
+		).insert()
+		driver = frappe.get_doc(
+			{
+				"doctype": "Driver",
+				"full_name": employee.name,
+				"cell_number": "98343424242",
+				"license_number": "B809",
+				"employee": employee.name,
+			}
+		).insert(ignore_permissions=True)
+		address = create_address(driver)
+		delivery_trip_doc = create_delivery_trip(driver, address)
+		delivery_trip_doc.submit()
+		self.assertEqual(delivery_trip_doc.docstatus, 1)
+		delivery_trip_doc.reload()
+		delivery_trip_doc.cancel()
+		# contact display
+		contact = create_contact(name="Test Contact1", salutation="Mr")
+		get_contact_display(contact)
+		self.assertEqual(delivery_trip_doc.docstatus, 2)
+		# get_driver_email
+		driver_email = get_driver_email(driver)
+		self.assertEqual(driver_email["email"], employee.prefered_email)
+
+	# codecov
+	def test_process_route_TC_SCK_307(self):
+		driver = create_driver()
+		address = create_address(driver)
+		delivery_trip_doc = create_delivery_trip(driver, address)
+
+		# Directly override the get_directions method on the instance
+		def create_get_directions(route, optimize):
+			return {
+				"waypoint_order": [0, 1],
+				"legs": [
+					{
+						"end_location": {"lat": 10.0, "lng": 20.0},
+						"distance": {"value": 1000},
+						"duration": {"value": 600},
+					},
+					{
+						"end_location": {"lat": 30.0, "lng": 40.0},
+						"distance": {"value": 1500},
+						"duration": {"value": 900},
+					},
+				],
+			}
+
+		# Assign the fake function to the instance
+		delivery_trip_doc.get_directions = create_get_directions
+		delivery_trip_doc.process_route(optimize=1)
+		self.assertTrue(delivery_trip_doc.total_distance > 0)
+
+	# codecov
+	def test_form_route_list_TC_SCK_308(self):
+		driver = create_driver()
+		address = create_address(driver)
+		delivery_trip_doc = create_delivery_trip(driver, address)
+
+		# Directly override the get_directions method on the instance
+		def create_get_directions(route, optimize):
+			return {
+				"waypoint_order": [0, 1],
+				"legs": [
+					{
+						"end_location": {"lat": 10.0, "lng": 20.0},
+						"distance": {"value": 1000},
+						"duration": {"value": 600},
+					},
+					{
+						"end_location": {"lat": 30.0, "lng": 40.0},
+						"distance": {"value": 1500},
+						"duration": {"value": 900},
+					},
+				],
+			}
+
+		delivery_trip_doc.get_directions = create_get_directions
+		delivery_trip_doc.process_route(optimize=1)
+		self.assertTrue(delivery_trip_doc.total_distance > 0)
 
 	def tearDown(self):
 		frappe.db.sql("delete from `tabDriver`")
@@ -110,7 +209,7 @@ def create_address(driver):
 				"address_type": "Office",
 				"address_line1": "Station Road",
 				"city": "_Test City",
-				"state": "Test State",
+				"state": "Maharashtra",
 				"country": "India",
 				"links": [{"link_doctype": "Driver", "link_name": driver.name}],
 			}

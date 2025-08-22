@@ -1,6 +1,7 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
+import json
 
 import frappe
 from frappe.tests.utils import FrappeTestCase, change_settings
@@ -11,6 +12,7 @@ from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_orde
 from erpnext.stock.doctype.item.test_item import make_item
 from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import get_gl_entries
 from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 
 
 def create_product_bundle(
@@ -52,6 +54,168 @@ class TestPackedItem(FrappeTestCase):
 		cls.bundle2, cls.bundle2_items = create_product_bundle(warehouse=cls.warehouse)
 
 		cls.normal_item = make_item().name
+
+	# codecov
+	def test_update_packed_item_from_cancelled_doc_TC_SCK_415(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer, make_test_item
+
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+		warehouse = create_warehouse(warehouse, company=company)
+		customer = "_Test Customer"
+		create_customer("_Test Customer", currency="INR")
+		item = "test packed item"
+		item = make_test_item(item)
+		item.item_group = "Products"
+		item.is_stock_item = 0
+		item.is_fixed_asset = 0
+		item.auto_create_assets = 0
+		item.save()
+
+		assert frappe.db.exists("Item", "test packed item")
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": "_Test Indian Registered Company",
+				"address_type": "Billing",
+				"address_line1": "Test",
+				"city": "Bengaluru",
+				"state": "Karnataka",
+				"country": "India",
+				"pincode": "581115",
+				"gstin": "29AAECS8690M1ZF",
+				"gst_category": "Registered Regular",
+				"gst_state": "Karnataka",
+				"gst_state_number": 29,
+				"is_your_company_address": 1,
+				"links": [
+					{
+						"link_doctype": "Company",
+						"link_name": "_Test Indian Registered Company",
+						"link_title": "_Test Indian Registered Company",
+					}
+				],
+			}
+		).insert()
+
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"customer": customer,
+				"company": company,
+				"set_warehouse": warehouse,
+				"items": [
+					{
+						"item_code": item.item_code,
+						"item_name": item.item_name,
+						"qty": 2,
+						"uom": "_Test UOM",
+						"stock_uom": "Nos",
+					}
+				],
+			}
+		).insert()
+		dn.submit()
+		self.assertEqual(dn.docstatus, 1, "Delivery Note was not submitted")
+		self.assertEqual(dn.status, "To Bill", f"Unexpected status after submit: {dn.status}")
+		dn.reload()
+		dn.cancel()
+		self.assertEqual(dn.docstatus, 2, "Delivery Note was not cancelled")
+		self.assertEqual(dn.status, "Cancelled", f"Expected status 'Cancelled', got {dn.status}")
+		amended_dn = frappe.copy_doc(dn)
+		amended_dn.amended_from = dn.name
+		amended_dn.docstatus = 0
+		amended_dn.name = None  # allow system to generate new name
+		amended_dn.insert()
+
+	# codecov
+	def test_on_doctype_update_TC_SCK_416(self):
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer, make_test_item
+		from erpnext.stock.doctype.packed_item.packed_item import (
+			get_items_from_product_bundle,
+			on_doctype_update,
+		)
+
+		company = "_Test Indian Registered Company"
+		warehouse = "Stores - _TIRC"
+		if not frappe.db.exists("Warehouse", warehouse):
+			warehouse = create_warehouse(warehouse, company=company)
+
+		customer = "_Test Customer"
+		if not frappe.db.exists("Customer", "_Test Customer"):
+			create_customer("_Test Customer", currency="INR")
+		item = "test packed item"
+		item = make_test_item(item)
+		item.item_group = "Products"
+		item.is_stock_item = 0
+		item.is_fixed_asset = 0
+		item.auto_create_assets = 0
+		item.save()
+		assert frappe.db.exists("Item", "test packed item")
+		item1 = "test packed item1"
+		item1 = make_test_item(item)
+		item1.item_group = "Products"
+		item1.is_stock_item = 0
+		item1.is_fixed_asset = 0
+		item.has_variants = 0
+		item1.auto_create_assets = 0
+		item1.save()
+		product_bundle = frappe.get_doc(
+			{
+				"doctype": "Product Bundle",
+				"new_item_code": item1.item_code,
+				"items": [{"item_code": item1.item_code, "qty": 2}],
+			}
+		).insert()
+
+		frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": "_Test Indian Registered Company",
+				"address_type": "Billing",
+				"address_line1": "Test",
+				"city": "Bengaluru",
+				"state": "Karnataka",
+				"country": "India",
+				"pincode": "581115",
+				"gstin": "29AAECS8690M1ZF",
+				"gst_category": "Registered Regular",
+				"gst_state": "Karnataka",
+				"gst_state_number": 29,
+				"is_your_company_address": 1,
+				"links": [
+					{
+						"link_doctype": "Company",
+						"link_name": "_Test Indian Registered Company",
+						"link_title": "_Test Indian Registered Company",
+					}
+				],
+			}
+		).insert()
+
+		dn = frappe.get_doc(
+			{
+				"doctype": "Delivery Note",
+				"customer": customer,
+				"company": company,
+				"set_warehouse": warehouse,
+				"items": [
+					{
+						"item_code": item.item_code,
+						"item_name": item.item_name,
+						"qty": 2,
+						"uom": "_Test UOM",
+						"stock_uom": "Nos",
+					}
+				],
+			}
+		).insert()
+		on_doctype_update()
+		dn.submit()
+		msg = "Please specify Company"
+		with self.assertRaises(frappe.ValidationError) as e:
+			get_items_from_product_bundle(json.dumps(product_bundle.items[0].as_dict()))
+		self.assertIn(msg, str(e.exception))
 
 	def test_adding_bundle_item(self):
 		"Test impact on packed items if bundle item row is added."
