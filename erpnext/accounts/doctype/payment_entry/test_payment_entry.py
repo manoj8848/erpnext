@@ -2735,7 +2735,7 @@ class TestPaymentEntry(FrappeTestCase):
 
 		self.assertEqual(pe.references[0].allocated_amount, 500)
 
-	def test_allocation_for_customer_ACC_385(self):
+	def test_allocation_for_customer_TC_ACC_385(self):
 		customer = "_Test Customer"
 		company = "_Test Company"
 
@@ -3103,7 +3103,7 @@ class TestPaymentEntry(FrappeTestCase):
 		value_3 = pe.get_value_in_transaction_currency("EUR", gl_dict, "non_existent_field")
 		self.assertEqual(value_3, 0.0)
 
-	def test_update_advance_paid_calls_set_total_advance_paid_TC_ACC_524(self):
+	def test_update_advance_paid_calls_set_total_advance_paid_TC_ACC_525(self):
 		"""
 		Test that update_advance_paid calls set_total_advance_paid
 		and updates the advance_paid field correctly.
@@ -3158,7 +3158,7 @@ class TestPaymentEntry(FrappeTestCase):
 		so.reload()
 		self.assertEqual(so.advance_paid, 500)
 
-	def test_determine_exclusive_rate_with_inclusive_tax(self):
+	def test_determine_exclusive_rate_with_inclusive_tax_TC_ACC_526(self):
 		company = "_Test Company"
 		customer = "_Test Customer"
 		create_customer(customer, "INR")
@@ -3210,7 +3210,7 @@ class TestPaymentEntry(FrappeTestCase):
 		self.assertTrue(hasattr(pe, "paid_amount_after_tax"))
 		self.assertEqual(pe.paid_amount_after_tax, pe.base_paid_amount)
 
-	def test_get_outstanding_of_references_with_payment_term(self):
+	def test_get_outstanding_of_references_with_payment_term_TC_ACC_527(self):
 		company = "_Test Company"
 		customer = "_Test Customer"
 		create_customer(customer, "INR")
@@ -3235,7 +3235,7 @@ class TestPaymentEntry(FrappeTestCase):
 		self.assertIn(expected_key, result)
 		self.assertEqual(result[expected_key], 100)
 
-	def test_get_company_default(self):
+	def test_get_company_default_TC_ACC_528(self):
 		company = "_Test Company"
 		company_doc = frappe.get_doc("Company", company)
 		# Call the function under test
