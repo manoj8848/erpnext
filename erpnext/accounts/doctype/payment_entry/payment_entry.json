@@ -227,6 +227,7 @@
    "fieldname": "party_balance",
    "fieldtype": "Currency",
    "label": "Party Balance",
+   "no_copy": 1,
    "print_hide": 1,
    "read_only": 1
   },
@@ -790,7 +791,7 @@
    "table_fieldname": "payment_entries"
   }
  ],
- "modified": "2025-05-08 11:18:10.238085",
+ "modified": "2025-05-15 18:01:04.013025",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Payment Entry",
