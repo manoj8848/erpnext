@@ -285,6 +285,7 @@ class StockReconciliation(StockController):
 							"warehouse": item.warehouse,
 							"posting_date": self.posting_date,
 							"posting_time": self.posting_time,
+							"for_stock_levels": True,
 							"ignore_voucher_nos": [self.name],
 						}
 					)
