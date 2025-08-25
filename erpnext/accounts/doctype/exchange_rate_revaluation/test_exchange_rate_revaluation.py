@@ -14,10 +14,7 @@ from frappe.exceptions import ValidationError
 class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
 	def setUp(self):
 		create_warehouse(warehouse_name="_Test Warehouse")
-
-		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
 		get_or_create_fiscal_year()
-  
 		self.create_company()
 		self.create_usd_receivable_account()
 		self.create_item()
@@ -980,3 +977,61 @@ def create_cost_center(**args):
 			cc.is_group = args.is_group or 0
 			cc.parent_cost_center = args.parent_cost_center or "_Test Company - _TC"
 			cc.insert()
+
+
+def get_or_create_fiscal_year(company="_Test Company"):
+	from datetime import date
+
+	current_posting_date = getdate()
+	current_year = current_posting_date.year
+	first_date = date(current_year, 4, 1)
+	last_date = date(current_year + 1, 3, 31)
+
+	fy_name_list = get_fy_list(first_date, last_date)
+	curr_fy_exists = False
+
+	for fy_name in fy_name_list:
+		fy_doc = frappe.get_doc("Fiscal Year", fy_name.name)
+		if fy_doc.year_start_date <= current_posting_date <= fy_doc.year_end_date:
+			company_for_existing = [c.company for c in fy_doc.companies]
+			if company in company_for_existing:
+				return fy_doc.name  # Return fiscal year name if exists
+			else:
+				curr_fy_exists = True
+				break
+
+	# Create new fiscal year if not found
+
+	current_fy_name = (
+		fy_name.name
+		if curr_fy_exists
+		else frappe.db.exists("Fiscal Year", {"year_start_date": first_date, "year_end_date": last_date})
+	)
+	if current_fy_name:
+		fy_doc = frappe.get_doc("Fiscal Year", current_fy_name)
+	else:
+		fy_doc = frappe.new_doc("Fiscal Year")
+		fy_doc.year = f"{current_year}-{current_year + 1}"
+		fy_doc.year_start_date = first_date
+		fy_doc.year_end_date = last_date
+
+	fy_doc.append("companies", {"company": company})
+	fy_doc.save()
+	return fy_doc.name
+
+
+def get_fy_list(year_start_date, year_end_date):
+	return frappe.db.sql(
+		"""select name from `tabFiscal Year`
+			where (
+				(%(year_start_date)s between year_start_date and year_end_date)
+				or (%(year_end_date)s between year_start_date and year_end_date)
+				or (year_start_date between %(year_start_date)s and %(year_end_date)s)
+				or (year_end_date between %(year_start_date)s and %(year_end_date)s)
+			) """,
+		{
+			"year_start_date": year_start_date,
+			"year_end_date": year_end_date,
+		},
+		as_dict=True,
+	)
