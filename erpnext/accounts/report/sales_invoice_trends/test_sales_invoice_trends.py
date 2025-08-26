@@ -128,7 +128,7 @@ class TestSalesInvoiceTrends(FrappeTestCase):
 		for doctype in doctype_list:
 			qb.from_(qb.DocType(doctype)).delete().where(qb.DocType(doctype).company == self.company).run()
 
-	def test_invoice_with_groupby_filter(self):
+	def test_invoice_with_filter_TC_ACC_532(self):
 		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import get_active_fiscal_year
 
 		filters = frappe._dict(
