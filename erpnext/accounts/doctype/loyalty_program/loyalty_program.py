@@ -14,7 +14,7 @@ class LoyaltyProgram(Document):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.loyalty_program_collection.loyalty_program_collection import (

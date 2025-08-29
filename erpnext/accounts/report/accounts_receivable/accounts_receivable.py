@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 import frappe
 from frappe import _, qb, query_builder, scrub
-from frappe.query_builder import Criterion, Case
+from frappe.query_builder import Case, Criterion
 from frappe.query_builder.functions import Date, Substring, Sum
 from frappe.utils import cint, cstr, flt, getdate, nowdate
 
@@ -20,7 +20,7 @@ from erpnext.accounts.utils import get_currency_precision, get_party_types_from_
 
 #  1. Invoice can be booked via Sales/Purchase Invoice or Journal Entry
 #  2. Report handles both receivable and payable
-#  3. Key balances for each row 
+#  3. Key balances for each row
 #  4. For explicit payment terms in invoice (example: 30% advance, 30% on delivery, 40% post delivery),
 #     the invoice will be broken up into multiple rows, one for each payment term
 #  5. If there are payments after the report date (post dated), these will be updated in additional columns
@@ -98,9 +98,6 @@ class ReceivablePayableReport:
 	def get_data(self):
 		self.get_sales_invoices_or_customers_based_on_sales_person()
 
-		# Build delivery note map against all sales invoices
-		self.build_delivery_note_map()
-
 		# Get invoice details like bill_no, due_date etc for all invoices
 		self.get_invoice_details()
 
@@ -108,7 +105,8 @@ class ReceivablePayableReport:
 		self.get_future_payments()
 
 		# Get return entries
-		self.get_return_entries()
+		if not self.filters.party_type or self.filters.party_type in ["Customer", "Supplier"]:
+			self.get_return_entries()
 
 		# Get Exchange Rate Revaluations
 		self.get_exchange_rate_revaluations()
@@ -122,10 +120,14 @@ class ReceivablePayableReport:
 		elif self.ple_fetch_method == "UnBuffered Cursor":
 			self.fetch_ple_in_unbuffered_cursor()
 
+		# Build delivery note map against all sales invoices
+		self.build_delivery_note_map()
+
 		self.build_data()
 
 	def fetch_ple_in_buffered_cursor(self):
-		self.ple_entries = frappe.db.sql(self.ple_query.get_sql(), as_dict=True)
+		query, param = self.ple_query.walk()
+		self.ple_entries = frappe.db.sql(query, param, as_dict=True)
 
 		for ple in self.ple_entries:
 			self.init_voucher_balance(ple)  # invoiced, paid, credit_note, outstanding
@@ -138,8 +140,9 @@ class ReceivablePayableReport:
 
 	def fetch_ple_in_unbuffered_cursor(self):
 		self.ple_entries = []
+		query, param = self.ple_query.walk()
 		with frappe.db.unbuffered_cursor():
-			for ple in frappe.db.sql(self.ple_query.get_sql(), as_dict=True, as_iterator=True):
+			for ple in frappe.db.sql(query, param, as_dict=True, as_iterator=True):
 				self.init_voucher_balance(ple)  # invoiced, paid, credit_note, outstanding
 				self.ple_entries.append(ple)
 
@@ -557,7 +560,6 @@ class ReceivablePayableReport:
 		# Deduct that from paid amount pre allocation
 		row.paid -= flt(payment_terms_details[0].total_advance)
 		company_currency = frappe.get_value("Company", self.filters.get("company"), "default_currency")
- 
 
 		# If single payment terms, no need to split the row
 		if len(payment_terms_details) == 1 and payment_terms_details[0].payment_term:
@@ -647,7 +649,8 @@ class ReceivablePayableReport:
 				(pe.reference_no).as_("future_ref"),
 				Case()
 				.when(pe.payment_type == "Receive", pe.source_exchange_rate * pe_ref.allocated_amount)
-				.else_(pe.target_exchange_rate * pe_ref.allocated_amount).as_("future_amount_in_base_currency"),
+				.else_(pe.target_exchange_rate * pe_ref.allocated_amount)
+				.as_("future_amount_in_base_currency"),
 			)
 			.where(
 				(pe.docstatus < 2)
@@ -709,7 +712,6 @@ class ReceivablePayableReport:
 			query = query.having(Sum(jea.debit_in_account_currency - jea.credit_in_account_currency) > 0)
 		else:
 			query = query.having(Sum(jea.credit_in_account_currency - jea.debit_in_account_currency) > 0)
-
 
 		return query.run(as_dict=True)
 
