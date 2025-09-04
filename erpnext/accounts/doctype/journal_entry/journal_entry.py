@@ -41,7 +41,7 @@ class JournalEntry(AccountsController):
 
 	from typing import TYPE_CHECKING
 
-	if TYPE_CHECKING:
+	if TYPE_CHECKING: # pragma: no cover
 		from frappe.types import DF
 
 		from erpnext.accounts.doctype.journal_entry_account.journal_entry_account import JournalEntryAccount
@@ -681,6 +681,7 @@ class JournalEntry(AccountsController):
 
 	def validate_orders(self):
 		"""Validate totals, closed and docstatus for orders"""
+		print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
 		for reference_name, total in self.reference_totals.items():
 			reference_type = self.reference_types[reference_name]
 			account = self.reference_accounts[reference_name]
@@ -689,12 +690,15 @@ class JournalEntry(AccountsController):
 				order = frappe.get_doc(reference_type, reference_name)
 
 				if order.docstatus != 1:
+					print("11111111111111111111111111111111111")
 					frappe.throw(_("{0} {1} is not submitted").format(reference_type, reference_name))
 
 				if flt(order.per_billed) >= 100:
+					print("222222222222222222222222222222222222222222222")
 					frappe.throw(_("{0} {1} is fully billed").format(reference_type, reference_name))
 
 				if cstr(order.status) == "Closed":
+					print("33333333333333333333333333333333333333333")
 					frappe.throw(_("{0} {1} is closed").format(reference_type, reference_name))
 
 				account_currency = get_account_currency(account)

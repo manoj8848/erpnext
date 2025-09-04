@@ -1563,7 +1563,233 @@ class TestJournalEntry(unittest.TestCase):
 		jv.accounts[1].cost_center="Main - _TC"
 		jv.save()
 		self.assertEqual(jv.accounts[0].debit_in_account_currency, jv.accounts[1].credit_in_account_currency)
-		
+  
+	def test_apply_tax_withholding_TC_ACC_543(self):
+		company = "_Test Indian Registered Company"
+		company_abbr = frappe.get_cached_value("Company", company, "abbr")
+
+		withholding_account = f"TDS Payable - {company_abbr}"
+		if not frappe.db.exists("Account", withholding_account):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "TDS Payable",
+				"parent_account": f"Current Liabilities - {company_abbr}",
+				"company": company,
+				"account_type": "Tax",
+				"root_type": "Liability",
+			}).insert(ignore_permissions=True)
+
+		creditor_account = f"Creditors - {company_abbr}"
+		if not frappe.db.exists("Account", creditor_account):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Creditors",
+				"parent_account": f"Current Liabilities - {company_abbr}",
+				"company": company,
+				"account_type": "Payable",
+				"root_type": "Liability",
+			}).insert(ignore_permissions=True)
+
+		bank_account = f"Bank - {company_abbr}"
+		if not frappe.db.exists("Account", bank_account):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Bank",
+				"parent_account": f"Current Assets - {company_abbr}",
+				"company": company,
+				"account_type": "Bank",
+				"root_type": "Asset",
+			}).insert(ignore_permissions=True)
+
+		if not frappe.db.exists("Tax Withholding Category", "_Test TDS Category"):
+			frappe.get_doc({
+				"doctype": "Tax Withholding Category",
+				"name": "_Test TDS Category",
+				"company": company,
+				"accounts": [
+					{
+						"account": withholding_account,
+						"company": company,
+						"tax_withholding_rate": 10.0,
+						"threshold": 0.0,
+					}
+				],
+				"rates": [
+					{
+						"from_date": frappe.utils.nowdate(),
+						"to_date": frappe.utils.add_years(frappe.utils.nowdate(), 1),
+						"tax_withholding_rate": 10.0,
+						"single_threshold": 0.0,
+						"cumulative_threshold": 0.0,
+					}
+				],
+			}).insert(ignore_permissions=True)
+
+		je = make_journal_entry(
+			account1=creditor_account,
+			account2=bank_account,
+			amount=-1000.0,
+			save=False,
+		)
+
+		je.voucher_type = "Credit Note"
+		je.company = company
+		je.apply_tds = 1
+		je.tax_withholding_category = "_Test TDS Category"
+
+		je.accounts[0].party_type = "Supplier"
+		je.accounts[0].party = "_Test Supplier"
+
+		je.insert(ignore_permissions=True)
+
+		je.apply_tax_withholding()
+
+		creditor_row = [d for d in je.accounts if d.account == creditor_account][0]
+		self.assertEqual(creditor_row.credit_in_account_currency, 1000.0)
+
+  
+	def test_get_outstanding_invoices_TC_ACC_544(self):
+		from frappe import _dict
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+
+		company = "_Test Company"
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+
+		if not frappe.db.exists("Customer", "_Test Customer JE"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "_Test Customer JE",
+				"customer_group": "_Test Customer Group",
+				"territory": "_Test Territory",
+			}).insert(ignore_permissions=True)
+
+		si = create_sales_invoice(
+			company=company,
+			customer="_Test Customer JE",
+			debit_to=f"Debtors - {abbr}",
+			item="_Test Item",
+			qty=1,
+			rate=100.0,
+		)
+
+		je = make_journal_entry(
+			account1=f"Debtors - {abbr}",
+			account2=f"Creditors - {abbr}",
+			amount=0, 
+			save=False
+		)
+		je.voucher_type = "Credit Note"
+		je.write_off_based_on = "Accounts Receivable"
+
+		je.get_values = lambda: [
+			_dict({
+				"name": si.name,
+				"account": si.debit_to,
+				"party": si.customer,
+				"outstanding_amount": si.outstanding_amount,
+			})
+		]
+
+		je.get_outstanding_invoices()
+
+		self.assertEqual(len(je.accounts), 2)
+
+		first = je.accounts[0]
+		bal   = je.accounts[1]
+
+		self.assertEqual(first.party_type, "Customer")
+		self.assertEqual(first.account, si.debit_to)
+		self.assertEqual(first.reference_type, "Sales Invoice")
+		self.assertEqual(first.reference_name, si.name)
+		self.assertEqual(first.credit_in_account_currency, 100.0)
+		self.assertEqual(bal.debit_in_account_currency, 100.0)
+
+  
+	def test_get_average_exchange_rate_TC_ACC_545(self):
+		from erpnext.accounts.doctype.journal_entry.journal_entry import get_average_exchange_rate
+
+		company = "_Test Company"
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+
+		bank_account = f"Bank - {abbr}"
+		if not frappe.db.exists("Account", bank_account):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Bank",
+				"parent_account": f"Current Assets - {abbr}",
+				"company": company,
+				"account_type": "Bank",
+				"root_type": "Asset",
+			}).insert(ignore_permissions=True)
+
+		expense_account = f"Round Off - {abbr}"
+		if not frappe.db.exists("Account", expense_account):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Round Off",
+				"parent_account": f"Expenses - {abbr}",
+				"company": company,
+				"account_type": "Expense Account",
+				"root_type": "Expense",
+			}).insert(ignore_permissions=True)
+
+		je = make_journal_entry(
+			account1=bank_account,
+			account2=expense_account,
+			amount=200.0,
+			exchange_rate=2.0,
+			save=False,
+			submit=False,
+		)
+
+		je.accounts[0].exchange_rate = 2.0
+		je.accounts[0].debit_in_account_currency = 200.0
+		je.accounts[0].debit = 400.0
+		je.accounts[1].credit_in_account_currency = 200.0
+		je.accounts[1].credit = 400.0
+
+		je.insert(ignore_permissions=True)
+		je.submit()
+
+		rate = get_average_exchange_rate(bank_account)
+		self.assertEqual(rate, 1.0)
+  
+	def test_validate_orders_TC_ACC_547(self):
+		from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
+
+		company = "_Test Company"
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+
+		def setup_je(ref_so, total):
+			je = frappe.get_doc({
+				"doctype": "Journal Entry",
+				"company": company,
+				"voucher_type": "Journal Entry",
+				"posting_date": nowdate(),
+			})
+
+			je.reference_totals = {ref_so.name: total}
+			je.reference_types = {ref_so.name: "Sales Order"}
+			je.reference_accounts = {ref_so.name: f"Debtors - {abbr}"}
+			return je
+
+		so1 = make_sales_order(company=company, customer="_Test Customer", rate=100, do_not_submit=True)
+		je1 = setup_je(so1, total=0)
+		with self.assertRaises(frappe.ValidationError):
+			je1.validate_orders()
+
+		so2 = make_sales_order(company=company, customer="_Test Customer", rate=200)
+		so2.db_set("per_billed", 100)
+		je2 = setup_je(so2, total=0)
+		with self.assertRaises(frappe.ValidationError):
+			je2.validate_orders()
+
+		so3 = make_sales_order(company=company, customer="_Test Customer", rate=300)
+		so3.db_set("status", "Closed")
+		je3 = setup_je(so3, total=0)
+		with self.assertRaises(frappe.ValidationError):
+			je3.validate_orders()
+  
 def make_journal_entry(
 	account1,
 	account2,
