@@ -2774,6 +2774,9 @@ class TestSalesInvoice(FrappeTestCase):
 		acc_settings.save()
 
 	def test_validate_inter_company_transaction_address_links(self):
+		from erpnext.buying.doctype.purchase_order.test_purchase_order import get_or_create_fiscal_year
+		from erpnext.buying.doctype.supplier.test_supplier import create_supplier
+
 		def _validate_address_link(address, link_doctype, link_name):
 			return frappe.db.get_value(
 				"Dynamic Link",
@@ -2786,6 +2789,21 @@ class TestSalesInvoice(FrappeTestCase):
 				"parent",
 			)
 
+		create_company(company_name="Wind Power LLC", country="United States", currency="USD", abbr="WP")
+		get_customer = frappe.get_doc("Customer", "_Test Internal Customer")
+		get_customer.is_internal_customer = 1
+		get_customer.represents_company = "_Test Company 1"
+		get_customer.append("companies", {"company": "Wind Power LLC"})
+		get_customer.save()
+		get_or_create_fiscal_year("Wind Power LLC")
+		args = {
+			"supplier_name": "Test Intercompany Supplier" + frappe.generate_hash(length=3),
+			"default_currency": "USD",
+		}
+		supplier = create_supplier(**args)
+		supplier.is_internal_supplier = 1
+		supplier.represents_company = "Wind Power LLC"
+		supplier.save()
 		si = create_sales_invoice(
 			company="Wind Power LLC",
 			customer="_Test Internal Customer",
