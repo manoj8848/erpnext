@@ -2464,6 +2464,62 @@ class TestJournalEntry(unittest.TestCase):
 		)
 		rate_foreign = get_exchange_rate(nowdate(), account=foreign_acc, company=company, account_currency="USD")
 		self.assertTrue(rate_foreign > 0)
+  
+	def test_get_account_details_and_party_type_TC_ACC_566(self):
+		from erpnext.accounts.doctype.journal_entry.journal_entry import get_account_details_and_party_type
+		from erpnext.accounts.doctype.journal_entry.test_journal_entry import get_or_create_account
+		from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_company
+		from frappe.utils import nowdate
+
+		company = "_Test Company"
+		create_company(company_name=company)
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+
+		if not frappe.db.exists("Account", f"Current Assets - {abbr}"):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": "Current Assets",
+				"parent_account": f"Assets - {abbr}" if frappe.db.exists("Account", f"Assets - {abbr}") else None,
+				"company": company,
+				"is_group": 1,
+				"root_type": "Asset",
+			}).insert(ignore_permissions=True)
+
+		receivable_acc = get_or_create_account(
+			"Test Receivable - PARTY",
+			company,
+			f"Current Assets - {abbr}",
+			"Receivable",
+			"Asset"
+		)
+		res_receivable = get_account_details_and_party_type(receivable_acc, nowdate(), company)
+		self.assertEqual(res_receivable["party_type"], "Customer")
+		self.assertEqual(res_receivable["account_type"], "Receivable")
+		self.assertTrue(res_receivable["exchange_rate"] > 0)
+
+		payable_acc = get_or_create_account(
+			"Test Payable - PARTY",
+			company,
+			f"Current Assets - {abbr}",
+			"Payable",
+			"Liability"
+		)
+		res_payable = get_account_details_and_party_type(payable_acc, nowdate(), company)
+		self.assertEqual(res_payable["party_type"], "Supplier")
+		self.assertEqual(res_payable["account_type"], "Payable")
+		self.assertTrue(res_payable["exchange_rate"] > 0)
+
+		cash_acc = get_or_create_account(
+			"Test Cash - PARTY",
+			company,
+			f"Current Assets - {abbr}",
+			"Cash",
+			"Asset"
+		)
+		res_cash = get_account_details_and_party_type(cash_acc, nowdate(), company)
+		self.assertEqual(res_cash["party_type"], "")
+		self.assertEqual(res_cash["account_type"], "Cash")
+		self.assertIn("party", res_cash) 
 
 def make_journal_entry(
 	account1,
