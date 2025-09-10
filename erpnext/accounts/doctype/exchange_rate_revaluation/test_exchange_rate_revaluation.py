@@ -3,13 +3,13 @@
 
 
 import frappe
-from frappe.exceptions import ValidationError
-from frappe.tests.utils import FrappeTestCase, change_setting
-from frappe.utils import add_days, flt, get_date_str, getdate, today
+from frappe.tests.utils import FrappeTestCase, change_settings
+from frappe.utils import add_days, flt, nowdate, today ,get_date_str, getdate
 
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
+from frappe.exceptions import ValidationError
 
 
 class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
