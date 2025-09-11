@@ -8,7 +8,7 @@ from frappe.utils import add_days, flt, nowdate
 
 from erpnext.accounts.doctype.account.test_account import create_account
 from erpnext.accounts.doctype.journal_entry.journal_entry import get_payment_entry_against_invoice
-from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
+from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_customer, create_sales_invoice
 from erpnext.stock.doctype.purchase_receipt.test_purchase_receipt import get_gl_entries
 
 
@@ -371,7 +371,50 @@ class TestInvoiceDiscounting(unittest.TestCase):
 
 		inv_disc.on_cancel()
 
+	def test_get_invoices_TC_ACC_567(self):
+		from erpnext.accounts.doctype.invoice_discounting.invoice_discounting import get_invoices
+		import json
+		from erpnext.accounts.doctype.payment_entry.test_payment_entry import get_or_create_fiscal_year
+		get_or_create_fiscal_year()
 
+		customer = create_customer(customer_name="_Test Customer", company="_Test Company", currency="INR")
+		other_customer = create_customer(customer_name="_Another Test Customer", company="_Test Company", currency="INR")
+
+		valid_receivable = create_account(
+			account_name="_Test Receivable Ledger for GetInvoices",
+			parent_account="Accounts Receivable - _TC",
+			company="_Test Company",
+			account_type="Receivable",
+			root_type="Asset",
+		)
+
+		si1 = create_sales_invoice(
+			rate=500,
+			debit_to=valid_receivable,
+			company="_Test Company",
+			customer=customer.name,
+			posting_date=nowdate(),
+		)
+		si2 = create_sales_invoice(
+			rate=1000,
+			debit_to=valid_receivable,
+			company="_Test Company",
+			customer=other_customer.name,
+			posting_date=nowdate(),
+		)
+
+		filters = {
+			"customer": "_Test Customer",
+			"from_date": add_days(nowdate(), -1),
+			"to_date": add_days(nowdate(), 1),
+			"min_amount": 100,
+			"max_amount": 600,
+		}
+		invoices = get_invoices(json.dumps(filters))
+  
+		self.assertEqual(invoices[0].get("customer"), "_Test Customer")
+		self.assertGreater(invoices[0].get("outstanding_amount"), 0)
+  
 def create_invoice_discounting(invoices, **args):
 	args = frappe._dict(args)
 	inv_disc = frappe.new_doc("Invoice Discounting")
