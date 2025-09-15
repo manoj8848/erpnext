@@ -7,7 +7,7 @@ from erpnext.accounts.report.budget_variance_report.budget_variance_report impor
 
 
 class TestBudgetVarianceReport(FrappeTestCase):
-    def test_execute_full_flow(self):
+    def test_execute_full_flow_TC_ACC_451(self):
         filters = _dict({
             "company": "Test Co",
             "budget_against": "Cost Center",
