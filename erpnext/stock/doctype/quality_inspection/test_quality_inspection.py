@@ -896,16 +896,15 @@ class TestQualityInspection(FrappeTestCase):
 		qi3.inspected_by = "Administrator"
 		qi3.sample_size = 5
 		qi3.insert()
-		from types import SimpleNamespace
 
 		# Patch frappe.get_all to simulate how distribute_child_row_reference pulls QIs
 		with unittest.mock.patch("frappe.get_all") as mock_get_all, unittest.mock.patch(
 			"frappe.db.set_value"
 		) as mock_set_value:
 			mock_get_all.return_value = [
-				SimpleNamespace(name=qi1.name, child_row_reference="ROW-1", docstatus=1),
-				SimpleNamespace(name=qi2.name, child_row_reference="ROW-2", docstatus=0),
-				SimpleNamespace(name=qi3.name, child_row_reference=None, docstatus=0),
+				{"name": qi1.name, "child_row_reference": "ROW-1", "docstatus": 1},
+				{"name": qi2.name, "child_row_reference": "ROW-2", "docstatus": 0},
+				{"name": qi3.name, "child_row_reference": None, "docstatus": 0},
 			]
 
 			# Call method under test
