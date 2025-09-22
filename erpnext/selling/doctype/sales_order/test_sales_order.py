@@ -7283,7 +7283,7 @@ class TestSalesOrder(AccountsTestMixin, FrappeTestCase):
 		so.customer_address = customer_add.get("name")
 		so.billing_address_gstin = customer_add.get("gstin")
 		so.company_address = company_add.get("name")
-		so.company_gstin = company_add.get("gstin")
+		so.company_gstin = company.get("gstin")
 		for i in so.items:
 			i.gst_hsn_code = "01011020"
 		so.save()

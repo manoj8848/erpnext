@@ -292,6 +292,7 @@ class StockReconciliation(StockController):
 							"warehouse": item.warehouse,
 							"posting_date": self.posting_date,
 							"posting_time": self.posting_time,
+							"for_stock_levels": True,
 							"ignore_voucher_nos": [self.name],
 						}
 					)
@@ -867,6 +868,10 @@ class StockReconciliation(StockController):
 			data.incoming_rate = flt(row.valuation_rate)
 
 		self.update_inventory_dimensions(row, data)
+
+		if self.docstatus == 1 and has_dimensions and (not row.batch_no or not row.serial_and_batch_bundle):
+			data.qty_after_transaction = data.actual_qty
+			data.actual_qty = 0.0
 
 		return data
 

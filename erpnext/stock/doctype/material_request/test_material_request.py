@@ -7298,10 +7298,10 @@ class TestMaterialRequest(FrappeTestCase):
 	@change_settings("Buying Settings", {"maintain_same_rate": 1})
 	def test_create_mr_to_2po_to_2pr_serial_return_TC_SCK_193(self):
 		from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
+		from erpnext.stock.utils import get_or_create_fiscal_year
 
-		create_customer("_Test Customer")
-		get_or_create_fiscal_year()
 		company = create_company()
+		create_customer("_Test Customer")
 		warehouse = "Stores - _TC"
 		create_supplier(supplier_name="_Test Supplier")
 		item_code = "_Test Item With Serial No"

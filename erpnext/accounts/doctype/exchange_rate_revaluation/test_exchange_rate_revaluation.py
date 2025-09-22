@@ -3,13 +3,13 @@
 
 
 import frappe
-from frappe.exceptions import ValidationError
 from frappe.tests.utils import FrappeTestCase, change_settings
-from frappe.utils import add_days, flt, get_date_str, getdate, today
+from frappe.utils import add_days, flt, nowdate, today ,get_date_str, getdate
 
 from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice
 from erpnext.accounts.test.accounts_mixin import AccountsTestMixin
+from frappe.exceptions import ValidationError
 
 
 class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
@@ -820,6 +820,78 @@ class TestExchangeRateRevaluation(AccountsTestMixin, FrappeTestCase):
 
 		self.assertEqual(accounts_data, [])
 
+	def test_calculate_exchange_rate_using_last_gle_TC_ACC_382(self):
+		from erpnext.accounts.utils import calculate_exchange_rate_using_last_gle
+
+		existing = frappe.db.exists("GL Entry", {"voucher_no": "TEST-JE-001"})
+		if existing:
+			frappe.delete_doc("GL Entry", existing, force=True)
+
+		gl_entry = frappe.get_doc({
+			"doctype": "GL Entry",
+			"posting_date": nowdate(),
+			"company": "_Test Company",
+			"account": "_Test Receivable - _TC",
+			"voucher_type": "Journal Entry",
+			"voucher_no": "TEST-JE-001",
+			"debit": 200,
+			"credit": 0,
+			"debit_in_account_currency": 100,
+			"credit_in_account_currency": 0,
+			"is_cancelled": 0
+		}).insert(ignore_permissions=True)
+
+		rate = calculate_exchange_rate_using_last_gle(
+			company="_Test Company",
+			account="_Test Receivable - _TC",
+			party_type=None,
+			party=None,
+		)
+
+		self.assertEqual(rate, 2.0)
+  
+	def test_check_journal_entry_condition_mismatch_TC_ACC_530(self):
+		err = frappe.new_doc("Exchange Rate Revaluation")
+		err.company = "_Test Company"
+		err.posting_date = today()
+		accounts = err.get_accounts_data()
+		err.extend("accounts", accounts)
+
+		row = err.accounts[0]
+		row.new_exchange_rate = 60
+		row.new_balance_in_base_currency = flt(
+			row.new_exchange_rate * flt(row.balance_in_account_currency)
+		)
+		row.gain_loss = row.new_balance_in_base_currency - flt(row.balance_in_base_currency)
+		err.set_total_gain_loss()
+		err = err.save().submit()
+
+		exchange_gain_loss_account = err.get_for_unrealized_gain_loss_account()
+		je = frappe.get_doc({
+			"doctype": "Journal Entry",
+			"voucher_type": "Bank Entry",
+			"posting_date": nowdate(),
+			"accounts": [
+				{
+					"account": exchange_gain_loss_account,
+					"debit": 0,
+					"credit": 200,
+					"reference_type": "Exchange Rate Revaluation",
+					"reference_name": err.name,
+				},
+				{
+					"account": "_Test Receivable - _TC",
+					"debit": 200,
+					"credit": 0,
+				},
+			],
+		})
+		je.insert(ignore_permissions=True)
+		je.submit()
+
+		result = err.check_journal_entry_condition()
+		self.assertTrue(result)
+		je.cancel()
 
 def gain_loss_account(company: str):
 	doc = frappe.get_doc("Company", company)
