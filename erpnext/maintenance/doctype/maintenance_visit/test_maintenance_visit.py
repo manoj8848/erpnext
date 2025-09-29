@@ -227,10 +227,8 @@ def make_sales_person(name):
     if sales_person_name:
         return frappe.get_doc("Sales Person", sales_person_name)
 
-    sales_person = frappe.get_doc({
-        "doctype": "Sales Person",
-        "sales_person_name": name
-    })
+    sales_person = frappe.new_doc("Sales Person")
+    sales_person.sales_person_name = name
     sales_person.insert(ignore_if_duplicate=True, ignore_permissions=True)
 
     return sales_person
