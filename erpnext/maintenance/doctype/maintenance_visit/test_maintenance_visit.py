@@ -222,12 +222,15 @@ def make_maintenance_visit():
 
 	return mv
 
-
 def make_sales_person(name):
-	if frappe.db.exists("Sales Person", {"sales_person_name": name}):
-		return frappe.get_doc("Sales Person", {"sales_person_name": name})
+    sales_person_name = frappe.db.exists("Sales Person", {"sales_person_name": name})
+    if sales_person_name:
+        return frappe.get_doc("Sales Person", sales_person_name)
 
-	sales_person = frappe.get_doc({"doctype": "Sales Person", "sales_person_name": name})
-	sales_person.insert(ignore_if_duplicate=True)
+    sales_person = frappe.get_doc({
+        "doctype": "Sales Person",
+        "sales_person_name": name
+    })
+    sales_person.insert(ignore_if_duplicate=True, ignore_permissions=True)
 
-	return sales_person
+    return sales_person
