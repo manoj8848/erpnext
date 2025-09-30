@@ -3056,10 +3056,13 @@ def make_supplier(supplier_name, currency=None):
 
 
 def create_fiscal_year(company, year_start_date, year_end_date):
+	print("111",company,year_start_date,year_end_date)
 	fy_docname = frappe.db.exists(
 		"Fiscal Year", {"year_start_date": year_start_date, "year_end_date": year_end_date}
 	)
+	print("fy_docname",fy_docname)
 	if not fy_docname:
+		print("ifff")
 		fy_doc = frappe.get_doc(
 			{
 				"doctype": "Fiscal Year",
@@ -3071,7 +3074,9 @@ def create_fiscal_year(company, year_start_date, year_end_date):
 		).save()
 		return fy_doc
 	else:
+		print("1111111else")
 		fy_doc = frappe.get_doc("Fiscal Year", fy_docname)
+		print("fy_doc",fy_doc)
 		if not frappe.db.exists("Fiscal Year Company", {"parent": fy_docname, "company": company}):
 			fy_doc.append("companies", {"company": company})
 			fy_doc.save()
