@@ -212,7 +212,6 @@ def make_maintenance_visit():
 		"purposes",
 		{
 			"item_code": "_Test Item",
-			"sales_person": "Sales Team",
 			"description": "Test Item",
 			"work_done": "Test Work Done",
 			"service_person": sales_person.name,
