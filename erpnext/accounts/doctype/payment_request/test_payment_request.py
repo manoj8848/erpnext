@@ -1730,8 +1730,7 @@ class TestPaymentRequest(FrappeTestCase):
 		m_pg = create_payment_gateway_account(
 			pg_name="Mpesa-" + rz.payment_gateway_name,
 			payment_channel="Phone",
-			is_default=True,
-			currency="USD"
+			is_default=True
 		)
 		payment_account = frappe.get_value(
 			"Payment Gateway Account",
@@ -1922,7 +1921,7 @@ def create_payment_gateway_account(pg_name, payment_channel=None, is_default=Fal
 			doctype="Payment Gateway",
 			gateway=pg_name
 		)).insert()
-	if not frappe.db.exists("Payment Gateway Account", pg_name):
+	if not frappe.db.exists("Payment Gateway Account", {"payment_gateway": pg_name}):
 		pg = frappe.get_doc(dict(
 				doctype = "Payment Gateway Account",
 				payment_gateway=pg_name,
@@ -1931,7 +1930,8 @@ def create_payment_gateway_account(pg_name, payment_channel=None, is_default=Fal
 				is_default=is_default
 			)).insert()
 	else:
-		pg = frappe.get_doc("Payment Gateway Account", pg_name)
+		all_pg = frappe.get_all("Payment Gateway Account", filters={"payment_gateway": pg_name}, fields=["name"])
+		pg = frappe.get_doc("Payment Gateway Account", all_pg[0].get("name"))
 	return pg
 
 def create_subscription_plan(sp_name, **kwargs):
