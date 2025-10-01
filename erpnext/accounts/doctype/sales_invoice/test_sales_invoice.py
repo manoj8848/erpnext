@@ -7426,7 +7426,8 @@ class TestSalesInvoice(FrappeTestCase):
 		
 		if not frappe.db.exists("Accounting Dimension", "Branch"):
 			act_dim = frappe.new_doc("Accounting Dimension")
-			act_dim.dimension_name = "Branch"
+			act_dim.document_type = "Branch"
+			act_dim.label = "Branch"
 			act_dim.insert(ignore_permissions=True)
 
 		get_dimensions = frappe.get_doc("Accounting Dimension", "Branch")
