@@ -1300,6 +1300,7 @@ class TestPOSInvoice(unittest.TestCase):
 		self.assertEqual(inv.status, "Paid")
 
 	def test_pos_inoivce_with_payment_terms_TC_S_123(self):
+		make_pos_profile(name="_Test POS Profile", company="_Test Company")
 		create_pos_opening_for_test(pos_profile="_Test POS Profile")
 		inv = create_pos_invoice(rate=3000, do_not_save=1)
 		inv.save()
@@ -1354,10 +1355,12 @@ class TestPOSInvoice(unittest.TestCase):
 
 
 def create_pos_invoice(**args):
+	print("args",args)
 	args = frappe._dict(args)
 	pos_profile = None
 	if not args.pos_profile:
 		pos_profile = make_pos_profile()
+		print("pos_profile",pos_profile)
 		pos_profile.save()
 
 	pos_inv = frappe.new_doc("POS Invoice")
