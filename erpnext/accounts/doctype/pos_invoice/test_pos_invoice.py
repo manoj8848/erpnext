@@ -1474,24 +1474,25 @@ import frappe
 from frappe.utils import now, nowdate
 
 def create_pos_opening_for_test(pos_profile, company="_Test Company", opening_balance=10000):
-    # Check if an open POS Opening Entry already exists
-    existing = frappe.get_list(
-        "POS Opening Entry",
-        filters={"pos_profile": pos_profile, "status": "Open", "docstatus": 1},
-        limit=1
-    )
-    if existing:
-        return frappe.get_doc("POS Opening Entry", existing[0].name)
+	# Check if an open POS Opening Entry already exists
+	existing = frappe.get_list(
+		"POS Opening Entry",
+		filters={"pos_profile": pos_profile, "status": "Open", "docstatus": 1},
+		limit=1
+	)
+	if existing:
+		return frappe.get_doc("POS Opening Entry", existing[0].name)
 
-    # Create new POS Opening Entry
-    pos_opening = frappe.new_doc("POS Opening Entry")
-    pos_opening.company = company
-    pos_opening.pos_profile = pos_profile
-    pos_opening.posting_date = nowdate()   # only date part
-    pos_opening.period_start_date = now()  # full timestamp with time
-    pos_opening.opening_balance = opening_balance
-    pos_opening.status = "Open"
-    pos_opening.insert()
-    pos_opening.submit()
+	# Create new POS Opening Entry
+	pos_opening = frappe.new_doc("POS Opening Entry")
+	pos_opening.company = company
+	pos_opening.pos_profile = pos_profile
+	pos_opening.posting_date = nowdate()   # only date part
+	pos_opening.period_start_date = now()  # full timestamp with time
+	pos_opening.opening_balance = opening_balance
+	pos_opening.status = "Open"
+	pos_opening.user = "Administrator"
+	pos_opening.insert()
+	pos_opening.submit()
 
-    return pos_opening
+	return pos_opening
