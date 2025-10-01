@@ -91,7 +91,7 @@ class TestProcessDeferredAccounting(unittest.TestCase):
 		supplier = make_supplier("_Test Supplier", currency="INR")
 
 		# Step 1: Set dynamic dates (2 years back)
-		backdate = getdate(add_years(nowdate(), -2))
+		backdate = date(getdate(add_years(nowdate(), -2)).year, 1, 1)
 		start_date = get_first_day(add_months(backdate, 4))
 		end_date = get_last_day(add_months(backdate, 6))
 		posting_date = get_first_day(add_months(backdate, 6))
