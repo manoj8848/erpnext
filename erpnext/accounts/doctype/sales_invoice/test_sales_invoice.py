@@ -7423,14 +7423,15 @@ class TestSalesInvoice(FrappeTestCase):
 
 	def test_create_invoice_discounting_TC_ACC_244(self):
 		from .sales_invoice import create_invoice_discounting
-		
-		if not frappe.db.exists("Accounting Dimension", "Branch"):
-			act_dim = frappe.new_doc("Accounting Dimension")
-			act_dim.document_type = "Branch"
-			act_dim.label = "Branch"
-			act_dim.insert(ignore_permissions=True)
 
-		get_dimensions = frappe.get_doc("Accounting Dimension", "Branch")
+		if not frappe.db.exists("Accounting Dimension", "Branch"):
+			get_dimensions = frappe.get_doc({
+				"doctype": "Accounting Dimension",
+				"document_type": "Branch",
+				"name": "Branch"
+			}).insert()
+		else:
+			get_dimensions = frappe.get_doc("Accounting Dimension", "Branch")
 		if get_dimensions:
 			get_dimensions.disabled = 1
 			get_dimensions.save()
