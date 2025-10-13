@@ -1300,6 +1300,8 @@ class TestPOSInvoice(unittest.TestCase):
 		self.assertEqual(inv.status, "Paid")
 
 	def test_pos_inoivce_with_payment_terms_TC_S_123(self):
+		make_pos_profile(name="_Test POS Profile", company="_Test Company")
+		create_pos_opening_for_test(pos_profile="_Test POS Profile")
 		inv = create_pos_invoice(rate=3000, do_not_save=1)
 		inv.save()
 		inv.include_payment = 1
@@ -1353,10 +1355,12 @@ class TestPOSInvoice(unittest.TestCase):
 
 
 def create_pos_invoice(**args):
+	print("args",args)
 	args = frappe._dict(args)
 	pos_profile = None
 	if not args.pos_profile:
 		pos_profile = make_pos_profile()
+		print("pos_profile",pos_profile)
 		pos_profile.save()
 
 	pos_inv = frappe.new_doc("POS Invoice")
@@ -1465,3 +1469,30 @@ def make_batch_item(item_name):
 
 	if not frappe.db.exists(item_name):
 		return make_item(item_name, dict(has_batch_no=1, create_new_batch=1, is_stock_item=1))
+
+import frappe
+from frappe.utils import now, nowdate
+
+def create_pos_opening_for_test(pos_profile, company="_Test Company", opening_balance=10000):
+	# Check if an open POS Opening Entry already exists
+	existing = frappe.get_list(
+		"POS Opening Entry",
+		filters={"pos_profile": pos_profile, "status": "Open", "docstatus": 1},
+		limit=1
+	)
+	if existing:
+		return frappe.get_doc("POS Opening Entry", existing[0].name)
+
+	# Create new POS Opening Entry
+	pos_opening = frappe.new_doc("POS Opening Entry")
+	pos_opening.company = company
+	pos_opening.pos_profile = pos_profile
+	pos_opening.posting_date = nowdate()
+	pos_opening.period_start_date = now()
+	pos_opening.opening_balance = opening_balance
+	pos_opening.status = "Open"
+	pos_opening.user = "Administrator"
+	pos_opening.insert()
+	pos_opening.submit()
+
+	return pos_opening
